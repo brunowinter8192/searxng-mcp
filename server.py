@@ -4,8 +4,8 @@ from typing import Annotated, Literal
 from fastmcp import FastMCP
 from pydantic import Field
 
-from searxng.search_web import search_web_workflow
-from scraper.scrape_urls import scrape_urls_workflow
+from src.search_web import search_web_workflow
+from src.scrape_urls import scrape_urls_workflow
 
 mcp = FastMCP("SearXNG")
 

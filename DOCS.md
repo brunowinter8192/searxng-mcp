@@ -1,20 +1,26 @@
 # SearXNG MCP Server
 
-Privacy-focused web search via local SearXNG metasearch engine instance.
+Privacy-focused web search and URL scraping via local SearXNG metasearch engine instance.
 
 ## Project Structure
 
 ```
 searxng/
 ├── server.py              # MCP server orchestrator
-├── search_web.py          # SearXNG API wrapper module
+├── src/                   # Tool modules package
+│   ├── __init__.py        # Package marker
+│   ├── search_web.py      # SearXNG API wrapper
+│   └── scrape_urls.py     # URL scraper with HTML to markdown conversion
+├── bug_fixes/             # Bug fixes and debug scripts (gitignored)
 ├── docker-compose.yml     # SearXNG container config
 ├── searxng/
-│   └── settings.yml       # SearXNG configuration (JSON format enabled)
+│   └── settings.yml       # SearXNG configuration
+├── .mcp.json              # Production MCP config (active development)
+├── .mcp.json.example      # Template for other projects
 ├── README.md              # Quick start guide
 ├── DOCS.md                # Module documentation
 ├── CLAUDE.md              # Engineering standards
-└── .gitignore             # Excludes debug/, logs/
+└── .gitignore             # Excludes debug/, logs/, bug_fixes/
 ```
 
 ## server.py
@@ -23,9 +29,13 @@ searxng/
 
 ### search_web()
 
-Exposes web search functionality to LLM clients. Accepts query string and category parameter. Delegates execution to search_web_workflow. Returns structured results with title, url, and content snippet for each result.
+Exposes web search functionality to LLM clients. Accepts query string and category parameter with Literal type constraint. Delegates execution to search_web_workflow. Returns structured results with title, url, and content snippet for each result. Use when user needs to search the web for information.
 
-## search_web.py
+### scrape_urls()
+
+Exposes URL scraping functionality to LLM clients. Accepts list of URLs and concurrency parameter. Delegates execution to scrape_urls_workflow wrapped in asyncio.run. Returns list of results with url, markdown content, success status, and error information. Use when user needs to fetch full page content from URLs.
+
+## src/search_web.py
 
 **Purpose:** Wrapper for SearXNG JSON API.
 **Input:** Query string and category name.
@@ -43,14 +53,122 @@ Performs HTTP GET request to SearXNG search endpoint. Constructs query parameter
 
 Transforms raw SearXNG response into standardized output. Iterates over raw results and extracts title, url, and content fields. Returns dictionary with query metadata and cleaned results list.
 
+## src/scrape_urls.py
+
+**Purpose:** URL scraper with JavaScript rendering and HTML to markdown conversion.
+**Input:** List of URLs and concurrency limit.
+**Output:** List of dictionaries containing url, markdown content, success status, and error.
+
+### scrape_urls_workflow()
+
+Main orchestrator function. Coordinates browser initialization, concurrent URL scraping, content extraction, and result formatting. Manages browser lifecycle and ensures cleanup. Called directly by server.py tool definition.
+
+### init_browser()
+
+Initializes headless Chromium browser instance using Playwright. Returns browser object for reuse across multiple page scrapes.
+
+### create_concurrency_semaphore()
+
+Creates asyncio semaphore to control maximum parallel requests. Prevents overwhelming target servers with too many concurrent connections.
+
+### create_scrape_tasks()
+
+Creates list of coroutine tasks for all URLs. Each task represents a single URL scrape operation with shared browser and semaphore.
+
+### gather_results()
+
+Executes all scrape tasks concurrently using asyncio.gather. Returns exceptions as results rather than raising them to handle partial failures gracefully.
+
+### scrape_single_url()
+
+Scrapes single URL with semaphore-controlled concurrency. Creates isolated browser context, navigates to URL with timeout, extracts page HTML content, and closes context. Returns raw HTML string.
+
+### cleanup_browser()
+
+Releases browser resources by closing the browser instance. Ensures proper cleanup even on errors.
+
+### extract_all_content()
+
+Processes all raw HTML results. Preserves exceptions from failed scrapes. Converts successful HTML results to markdown using extract_single_content.
+
+### extract_single_content()
+
+Converts single HTML string to markdown. Orchestrates parsing, filtering, and markdown conversion pipeline.
+
+### format_results()
+
+Transforms raw results into structured output. Pairs URLs with their results. Handles both successful markdown content and error cases with appropriate status flags.
+
+### parse_html()
+
+Parses HTML string into structured representation using HTMLContentParser. Returns dictionary with nodes array and tag stack state.
+
+### filter_content()
+
+Filters parsed content to extract main content. Removes navigation, footer, script, and other non-content elements. Extracts content from main or article tags when present.
+
+### to_markdown()
+
+Converts filtered nodes to markdown string. Orchestrates node conversion, whitespace cleaning, and content truncation.
+
+### HTMLContentParser
+
+Custom HTMLParser subclass that builds structured representation of HTML document. Tracks tag hierarchy and extracts text content with parent tag context. Handles opening tags, closing tags, text data, and self-closing tags.
+
+### remove_skip_tags()
+
+Removes all nodes belonging to skip tags like nav, footer, header, script, style. Tracks nesting depth to handle nested skip tags correctly.
+
+### extract_main_content()
+
+Extracts content from main or article tags when present. Returns all nodes if no main content container found. Prioritizes main tag over article tag.
+
+### find_content_tag_start()
+
+Finds index of first content tag (main or article) in nodes list. Returns -1 if not found.
+
+### find_matching_end()
+
+Finds index of matching end tag for given start tag. Tracks nesting depth to handle nested same-name tags correctly.
+
+### convert_nodes_to_markdown()
+
+Converts parsed nodes to markdown string. Handles headings, paragraphs, lists, links, images, code blocks, blockquotes, and inline formatting. Maintains list stack for proper nesting and link href for anchor tags.
+
+### clean_whitespace()
+
+Removes excessive whitespace from markdown text. Collapses multiple newlines, removes multiple spaces, and trims leading/trailing whitespace.
+
+### truncate_content()
+
+Truncates content if exceeding maximum length. Attempts to break at paragraph boundary for clean truncation. Appends truncation notice when content is cut.
+
 ## docker-compose.yml
 
 **Purpose:** Container configuration for SearXNG instance.
 
-Defines SearXNG service with port mapping 8080:8080. Mounts local searxng/ directory for custom configuration. Sets base URL and restart policy.
+Defines SearXNG service using official Docker image. Maps port 8080 for local API access. Mounts local searxng/ directory for custom configuration. Sets base URL environment variable and restart policy for service reliability.
 
 ## searxng/settings.yml
 
 **Purpose:** SearXNG instance configuration.
 
-Enables JSON output format required for API access. Disables rate limiting for local use. Sets English as default language. Configures 3 second request timeout.
+Enables JSON output format required for API access. Disables rate limiter for local development use. Disables image proxy for simpler setup. Configures safe search, autocomplete, and default language settings. Sets request timeout to 3 seconds with maximum of 10 seconds. Configures simple UI theme and query behavior options.
+
+## .mcp.json
+
+**Purpose:** Production MCP server configuration for active development.
+
+Defines searxng server with absolute paths to fastmcp executable and server.py script. Uses virtual environment fastmcp binary. Enables Claude Code to discover and connect to the MCP server automatically. May include additional MCPs used for development workflows.
+
+## .mcp.json.example
+
+**Purpose:** Template configuration for integrating into other projects.
+
+Provides skeleton configuration with placeholder paths. Users copy this file to .mcp.json and replace paths with their actual absolute paths. Simplifies integration by providing ready-to-use structure.
+
+## bug_fixes/
+
+**Purpose:** Development directory for bug fixes and debugging scripts.
+
+Contains temporary scripts and test cases for debugging issues. Excluded from version control via .gitignore. Keeps main codebase clean while allowing iterative debugging workflows.

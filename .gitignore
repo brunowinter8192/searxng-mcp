@@ -1,5 +1,6 @@
 debug/
 logs/
+bug_fixes/
 venv/
 __pycache__/
 *.pyc

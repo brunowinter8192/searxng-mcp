@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "searxng": {
+      "command": "/path/to/venv/bin/fastmcp",
+      "args": ["run", "/path/to/server.py"]
+    }
+  }
+}

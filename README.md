@@ -55,13 +55,29 @@ Parameters:
 - `urls`: List of URLs to scrape
 - `concurrency`: Number of parallel requests (default: 5)
 
-Returns list of results with url, content (HTML), success status.
+Returns list of results with url, content (markdown), success status.
 
 ## Configuration
 
 SearXNG settings: `searxng/settings.yml`
 
+### MCP Registration
+
+Two configuration files are provided:
+
+- **`.mcp.json.example`** - Template for integrating into other projects. Copy and adjust paths.
+- **`.mcp.json`** - Production configuration with absolute paths for active development.
+
+To use in Claude Code:
+```bash
+cp .mcp.json.example .mcp.json
+# Edit .mcp.json with your absolute paths
+```
+
+## Development
+
+Bug fixes and debugging scripts go in `bug_fixes/` directory. This folder is gitignored and not tracked in version control.
+
 ## Documentation
 
-- `searxng/DOCS.md` - Web search tool module documentation
-- `scraper/DOCS.md` - URL scraper tool module documentation
+See `DOCS.md` for complete module documentation.
