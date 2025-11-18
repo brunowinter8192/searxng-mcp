@@ -1,15 +1,13 @@
 # INFRASTRUCTURE
-import asyncio
 import re
 from html.parser import HTMLParser
 from html import unescape
 from playwright.async_api import async_playwright, Browser
 
-DEFAULT_CONCURRENCY = 5
 TIMEOUT_MS = 30000
-MAX_CONTENT_LENGTH = 15000
+DEFAULT_MAX_CONTENT_LENGTH = 15000
 
-SKIP_TAGS = {'nav', 'footer', 'header', 'aside', 'script', 'style', 'noscript', 'iframe', 'svg'}
+SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg'}
 CONTENT_TAGS = {'main', 'article', 'section', 'div', 'body'}
 INLINE_TAGS = {'a', 'strong', 'b', 'em', 'i', 'code', 'span', 'img'}
 BLOCK_TAGS = {'p', 'div', 'section', 'article', 'main', 'blockquote'}
@@ -18,14 +16,16 @@ LIST_TAGS = {'ul', 'ol'}
 
 
 # ORCHESTRATOR
-async def scrape_urls_workflow(urls: list[str], concurrency: int = DEFAULT_CONCURRENCY) -> list[dict]:
+async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH) -> dict:
     browser = await init_browser()
-    semaphore = create_concurrency_semaphore(concurrency)
-    tasks = create_scrape_tasks(urls, browser, semaphore)
-    raw_results = await gather_results(tasks)
+    raw_html = await fetch_url_content(url, browser)
     await cleanup_browser(browser)
-    extracted_results = extract_all_content(raw_results)
-    return format_results(urls, extracted_results)
+
+    if isinstance(raw_html, Exception):
+        return format_error_result(url, raw_html)
+
+    extracted_content = extract_single_content(raw_html, max_content_length)
+    return format_success_result(url, extracted_content)
 
 
 # FUNCTIONS
@@ -37,30 +37,17 @@ async def init_browser() -> Browser:
     return browser
 
 
-# Create semaphore for concurrency control
-def create_concurrency_semaphore(concurrency: int) -> asyncio.Semaphore:
-    return asyncio.Semaphore(concurrency)
-
-
-# Create list of scrape tasks for all URLs
-def create_scrape_tasks(urls: list[str], browser: Browser, semaphore: asyncio.Semaphore) -> list:
-    return [scrape_single_url(url, browser, semaphore) for url in urls]
-
-
-# Execute all tasks and gather results
-async def gather_results(tasks: list) -> list:
-    return await asyncio.gather(*tasks, return_exceptions=True)
-
-
-# Scrape single URL with semaphore-controlled concurrency
-async def scrape_single_url(url: str, browser: Browser, semaphore: asyncio.Semaphore) -> str:
-    async with semaphore:
+# Fetch HTML content from URL using Playwright with networkidle wait
+async def fetch_url_content(url: str, browser: Browser) -> str | Exception:
+    try:
         context = await browser.new_context()
         page = await context.new_page()
-        await page.goto(url, timeout=TIMEOUT_MS, wait_until="domcontentloaded")
+        await page.goto(url, timeout=TIMEOUT_MS, wait_until="networkidle")
         content = await page.content()
         await context.close()
         return content
+    except Exception as e:
+        return e
 
 
 # Release browser resources
@@ -68,44 +55,32 @@ async def cleanup_browser(browser: Browser) -> None:
     await browser.close()
 
 
-# Extract content from all raw HTML results
-def extract_all_content(raw_results: list) -> list:
-    extracted = []
-    for result in raw_results:
-        if isinstance(result, Exception):
-            extracted.append(result)
-        else:
-            extracted.append(extract_single_content(result))
-    return extracted
-
-
 # Parse and convert single HTML to markdown
-def extract_single_content(html: str) -> str:
+def extract_single_content(html: str, max_content_length: int) -> str:
     parsed = parse_html(html)
     filtered = filter_content(parsed)
-    markdown = to_markdown(filtered)
+    markdown = to_markdown(filtered, max_content_length)
     return markdown
 
 
-# Transform raw results into structured output
-def format_results(urls: list[str], results: list) -> list[dict]:
-    formatted = []
-    for url, result in zip(urls, results):
-        if isinstance(result, Exception):
-            formatted.append({
-                "url": url,
-                "content": "",
-                "success": False,
-                "error": str(result)
-            })
-        else:
-            formatted.append({
-                "url": url,
-                "content": result,
-                "success": True,
-                "error": None
-            })
-    return formatted
+# Format successful scrape result
+def format_success_result(url: str, content: str) -> dict:
+    return {
+        "url": url,
+        "content": content,
+        "success": True,
+        "error": None
+    }
+
+
+# Format error result
+def format_error_result(url: str, error: Exception) -> dict:
+    return {
+        "url": url,
+        "content": "",
+        "success": False,
+        "error": str(error)
+    }
 
 
 # Parse HTML into structured representation
@@ -124,10 +99,10 @@ def filter_content(parsed: dict) -> list:
 
 
 # Convert filtered nodes to markdown string
-def to_markdown(nodes: list) -> str:
+def to_markdown(nodes: list, max_content_length: int) -> str:
     raw_markdown = convert_nodes_to_markdown(nodes)
     cleaned = clean_whitespace(raw_markdown)
-    truncated = truncate_content(cleaned, MAX_CONTENT_LENGTH)
+    truncated = truncate_content(cleaned, max_content_length)
     return truncated
 
 
@@ -224,12 +199,20 @@ def extract_main_content(nodes: list) -> list:
     return nodes[main_start:main_end + 1]
 
 
-# Find index of first content tag
+# Find index of first content tag with improved priority
 def find_content_tag_start(nodes: list) -> int:
-    for priority_tag in ['main', 'article']:
+    for priority_tag in ['main', 'article', 'section']:
         for i, node in enumerate(nodes):
             if node["type"] == "start" and node["tag"] == priority_tag:
-                return i
+                attrs = node.get("attrs", {})
+                class_attr = attrs.get("class", "").lower()
+                id_attr = attrs.get("id", "").lower()
+
+                if priority_tag in ['main', 'article']:
+                    return i
+
+                if 'content' in class_attr or 'content' in id_attr or 'main' in class_attr or 'article' in class_attr:
+                    return i
     return -1
 
 

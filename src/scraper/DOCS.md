@@ -1,70 +1,40 @@
 # Scraper Module
 
-Web search and URL scraping tools for SearXNG MCP server.
+URL scraping tool with JavaScript rendering for SearXNG MCP server.
 
-## search_web.py
+## scrape_url.py
 
-**Purpose:** Wrapper for SearXNG JSON API.
-**Input:** Query string and category name.
-**Output:** Dictionary containing query, category, and list of result objects.
+**Purpose:** Single URL scraper with JavaScript rendering and HTML to markdown conversion using networkidle wait strategy.
+**Input:** Single URL string and optional maximum content length.
+**Output:** Dictionary containing url, markdown content, success status, and error.
 
-### search_web_workflow()
+### scrape_url_workflow()
 
-Main orchestrator function. Coordinates fetching raw results from SearXNG API and formatting them into clean output structure. Called directly by server.py tool definition.
-
-### fetch_search_results()
-
-Performs HTTP GET request to SearXNG search endpoint. Constructs query parameters including format=json and category filter. Raises exception on HTTP errors. Extracts results array from response and limits to MAX_RESULTS (20).
-
-### format_results()
-
-Transforms raw SearXNG response into standardized output. Iterates over raw results and extracts title, url, and content fields. Returns dictionary with query metadata and cleaned results list.
-
-## scrape_urls.py
-
-**Purpose:** URL scraper with JavaScript rendering and HTML to markdown conversion.
-**Input:** List of URLs and concurrency limit.
-**Output:** List of dictionaries containing url, markdown content, success status, and error.
-
-### scrape_urls_workflow()
-
-Main orchestrator function. Coordinates browser initialization, concurrent URL scraping, content extraction, and result formatting. Manages browser lifecycle and ensures cleanup. Called directly by server.py tool definition.
+Main orchestrator function. Coordinates browser initialization, URL content fetching, content extraction, and result formatting. Manages browser lifecycle and ensures cleanup. Called directly by server.py tool definition. Uses networkidle wait strategy for complete JavaScript rendering.
 
 ### init_browser()
 
-Initializes headless Chromium browser instance using Playwright. Returns browser object for reuse across multiple page scrapes.
+Initializes headless Chromium browser instance using Playwright. Returns browser object for page scraping.
 
-### create_concurrency_semaphore()
+### fetch_url_content()
 
-Creates asyncio semaphore to control maximum parallel requests. Prevents overwhelming target servers with too many concurrent connections.
-
-### create_scrape_tasks()
-
-Creates list of coroutine tasks for all URLs. Each task represents a single URL scrape operation with shared browser and semaphore.
-
-### gather_results()
-
-Executes all scrape tasks concurrently using asyncio.gather. Returns exceptions as results rather than raising them to handle partial failures gracefully.
-
-### scrape_single_url()
-
-Scrapes single URL with semaphore-controlled concurrency. Creates isolated browser context, navigates to URL with timeout, extracts page HTML content, and closes context. Returns raw HTML string.
+Fetches HTML content from URL using Playwright with networkidle wait strategy. Creates isolated browser context, navigates to URL with timeout, waits for all network activity to settle before extracting page HTML content, and closes context. Returns raw HTML string or exception on failure.
 
 ### cleanup_browser()
 
 Releases browser resources by closing the browser instance. Ensures proper cleanup even on errors.
 
-### extract_all_content()
-
-Processes all raw HTML results. Preserves exceptions from failed scrapes. Converts successful HTML results to markdown using extract_single_content.
-
 ### extract_single_content()
 
-Converts single HTML string to markdown. Orchestrates parsing, filtering, and markdown conversion pipeline.
+Converts single HTML string to markdown. Orchestrates parsing, filtering, and markdown conversion pipeline with configurable maximum content length.
 
-### format_results()
+### format_success_result()
 
-Transforms raw results into structured output. Pairs URLs with their results. Handles both successful markdown content and error cases with appropriate status flags.
+Formats successful scrape result into structured dictionary. Returns url, content, success flag set to true, and null error.
+
+### format_error_result()
+
+Formats error result into structured dictionary. Returns url, empty content, success flag set to false, and error message string.
 
 ### parse_html()
 
@@ -76,7 +46,7 @@ Filters parsed content to extract main content. Removes navigation, footer, scri
 
 ### to_markdown()
 
-Converts filtered nodes to markdown string. Orchestrates node conversion, whitespace cleaning, and content truncation.
+Converts filtered nodes to markdown string with configurable maximum length. Orchestrates node conversion, whitespace cleaning, and content truncation.
 
 ### HTMLContentParser
 
@@ -84,15 +54,15 @@ Custom HTMLParser subclass that builds structured representation of HTML documen
 
 ### remove_skip_tags()
 
-Removes all nodes belonging to skip tags like nav, footer, header, script, style. Tracks nesting depth to handle nested skip tags correctly.
+Removes all nodes belonging to skip tags like aside, script, style, noscript, iframe, svg. Tracks nesting depth to handle nested skip tags correctly. Less aggressive than previous version to preserve legitimate content.
 
 ### extract_main_content()
 
-Extracts content from main or article tags when present. Returns all nodes if no main content container found. Prioritizes main tag over article tag.
+Extracts content from main, article, or section tags when present. Returns all nodes if no main content container found. Prioritizes main tag, then article tag, then section tags with content-related class or id attributes.
 
 ### find_content_tag_start()
 
-Finds index of first content tag (main or article) in nodes list. Returns -1 if not found.
+Finds index of first content tag with improved priority detection. Searches for main, article, or section tags. For section tags, checks class and id attributes for content-related keywords like 'content', 'main', or 'article'. Returns -1 if not found.
 
 ### find_matching_end()
 

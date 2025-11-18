@@ -7,8 +7,8 @@ from pydantic import Field
 
 nest_asyncio.apply()
 
-from src.scraper.search_web import search_web_workflow
-from src.scraper.scrape_urls import scrape_urls_workflow
+from src.searxng.search_web import search_web_workflow
+from src.scraper.scrape_url import scrape_url_workflow
 
 mcp = FastMCP("SearXNG")
 
@@ -28,12 +28,12 @@ def search_web(
 
 
 @mcp.tool
-def scrape_urls(
-    urls: Annotated[list[str], Field(description="List of URLs to scrape (e.g., ['https://example.com', 'https://docs.python.org'])")],
-    concurrency: Annotated[int, Field(description="Number of parallel requests (default: 5, max recommended: 10)")] = 5
-) -> list[dict]:
-    """Use when user needs to fetch full page content from URLs. Handles JavaScript-rendered pages. Good for extracting documentation, articles, or any web content after getting URLs from search_web."""
-    return asyncio.run(scrape_urls_workflow(urls, concurrency))
+def scrape_url(
+    url: Annotated[str, Field(description="Single URL to scrape (e.g., 'https://example.com', 'https://docs.python.org/3/library/asyncio.html')")],
+    max_content_length: Annotated[int, Field(description="Maximum content length in characters (default: 15000, increase for longer articles)")] = 15000
+) -> dict:
+    """Use when user needs to fetch full page content from a URL. Handles JavaScript-rendered pages with networkidle wait strategy. Good for extracting documentation, articles, or any web content after getting URLs from search_web."""
+    return asyncio.run(scrape_url_workflow(url, max_content_length))
 
 
 if __name__ == "__main__":

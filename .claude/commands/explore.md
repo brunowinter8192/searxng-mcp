@@ -5,13 +5,13 @@ argument-hint: [question] | [reason why you need this]
 
 # Codebase Exploration
 
-You have received an exploration request from the user.
+You have received an exploration request from the user or main agent.
 
 **Full Input:** $ARGUMENTS
 
 ## Parse the Input
 
-The user provides:
+The user/main agent provides:
 - **Question**: What they want to find/understand (before the `|`)
 - **Reason**: Why they need this information (after the `|`)
 

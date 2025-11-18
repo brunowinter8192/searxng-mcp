@@ -133,6 +133,74 @@ Documentation updates are OPTIONAL - only required when changes affect the docum
 
 ---
 
+## TEST SUITE DOCUMENTATION CHECK
+
+**Purpose:** Test suite documentation describes test domains, validation workflow, and quality monitoring procedures.
+
+**Location:** debug/scraping_suite/README.md
+
+### Update Required When:
+
+1. **New test domain added**
+   - New URL added to domains.txt
+   - New domain folder appears in baselines/
+   - Domain represents new content type or technical challenge
+
+2. **Test workflow changes**
+   - run_baseline.py execution steps modified
+   - compare_iterations.py analysis logic changed
+   - New validation procedures added
+   - Workflow phases reordered
+
+3. **Test scripts modified**
+   - run_baseline.py parameter changes
+   - compare_iterations.py output format changes
+   - New test scripts added to suite
+
+4. **Output structure changes**
+   - Baselines directory organization modified
+   - Reports directory structure changed
+   - Metadata JSON format altered
+   - Iteration numbering scheme changed
+
+### Update NOT Required When:
+
+- Bug fixes in test scripts (internal logic)
+- Internal refactoring of test functions
+- Performance improvements to test execution
+- Code reorganization without workflow changes
+- Comment updates or formatting changes
+
+### Decision Workflow:
+
+1. **Identify Test Suite Changes** - Were files in debug/scraping_suite/ modified?
+2. **Read Suite README** - Check documented workflow and structure
+3. **Identify Impact** - Does change affect documented behavior or output?
+4. **Decision:**
+   - If test workflow/structure changes then Update suite README
+   - If only internal implementation changes then Document reason for skipping
+   - **If uncertain then ASK THE USER**
+
+### Sections to Update:
+
+**Test Domains Section:**
+- Update when new domain added
+- Include URL, content type description, technical challenges tested
+
+**Usage Section:**
+- Update when command-line usage changes
+- Update when new scripts added
+
+**Workflow Section:**
+- Update when execution steps change
+- Update when decision gates modified
+
+**Output Structure Section:**
+- Update when directory structure changes
+- Update when file formats change
+
+---
+
 ## COMPREHENSIVE REVIEW PROTOCOL
 
 ### Step 1: Analyze Changes
@@ -162,10 +230,20 @@ Ask these questions:
 
 **If YES to any then that domain's DOCS.md update likely required**
 
+### Step 3.5: Test Suite DOCS Impact Assessment
+Ask these questions:
+1. Were files in debug/scraping_suite/ modified?
+2. Was a new test domain added to domains.txt?
+3. Did test workflow execution steps change?
+4. Did test output structure change (baselines/, reports/)?
+5. Were new test scripts added?
+
+**If YES to any then debug/scraping_suite/README.md update likely required**
+
 ### Step 4: Document Decisions
-For each file (README, domain DOCS), document:
+For each file (README, domain DOCS, test suite README), document:
 ```
-FILE: README.md / src/domain/DOCS.md
+FILE: README.md / src/domain/DOCS.md / debug/scraping_suite/README.md
 CHANGE: <brief description>
 SECTION: <which section would be affected>
 DECISION: UPDATE REQUIRED / NO UPDATE / UNCERTAIN
@@ -191,9 +269,10 @@ After completing Step 4, summarize:
 OVERALL RECOMMENDATION:
 - README.md: UPDATE / NO UPDATE
 - src/domain/DOCS.md: UPDATE / NO UPDATE (list each affected domain)
+- debug/scraping_suite/README.md: UPDATE / NO UPDATE
 
 QUESTION (if applicable): [Specific uncertainty]
-RECOMMENDATION: [e.g., "Update src/scraper/DOCS.md yes, README no"]
+RECOMMENDATION: [e.g., "Update src/scraper/DOCS.md yes, README no, test suite README no"]
 REASONING: [Brief explanation]
 ```
 

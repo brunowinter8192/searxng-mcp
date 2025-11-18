@@ -1,4 +1,7 @@
-debug/
+debug/*
+!debug/scraping_suite/
+debug/scraping_suite/baselines/
+debug/scraping_suite/reports/
 logs/
 bug_fixes/
 venv/

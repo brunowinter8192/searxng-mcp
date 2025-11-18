@@ -48,14 +48,14 @@ Parameters:
 
 Returns 20 results with title, url, content snippet.
 
-### scrape_urls
-Fetch full page content from URLs with JavaScript rendering.
+### scrape_url
+Fetch full page content from a URL with JavaScript rendering.
 
 Parameters:
-- `urls`: List of URLs to scrape
-- `concurrency`: Number of parallel requests (default: 5)
+- `url`: Single URL to scrape
+- `max_content_length`: Maximum content length in characters (default: 15000)
 
-Returns list of results with url, content (markdown), success status.
+Returns dictionary with url, content (markdown), success status. Uses networkidle wait strategy for complete JavaScript rendering.
 
 ## Configuration
 
@@ -78,8 +78,27 @@ cp .mcp.json.example .mcp.json
 
 Bug fixes and debugging scripts go in `bug_fixes/` directory. This folder is gitignored and not tracked in version control.
 
+## Testing
+
+The scraping suite provides continuous quality monitoring for the URL scraper. Located in `debug/scraping_suite/`, it tests content extraction across diverse web page types and detects regressions.
+
+### Running Tests
+
+Generate baseline for all test domains:
+```bash
+python debug/scraping_suite/run_baseline.py
+```
+
+Compare with previous iteration:
+```bash
+python debug/scraping_suite/compare_iterations.py
+```
+
+See `debug/scraping_suite/README.md` for detailed documentation on test domains, workflow, and output structure.
+
 ## Documentation
 
 Module documentation lives in each source directory:
-- `src/scraper/DOCS.md` - Scraper module documentation
-- `src/searxng/DOCS.md` - SearXNG configuration documentation
+- `src/searxng/DOCS.md` - SearXNG search module and configuration
+- `src/scraper/DOCS.md` - URL scraper module documentation
+- `debug/scraping_suite/README.md` - Test suite documentation
