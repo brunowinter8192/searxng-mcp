@@ -20,10 +20,7 @@ User observes: $ARGUMENTS
 3. Find relevant files in the codebase (max 3-4, focused)
 4. Check `logs/` folder if present
 5. Debug workspaces: `debug/Agent_1/`, `debug/Agent_2/`, `debug/Agent_3/` (isolated per agent)
-6. Shared testing infrastructure: `debug/scraping_suite/`
-   - `domains.txt` - Test URLs for agents to pick from
-   - `run_baseline.py` - Reference for environment validation approach
-7. Gather: Error messages, stack traces, affected functions with File:Line references
+6. Gather: Error messages, stack traces, affected functions with File:Line references
 
 ---
 
@@ -44,7 +41,7 @@ Call 3 Task tools **in a single message** (parallel execution):
   "parameters": {
     "description": "debug issue (Agent 1)",
     "subagent_type": "debug-specialist",
-    "prompt": "## Problem Description\n<Precise description of what is failing, expected vs actual behavior>\n\n## Investigation Results\n<Findings from Phase 1: error messages, stack traces, affected functions with File:Line references>\n\n## Recommended Starting Points\n<Specific folders and files the subagent should examine first, ordered by relevance>\n\n## CRITICAL: Workspace\nYou MUST create all debug scripts and test files in: debug/Agent_1/\nThis is YOUR isolated workspace. Other agents work in Agent_2/ and Agent_3/.\n\n## CRITICAL: Testing Infrastructure\nFor URL selection and validation:\n- Pick ONE URL from debug/scraping_suite/domains.txt for your tests\n- Reference debug/scraping_suite/run_baseline.py for environment validation approach\n- Your validation must use REAL scraper output, not just isolated function tests"
+    "prompt": "## Problem Description\n<Precise description of what is failing, expected vs actual behavior>\n\n## Investigation Results\n<Findings from Phase 1: error messages, stack traces, affected functions with File:Line references>\n\n## Recommended Starting Points\n<Specific folders and files the subagent should examine first, ordered by relevance>\n\n## CRITICAL: Workspace\nYou MUST create all debug scripts and test files in: debug/Agent_1/\nThis is YOUR isolated workspace. Other agents work in Agent_2/ and Agent_3/"
   }
 }
 ```
@@ -89,222 +86,233 @@ print(f"Agent IDs extracted: {agent_1_id}, {agent_2_id}, {agent_3_id}")
 
 ---
 
-## Phase 2.4: Assess Agent Debug Plans & Get User Approval
+## Phase 2.4: Assess Agent Debug Plans
 
-**CRITICAL:** Agents deliver their debug plans BEFORE executing Step 2 (Reproduce).
+**CRITICAL:** Agents complete Steps 1+2 (Root Cause + Reproduce) and then report with their solution plans.
 
-After Phase 2 agents return with their initial reports, perform **DUAL ASSESSMENT** and WAIT for user decision.
+After Phase 2 agents return with their reproduction results and solution plans, assess their approaches:
 
-### Collect Agent Plans
+### Collect Agent Reports
 
 Each agent provides:
-1. **Root Cause Analysis** - What they identified as the problem source
-2. **Debug Plan** - What they intend to test/reproduce
-3. **Planned Scripts** - Which debug scripts they will create in debug/Agent_X/
-4. **Validation Strategy** - How they will validate using scraping_suite infrastructure
+1. **Root Cause Analysis** - What they identified as the problem source (What/Where/Why)
+2. **Reproduction Results** - Whether bug was successfully reproduced, key findings from `reproduce_[issue].py`
+3. **Solution Plan** - Hypothesized fix and planned solution scripts (describe only, not created yet)
 
-### Assessment Criteria (DUAL)
+### Assessment Criteria
 
-#### A. Root Cause Assessment
+#### 1. Root Cause Assessment
 
-Analyze root cause findings:
+**Main Agent's Role:**
+- ❌ NOT: Deep root cause evaluation (Main Agent doesn't have full context)
+- ✅ YES: Catch obviously wrong/absurd root causes
 
-1. **Consensus Check**
-   - Do all 3 agents identify the same root cause?
-   - If YES with identical solution approach: **Diversify methods**
-     → Agent 1: Method X, Agent 2: Method Y, Agent 3: Method Z
-   - If NO: Good diversity, let agents test different theories
-
-2. **Sanity Check**
-   - Is any root cause analysis "hirnrissig" (obviously wrong)?
-   - If YES: **REDIRECT** with hints toward credible analysis
-   - If plausible: Let agent test their theory
-
-**Root Cause Consensus:**
-- Agent 1: [root cause identified]
-- Agent 2: [root cause identified]
-- Agent 3: [root cause identified]
-- Consensus: YES/NO - [explanation]
-- **Action needed:** [None / Diversify solutions / Redirect incorrect analysis]
-
-#### B. Test Strategy Assessment (CRITICAL)
-
-**MANDATORY: All agents MUST use the scraping_suite infrastructure!**
-
-**Required Test Coverage:**
-```
-✅ Phase 1: Isolated Function Test (debug/Agent_X/)
-   - Test scraper functions with imports from src/scraper/
-   - Use URL picked from debug/scraping_suite/domains.txt
-
-✅ Phase 2: Real Environment Test (using scraping_suite)
-   - Reference debug/scraping_suite/run_baseline.py approach
-   - Scrape actual URL from domains.txt
-   - Compare output before/after fix
-   - Demonstrate concrete improvement with real examples
-```
-
-**RED FLAGS (Incomplete Test Strategy):**
-```
-❌ "Test with mock HTML strings only"
-❌ "Validate regex patterns in isolation"
-❌ "Test function logic without real scraping"
-❌ NO mention of domains.txt
-❌ NO mention of run_baseline.py or real scraper output
-❌ NO comparison of actual scraping results
-```
-
-**Test Strategy Analysis:**
-- Agent 1: Uses domains.txt? [YES/NO] | Uses real scraper output? [YES/NO]
-- Agent 2: Uses domains.txt? [YES/NO] | Uses real scraper output? [YES/NO]
-- Agent 3: Uses domains.txt? [YES/NO] | Uses real scraper output? [YES/NO]
-
-**Approach Overlap Analysis:**
-- Agent 1 vs Agent 2: HIGH/MEDIUM/LOW overlap - [explain]
-- Agent 1 vs Agent 3: HIGH/MEDIUM/LOW overlap - [explain]
-- Agent 2 vs Agent 3: HIGH/MEDIUM/LOW overlap - [explain]
-
-**Coverage Quality:**
-- Untested approaches: [list alternative strategies not covered by any agent]
-- Diversity rating: EXCELLENT/GOOD/POOR - [explanation]
-
-### Present Assessment to User
-
-Show user complete analysis with recommendations:
+**Intervention Logic:**
 
 ```
-PHASE 2.4: AGENT PLANS ASSESSMENT
-==================================
+IF agent has clearly absurd root cause (obviously wrong):
+  REDIRECT: "Your root cause analysis seems off. Consider [hint]."
 
-AGENT 1 ASSESSMENT
-------------------
-Root Cause: [identified cause]
-Planned Approach: [brief summary]
-Planned Scripts: [list in debug/Agent_1/]
+IF all 3 agents agree on SAME root cause AND SAME solution approach:
+  REDIRECT: "All agents plan to fix [root cause] with [method X].
+             Agent 2: Try fixing it with [method Y] instead
+             Agent 3: Try fixing it with [method Z] instead"
 
-TEST STRATEGY:
-✅/❌ Phase 1 (Isolated): [Tests functions with URL from domains.txt]
-✅/❌ Phase 2 (Real Environment): [Uses run_baseline.py approach, compares actual output]
-✅/❌ Scraping Suite Integration: [Picks URL from domains.txt, references baseline]
+OTHERWISE:
+  LET AGENTS TEST their different theories
+```
 
-⚠️ ISSUES FOUND:
-[Missing scraping_suite usage / isolated-only testing / no real URL testing / etc.]
+**Principle:** Diversify solution approaches when consensus exists, catch extreme outliers.
 
-OVERLAP:
-- With Agent 2: [HIGH/MEDIUM/LOW - explain]
-- With Agent 3: [HIGH/MEDIUM/LOW - explain]
+#### 2. Test Strategy Assessment
 
-QUALITY: [EXCELLENT/GOOD/NEEDS_IMPROVEMENT]
-DECISION: GO / REDIRECT
-REASONING: [Why]
+**CRITICAL:** Don't let agents fuck around in isolated test environments.
 
----
+**The Message:**
+Testing MUST happen in the **actual production context** with the **actual framework** the project uses.
 
-AGENT 2 ASSESSMENT
-------------------
-[Same structure as Agent 1]
+**RED FLAGS - Agent is jerking off in isolation:**
 
----
+❌ "I'll test this in a standalone Python script"
+❌ "Let me create mock data in debug/"
+❌ "I'll validate with json.dumps()"
+❌ "Quick test to see if function returns the right value"
 
-AGENT 3 ASSESSMENT
-------------------
-[Same structure as Agent 1]
+**What's ACTUALLY needed:**
 
----
+✅ Test with the **real framework/stack** the project runs on
+✅ Use **actual production imports and structure**
+✅ Validate in **full workflow context**, not synthetic bullshit
 
+**Intervention Logic:**
+
+```
+IF agent plans to test ONLY in isolation without using the production framework:
+  REDIRECT: "Stop testing in isolation. Your fix needs to work in the ACTUAL
+             production context. Test with:
+             - The actual framework/stack this project uses
+             - Real production imports and structure
+             - Full workflow context, not mock data"
+```
+
+**Why?** Because a fix that works in a vacuum but breaks in production is worthless.
+
+#### 3. Approach Diversity
+
+- Do agents cover different solution strategies?
+- If all test same approach: Assign different methods to ensure diversity
+
+#### 4. Plan Quality
+
+- Is the debug plan comprehensive?
+- Does it cover reproduction + validation?
+- Are planned scripts well-structured?
+
+### Decision & Recommendation Format
+
+For each agent, document:
+
+```
+AGENT [X] ASSESSMENT
+
+Root Cause: [Agent's identified root cause]
+Root Cause Sanity: ✅ Reasonable / ⚠️ Questionable / ❌ Absurd
+
+Reproduction: ✅ Bug reproduced / ❌ Could not reproduce
+Key Findings: [What the reproduction revealed]
+
+Planned Solution: [Brief summary of solution hypothesis]
+Planned Scripts: [List of solution scripts agent will create in Phase 2]
+
+SOLUTION STRATEGY:
+- Uses Production Framework: ✅/❌
+- Uses Real Project Structure: ✅/❌
+- Tests in Full Workflow Context: ✅/❌
+
+⚠️ ISSUE: [If testing only in isolation or absurd root cause, describe]
+RECOMMENDATION: [GO / REDIRECT]
+
+OVERLAP CHECK:
+- With Agent Y: [HIGH/MEDIUM/LOW overlap - explain]
+- With Agent Z: [HIGH/MEDIUM/LOW overlap - explain]
+
+QUALITY: [EXCELLENT/GOOD/NEEDS_IMPROVEMENT - explain]
+
+DECISION: GO / REDIRECT / MERGE
+REASONING: [Why this decision]
+
+INSTRUCTIONS TO AGENT:
+[If GO: "Proceed with your planned solution approach"]
+[If REDIRECT for approach: "Try fixing [root cause] with [method Y] instead of [method X]"]
+[If REDIRECT for isolation: "Stop testing in isolation. Use the actual production framework and workflow context"]
+[If REDIRECT for root cause: "Your reproduction was good but root cause seems off. Consider [hint]"]
+[If MERGE: "Collaborate with Agent Y to test [combined approach]"]
+```
+
+### Overall Recommendation
+
+After assessing all 3 agents:
+
+```
 OVERALL ASSESSMENT
-==================
 
-Root Cause Consensus: YES/NO
-  [If YES: Are solutions identical? → Need diversification?]
+Root Cause Consensus: YES/NO - [explanation]
+Reproduction Success: [X/3 agents successfully reproduced the bug]
+Solution Approach Diversity: EXCELLENT/GOOD/POOR - [explanation]
 
-Solution Diversity: EXCELLENT/GOOD/POOR
-  [If all test same method: Redirect to diversify]
+SOLUTION STRATEGY ASSESSMENT:
+- Agent 1: ✅ Using production framework / ❌ Isolated testing only
+- Agent 2: ✅ Using production framework / ❌ Isolated testing only
+- Agent 3: ✅ Using production framework / ❌ Isolated testing only
 
-Test Strategy Quality:
-  - Agent 1: COMPLETE/INCOMPLETE (uses scraping_suite: YES/NO)
-  - Agent 2: COMPLETE/INCOMPLETE (uses scraping_suite: YES/NO)
-  - Agent 3: COMPLETE/INCOMPLETE (uses scraping_suite: YES/NO)
+AGENTS TO PROCEED:
+- Agent 1: [GO/REDIRECT/MERGE] - [brief instruction]
+- Agent 2: [GO/REDIRECT/MERGE] - [brief instruction]
+- Agent 3: [GO/REDIRECT/MERGE] - [brief instruction]
 
----
-
-MY RECOMMENDATIONS:
-- Agent 1: [GO / REDIRECT - specific instructions]
-- Agent 2: [GO / REDIRECT - specific instructions]
-- Agent 3: [GO / REDIRECT - specific instructions]
-
-REASONING: [Why these recommendations ensure complete and diverse testing]
+EXPECTED OUTCOME:
+[What solutions/validations you expect from the 3 agents in Phase 2]
 ```
 
-**WAIT for user decision.**
+**CRITICAL: PRESENT THIS ASSESSMENT TO THE USER**
 
-Ask: "Should I proceed with these agent assignments, or would you like to redirect any agents to different approaches?"
+This is NOT internal analysis. The user MUST see:
+1. Each agent's individual assessment (GO/REDIRECT/MERGE decisions with reasoning)
+2. The OVERALL ASSESSMENT with all agents' statuses
+3. Expected outcomes after redirection
 
-### User Decision Options
+**Format for user presentation:**
+- Show all 3 AGENT [X] ASSESSMENT blocks
+- Show the OVERALL ASSESSMENT block
+- Use clear formatting so user can review your decisions
 
-User can:
-1. **Approve all**: All agents GO with their planned approaches
-2. **Approve with modifications**: Specific agents get REDIRECT instructions
-3. **Request changes**: User specifies different approach assignments
+Do NOT proceed to send continuation instructions until user has seen this report.
 
-### Send Continuation Instructions to Agents
+### Send Continuation Instructions
 
-After user approval, resume each agent using the Task tool with `resume` parameter and their extracted Agent IDs:
+Resume each agent with specific instructions based on decisions above. Agents continue from **Step 3 (Develop Solution)** with their assigned approach.
+
+**IMPORTANT:** Agents have already completed:
+- Step 1: Root Cause Analysis
+- Step 2: Reproduction (created and executed `reproduce_[issue].py`)
+- Step 2.5: Reported to Main Agent
+
+Now they proceed with Phase 2:
+- Step 3: Develop Solution
+- Step 4: Validate Solution
+- Step 5: Final Report
+
+**🔥 CRITICAL: Use the extracted agent IDs from Phase 2.3 (HASH ONLY) 🔥**
+
+**REMINDER:**
+- Agent IDs are stored as HASH ONLY (e.g., "abc123")
+- DO NOT use "agent-" prefix in resume parameter
+- ✅ CORRECT: `resume="abc123"`
+- ❌ WRONG: `resume="agent-abc123"` (will fail with "No transcript found")
 
 ```python
-# Example: Resume Agent 1 with GO instruction
+# Resume Agent 1
 Task(
     subagent_type="debug-specialist",
-    description="continue debug (Agent 1)",
-    resume=agent_1_id,  # Use extracted ID from Phase 2.3
-    prompt="[GO or REDIRECT message below]"
+    description="Agent 1 - continue",
+    resume=agent_1_id,  # ← Use extracted ID (HASH ONLY, no "agent-" prefix)
+    prompt="## [GO/REDIRECT] - INSTRUCTIONS\n[Your assessment and instructions]"
+)
+
+# Resume Agent 2
+Task(
+    subagent_type="debug-specialist",
+    description="Agent 2 - continue",
+    resume=agent_2_id,  # ← Use extracted ID (HASH ONLY, no "agent-" prefix)
+    prompt="## [GO/REDIRECT] - INSTRUCTIONS\n[Your assessment and instructions]"
+)
+
+# Resume Agent 3
+Task(
+    subagent_type="debug-specialist",
+    description="Agent 3 - continue",
+    resume=agent_3_id,  # ← Use extracted ID (HASH ONLY, no "agent-" prefix)
+    prompt="## [GO/REDIRECT] - INSTRUCTIONS\n[Your assessment and instructions]"
 )
 ```
 
-Resume each agent with specific instructions:
+**Example of correct usage:**
+```python
+# If extracted ID is "62b9126b" (correct format from Phase 2.3)
+Task(
+    subagent_type="debug-specialist",
+    description="Agent 1 - continue",
+    resume="62b9126b",  # ✅ Correct
+    prompt="..."
+)
 
-**If GO:**
+# NOT like this:
+# resume="agent-62b9126b"  # ❌ Wrong - will fail
 ```
-Proceed with your planned approach. Execute Step 2 (Reproduce) as described in your plan.
-```
-
-**If REDIRECT (incomplete test strategy):**
-```
-Your test plan is incomplete. You MUST add real environment validation:
-- Pick ONE URL from debug/scraping_suite/domains.txt
-- Reference debug/scraping_suite/run_baseline.py for validation approach
-- Compare actual scraper output before/after your fix
-- Show concrete examples from real scraping, not just isolated tests
-
-Proceed to Step 2 with this enhanced validation strategy.
-```
-
-**If REDIRECT (solution diversification needed):**
-```
-All agents identified the same root cause with identical solution approaches.
-To ensure thorough testing, focus on [specific alternative method] instead.
-
-Test [alternative approach] because [reasoning].
-Still use scraping_suite infrastructure (domains.txt + run_baseline.py approach).
-
-Proceed to Step 2 with this adjusted approach.
-```
-
-**If REDIRECT (incorrect root cause):**
-```
-Your root cause analysis seems incorrect. Consider [hint toward correct direction].
-Re-examine [specific file:line] and [specific behavior].
-
-Still use scraping_suite infrastructure for validation.
-
-Proceed to Step 2 with revised root cause analysis.
-```
-
-Agents continue from Step 2 with clear direction.
 
 ---
 
-## Phase 2.6: Agent Results Aggregation
+## Phase 2.5: Agent Results Aggregation
 
 After all 3 agents complete, analyze their solutions:
 
@@ -350,9 +358,9 @@ REJECTED SOLUTIONS:
 
 ## Phase 3: Present Multi-Agent Analysis to User
 
-After completing Phase 2.6 aggregation:
+After completing Phase 2.5 aggregation:
 
-1. **Show the Agent Comparison Report** (from Phase 2.6)
+1. **Show the Agent Comparison Report** (from Phase 2.5)
 2. **Present your recommended solution** with clear reasoning
 3. **Highlight key differences** between the 3 approaches
 4. **Show consensus areas** (if all agents agreed on root cause)

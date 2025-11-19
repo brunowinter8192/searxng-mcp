@@ -88,7 +88,7 @@ baselines/
 └── chroma_docs/
 ```
 
-Metadata files contain iteration number, timestamp, URL, character count, word count, success status, and error information if applicable.
+Metadata files contain iteration number, timestamp, URL, character count, and word count.
 
 ### Reports Directory
 

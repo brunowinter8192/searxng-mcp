@@ -32,7 +32,7 @@ Long-term thinking. Brutal honesty. No overengineering.
 
 - NO comments inside function bodies (only function header comments + section markers)
 - NO test files in root (ONLY in debug/ folders - root or per-module)
-- NO debug/ or logs/ folders in version control (MUST be in .gitignore)
+- NO debug/ or logs/ folders in version control (MUST be in .gitignore, except debug/scraping_suite/ which is tracked as test infrastructure)
 - NO emojis in production code, READMEs, DOCS.md, logs
 - NO verbose console output (use logging instead)
 
@@ -517,5 +517,10 @@ claude mcp list
 ## COMPLIANCE
 
 Scripts in `debug/` folders (root-level or per-module) are exempt from CLAUDE.md compliance requirements.
+
+**Exception:** The `debug/scraping_suite/` directory contains test infrastructure for continuous quality monitoring and is tracked in version control. The following files in this directory are maintained as part of the project:
+- `debug/scraping_suite/run_baseline.py` - Test runner for baseline scraping validation
+- `debug/scraping_suite/README.md` - Documentation for the scraping test suite
+- `debug/scraping_suite/compare_iterations.py` - Tool for comparing scraping iterations
 
 All other code must follow these standards strictly.

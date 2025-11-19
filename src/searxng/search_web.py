@@ -1,14 +1,17 @@
 # INFRASTRUCTURE
+import json
 import requests
+from mcp.types import TextContent
 
 SEARXNG_URL = "http://localhost:8080/search"
 MAX_RESULTS = 20
 
 
 # ORCHESTRATOR
-def search_web_workflow(query: str, category: str) -> dict:
+def search_web_workflow(query: str, category: str) -> list[TextContent]:
     raw_results = fetch_search_results(query, category)
-    return format_results(query, category, raw_results)
+    formatted_dict = format_results(query, category, raw_results)
+    return [TextContent(type="text", text=json.dumps(formatted_dict, indent=2))]
 
 
 # FUNCTIONS

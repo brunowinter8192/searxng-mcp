@@ -6,11 +6,11 @@ URL scraping tool with JavaScript rendering for SearXNG MCP server.
 
 **Purpose:** Single URL scraper with JavaScript rendering and HTML to markdown conversion using networkidle wait strategy.
 **Input:** Single URL string and optional maximum content length.
-**Output:** Dictionary containing url, markdown content, success status, and error.
+**Output:** Plain markdown content string wrapped in TextContent, or error message string on failure.
 
 ### scrape_url_workflow()
 
-Main orchestrator function. Coordinates browser initialization, URL content fetching, content extraction, and result formatting. Manages browser lifecycle and ensures cleanup. Called directly by server.py tool definition. Uses networkidle wait strategy for complete JavaScript rendering.
+Main orchestrator function. Coordinates browser initialization, URL content fetching, and content extraction. Manages browser lifecycle and ensures cleanup. Returns plain markdown directly in TextContent on success, or error message on failure. Called directly by server.py tool definition. Uses networkidle wait strategy for complete JavaScript rendering.
 
 ### init_browser()
 
@@ -27,14 +27,6 @@ Releases browser resources by closing the browser instance. Ensures proper clean
 ### extract_single_content()
 
 Converts single HTML string to markdown. Orchestrates parsing, filtering, and markdown conversion pipeline with configurable maximum content length.
-
-### format_success_result()
-
-Formats successful scrape result into structured dictionary. Returns url, content, success flag set to true, and null error.
-
-### format_error_result()
-
-Formats error result into structured dictionary. Returns url, empty content, success flag set to false, and error message string.
 
 ### parse_html()
 

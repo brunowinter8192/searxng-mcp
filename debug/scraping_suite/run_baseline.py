@@ -48,13 +48,17 @@ async def process_single_domain(url: str) -> None:
     print(f"\nProcessing: {domain_name}")
     print(f"URL: {url}")
 
-    result = await scrape_url_workflow(url)
+    response = await scrape_url_workflow(url)
 
-    if result['success']:
-        save_baseline(domain_name, url, result)
-        print(f"Success: Saved iteration for {domain_name}")
+    if isinstance(response, list) and len(response) > 0:
+        content = response[0].text
+        if content.startswith("Error"):
+            print(f"Failed: {content}")
+        else:
+            save_baseline(domain_name, url, content)
+            print(f"Success: Saved iteration for {domain_name}")
     else:
-        print(f"Failed: {result['error']}")
+        print(f"Failed: Unexpected response format")
 
 
 # Extract clean domain name from URL for folder naming
@@ -77,7 +81,7 @@ def extract_domain_name(url: str) -> str:
 
 
 # Save baseline content and metadata
-def save_baseline(domain_name: str, url: str, result: dict) -> None:
+def save_baseline(domain_name: str, url: str, content: str) -> None:
     baselines_dir = Path(__file__).parent / "baselines" / domain_name
     baselines_dir.mkdir(parents=True, exist_ok=True)
 
@@ -87,9 +91,9 @@ def save_baseline(domain_name: str, url: str, result: dict) -> None:
     metadata_file = baselines_dir / f"metadata_{iteration_number:03d}.json"
 
     with open(content_file, 'w', encoding='utf-8') as f:
-        f.write(result['content'])
+        f.write(content)
 
-    metadata = create_metadata(url, result, iteration_number)
+    metadata = create_metadata(url, content, iteration_number)
 
     with open(metadata_file, 'w', encoding='utf-8') as f:
         json.dump(metadata, f, indent=2)
@@ -115,17 +119,13 @@ def get_next_iteration(baselines_dir: Path) -> int:
 
 
 # Create metadata dictionary
-def create_metadata(url: str, result: dict, iteration_number: int) -> dict:
-    content = result['content']
-
+def create_metadata(url: str, content: str, iteration_number: int) -> dict:
     return {
         "iteration": iteration_number,
         "timestamp": datetime.now().isoformat(),
         "url": url,
         "char_count": len(content),
-        "word_count": len(content.split()),
-        "success": result['success'],
-        "error": result['error']
+        "word_count": len(content.split())
     }
 
 

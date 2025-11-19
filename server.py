@@ -4,6 +4,7 @@ import nest_asyncio
 from typing import Annotated, Literal
 from fastmcp import FastMCP
 from pydantic import Field
+from mcp.types import TextContent
 
 nest_asyncio.apply()
 
@@ -22,7 +23,7 @@ def search_web(
         Literal["general", "news", "it", "science"],
         Field(description="Search category: general (web/books), news (articles), it (code/packages/Q&A), science (publications)")
     ] = "general"
-) -> dict:
+) -> list[TextContent]:
     """Use when user needs to search the web for information. Good for finding documentation, tutorials, code examples, news articles, or scientific papers."""
     return search_web_workflow(query, category)
 
@@ -31,7 +32,7 @@ def search_web(
 def scrape_url(
     url: Annotated[str, Field(description="Single URL to scrape (e.g., 'https://example.com', 'https://docs.python.org/3/library/asyncio.html')")],
     max_content_length: Annotated[int, Field(description="Maximum content length in characters (default: 15000, increase for longer articles)")] = 15000
-) -> dict:
+) -> list[TextContent]:
     """Use when user needs to fetch full page content from a URL. Handles JavaScript-rendered pages with networkidle wait strategy. Good for extracting documentation, articles, or any web content after getting URLs from search_web."""
     return asyncio.run(scrape_url_workflow(url, max_content_length))
 

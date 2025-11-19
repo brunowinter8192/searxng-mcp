@@ -3,11 +3,12 @@ import re
 from html.parser import HTMLParser
 from html import unescape
 from playwright.async_api import async_playwright, Browser
+from mcp.types import TextContent
 
 TIMEOUT_MS = 30000
 DEFAULT_MAX_CONTENT_LENGTH = 15000
 
-SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg'}
+SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer'}
 CONTENT_TAGS = {'main', 'article', 'section', 'div', 'body'}
 INLINE_TAGS = {'a', 'strong', 'b', 'em', 'i', 'code', 'span', 'img'}
 BLOCK_TAGS = {'p', 'div', 'section', 'article', 'main', 'blockquote'}
@@ -16,16 +17,17 @@ LIST_TAGS = {'ul', 'ol'}
 
 
 # ORCHESTRATOR
-async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH) -> dict:
+async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH) -> list[TextContent]:
     browser = await init_browser()
     raw_html = await fetch_url_content(url, browser)
     await cleanup_browser(browser)
 
     if isinstance(raw_html, Exception):
-        return format_error_result(url, raw_html)
+        error_msg = f"Error scraping {url}: {str(raw_html)}"
+        return [TextContent(type="text", text=error_msg)]
 
     extracted_content = extract_single_content(raw_html, max_content_length)
-    return format_success_result(url, extracted_content)
+    return [TextContent(type="text", text=extracted_content)]
 
 
 # FUNCTIONS
@@ -63,26 +65,6 @@ def extract_single_content(html: str, max_content_length: int) -> str:
     return markdown
 
 
-# Format successful scrape result
-def format_success_result(url: str, content: str) -> dict:
-    return {
-        "url": url,
-        "content": content,
-        "success": True,
-        "error": None
-    }
-
-
-# Format error result
-def format_error_result(url: str, error: Exception) -> dict:
-    return {
-        "url": url,
-        "content": "",
-        "success": False,
-        "error": str(error)
-    }
-
-
 # Parse HTML into structured representation
 def parse_html(html: str) -> dict:
     parser = HTMLContentParser()
@@ -95,7 +77,49 @@ def filter_content(parsed: dict) -> list:
     nodes = parsed.get("nodes", [])
     filtered = remove_skip_tags(nodes)
     main_content = extract_main_content(filtered)
-    return main_content
+    clean_content = remove_navigation_attributes(main_content)
+    return clean_content
+
+
+# Remove navigation elements by attributes
+def remove_navigation_attributes(nodes: list) -> list:
+    result = []
+    skip_depth = 0
+    current_skip_tag = None
+    filterable_tags = {'div', 'section', 'aside', 'ul', 'ol', 'li', 'span', 'label', 'button', 'input', 'form'}
+
+    for node in nodes:
+        if node["type"] == "start" and node["tag"] in filterable_tags:
+            attrs = node.get("attrs", {})
+            class_attr = attrs.get("class", "").lower()
+            id_attr = attrs.get("id", "").lower()
+            role_attr = attrs.get("role", "").lower()
+
+            nav_patterns = ['vector-', 'mw-portlet', 'mw-panel', 'navigation', 'noprint', 'toc', 'sidebar', 'menu', 'tools', 'p-lang', 'p-tb', 'p-navigation', 'p-interaction', 'wmde-banner', 'cn-fundraising', 'frb']
+
+            should_skip = (
+                role_attr in ['navigation', 'complementary', 'banner'] or
+                any(pattern in class_attr for pattern in nav_patterns) or
+                any(pattern in id_attr for pattern in nav_patterns)
+            )
+
+            if should_skip:
+                if skip_depth == 0:
+                    current_skip_tag = node["tag"]
+                skip_depth += 1
+                continue
+
+        if node["type"] == "end" and skip_depth > 0:
+            if node["tag"] == current_skip_tag:
+                skip_depth -= 1
+                if skip_depth == 0:
+                    current_skip_tag = None
+            continue
+
+        if skip_depth == 0:
+            result.append(node)
+
+    return result
 
 
 # Convert filtered nodes to markdown string
@@ -115,7 +139,6 @@ class HTMLContentParser(HTMLParser):
         self.tag_stack = []
         self.current_attrs = {}
 
-    # Handle opening tags
     def handle_starttag(self, tag, attrs):
         self.tag_stack.append(tag)
         self.current_attrs[tag] = dict(attrs)
@@ -125,7 +148,6 @@ class HTMLContentParser(HTMLParser):
             "attrs": dict(attrs)
         })
 
-    # Handle closing tags
     def handle_endtag(self, tag):
         if self.tag_stack and self.tag_stack[-1] == tag:
             self.tag_stack.pop()
@@ -134,7 +156,6 @@ class HTMLContentParser(HTMLParser):
             "tag": tag
         })
 
-    # Handle text content between tags
     def handle_data(self, data):
         text = unescape(data.strip())
         if text:
@@ -144,7 +165,6 @@ class HTMLContentParser(HTMLParser):
                 "parent_tags": list(self.tag_stack)
             })
 
-    # Handle self-closing tags
     def handle_startendtag(self, tag, attrs):
         self.result.append({
             "type": "self_closing",
@@ -152,7 +172,6 @@ class HTMLContentParser(HTMLParser):
             "attrs": dict(attrs)
         })
 
-    # Return parsed structure
     def get_result(self) -> dict:
         return {
             "nodes": self.result,
