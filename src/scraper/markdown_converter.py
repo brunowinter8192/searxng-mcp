@@ -218,6 +218,7 @@ def clean_markdown_artifacts(markdown: str) -> str:
     markdown = re.sub(r'\[\[(\d+)\]\]\([^)]*cite[^)]*\)', '', markdown)
     markdown = re.sub(r'\[\]\(/wiki/[^)]*\)', '', markdown)
     markdown = re.sub(r'\[([^\]]+)\]\(/wiki/[^)]*\)', r' \1 ', markdown)
+    markdown = re.sub(r'!\[\s*\]\([^)]+\)', '', markdown)
     markdown = re.sub(r'\[\s*\]\([^)]+\)', '', markdown)
 
     replacements = {
