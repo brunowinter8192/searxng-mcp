@@ -164,8 +164,6 @@ def remove_noise_text(nodes: list) -> list:
                 continue
             if node["content"] in ['--', 'Share', 'Listen']:
                 continue
-            if node["content"].isdigit() and len(node["content"]) <= 5:
-                continue
 
         result.append(node)
 

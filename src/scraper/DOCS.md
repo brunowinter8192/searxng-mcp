@@ -82,7 +82,7 @@ Removes anchor tags that match noise URL patterns. Filters out signin links, cla
 
 ### remove_noise_text()
 
-Removes text nodes matching noise patterns. Filters out UI text like "Member-only story", "Share", "Listen", "Press enter or click to view", and standalone numbers (clap counts). Preserves all other text content.
+Removes text nodes matching noise patterns. Filters out UI text like "Member-only story", "Share", "Listen", "Press enter or click to view", and specific noise strings like "--". Preserves numeric values to maintain data integrity in technical documentation, code examples, and JSON content.
 
 ## markdown_converter.py
 
@@ -98,17 +98,37 @@ Main orchestrator. Converts filtered nodes to markdown string with configurable 
 
 Removes tracking query parameters from URLs. Takes URL string and returns clean URL without query string. Preserves scheme, host, path, and fragment while stripping all query parameters. Used to clean links from tracking suffixes like ?source=post_page or ?utm_source.
 
+### sanitize_image_alt()
+
+Sanitizes image alt text for markdown compatibility. Removes file extensions (.jpg, .png, .gif, .webp, .svg, .bmp), strips markdown-breaking characters (brackets, parentheses), and truncates to 100 characters with ellipsis if exceeding limit. Returns cleaned alt text suitable for markdown image syntax.
+
 ### extract_image_markdown()
 
 Extracts image markdown with lazy loading support and size filtering. Checks src attribute first, falls back to data-src, data-lazy-src, or srcset for lazy-loaded images. Returns empty string if no valid source found (prevents ghost exclamation marks). Filters out small images (width or height below 100px) and avatar-sized images (Medium resize:fill patterns). Returns properly formatted markdown image syntax with alt text.
 
+### handle_start_tag()
+
+Processes opening HTML tags and appends markdown equivalent to result buffer. Handles headings, paragraphs, line breaks, bold, italic, code, pre blocks, links, images, lists, blockquotes, and tables. For tables, tracks state including header row detection and cell counting for separator row generation. Returns updated link_href and pre_depth state. Mutates result list, list_stack, and table_state in place.
+
+### handle_end_tag()
+
+Processes closing HTML tags and appends markdown equivalent to result buffer. Handles heading newlines, bold/italic/code closing markers with trailing space detection, pre block closing fences, link closing with href, list stack management, and table elements. For table rows, generates markdown separator row after header row using tracked cell count. Returns updated link_href and pre_depth state.
+
+### handle_text_node()
+
+Processes text content nodes with whitespace normalization. Preserves literal whitespace for text inside pre blocks (in_pre flag). For regular text, detects leading and trailing space metadata to insert boundary spaces when adjacent to alphanumeric characters. Mutates result list in place.
+
+### handle_self_closing_tag()
+
+Processes self-closing HTML tags (br, img, hr). Appends line break for br, image markdown for img (using extract_image_markdown), and horizontal rule for hr. Mutates result list in place.
+
 ### convert_nodes_to_markdown()
 
-Converts parsed nodes to markdown string. Handles headings, paragraphs, lists, links, images, code blocks, blockquotes, and inline formatting. Maintains list stack for proper nesting and link href for anchor tags. Uses whitespace boundary detection helpers to insert spaces around bold, italic, code, and link markers when needed. Preserves literal whitespace in pre blocks by checking in_pre flag on text nodes.
+Orchestrates node-to-markdown conversion by delegating to specialized handlers. Iterates through nodes and dispatches to handle_start_tag, handle_end_tag, handle_text_node, or handle_self_closing_tag based on node type. Maintains conversion state including result buffer, list stack for nesting, link href for anchors, pre depth for code blocks, last text node for whitespace tracking, and table state for GitHub-flavored markdown table generation.
 
 ### should_add_space_before()
 
-Helper function to check if space should be added before inline tag marker. Examines last text node's has_trailing_space metadata and previous element type to determine if boundary space is needed before bold, italic, code, or link opening markers.
+Helper function to check if space should be added before inline tag marker. Examines result buffer for trailing alphanumeric characters, checks parser whitespace flags, and applies smart spacing for inline formatting tags (strong, b, em, i, code). Adds space when previous text ends with alphanumeric character and current tag is inline formatting, even when parser flags indicate no explicit whitespace.
 
 ### find_next_node()
 
@@ -116,11 +136,11 @@ Helper function to find next node in list. Returns None if current node is last.
 
 ### should_add_space_after()
 
-Helper function to check if space should be added after inline tag marker. Examines next text node's has_leading_space metadata to determine if boundary space is needed after bold, italic, code, or link closing markers.
+Helper function to check if space should be added after inline tag marker. Examines next text node's has_leading_space metadata and content start character. Adds space after inline formatting closing markers when next text starts with alphanumeric character, improving readability when HTML source lacks explicit whitespace.
 
 ### clean_markdown_artifacts()
 
-Removes Wikipedia-specific artifacts from markdown output to improve readability and LLM processing quality. Strips citation references in bracket notation, removes inline image tags that disrupt text flow, eliminates empty wiki links, converts Wikipedia relative links to plain text while preserving link text, and decodes URL-encoded characters common in German Wikipedia.
+Removes documentation artifacts from markdown output to improve readability and LLM processing quality. Handles both general documentation patterns (zero-width space anchors, hash self-reference anchors, empty bracket anchors) and Wikipedia-specific patterns (citation references, wiki links). Also decodes URL-encoded characters common in German Wikipedia. Applied after node-to-markdown conversion and before whitespace normalization.
 
 ### clean_whitespace()
 
