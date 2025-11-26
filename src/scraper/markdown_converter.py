@@ -62,14 +62,14 @@ def extract_image_markdown(attrs: dict) -> str:
 
 
 # Check if space should be added before inline tag marker
-def should_add_space_before(result: list, last_text_node: dict | None, nodes: list, current_index: int) -> bool:
+def should_add_space_before(result: list, last_text_node: dict | None, nodes: list, current_index: int, trailing_space_consumed: bool = False) -> bool:
     if not result or not result[-1]:
         return False
+    if last_text_node and last_text_node.get("has_trailing_space") and not trailing_space_consumed:
+        return True
     last_char = result[-1][-1:]
     if not last_char.isalnum():
         return False
-    if last_text_node and last_text_node.get("has_trailing_space"):
-        return True
     current_node = nodes[current_index] if current_index < len(nodes) else None
     if current_node and current_node.get("tag") in {'strong', 'b', 'em', 'i', 'code'}:
         if current_index > 0 and nodes[current_index - 1].get("type") == "text":
@@ -95,7 +95,12 @@ def should_add_space_after(result: list, nodes: list, current_index: int) -> boo
         if next_node.get("has_leading_space"):
             return True
         next_content = next_node.get("content", "")
-        if next_content and next_content[0].isalnum():
+        if not next_content:
+            return False
+        first_char = next_content[0]
+        if first_char.isalnum():
+            return True
+        if first_char in '([{':
             return True
     return False
 
@@ -103,7 +108,10 @@ def should_add_space_after(result: list, nodes: list, current_index: int) -> boo
 # Process opening HTML tag and append markdown equivalent
 def handle_start_tag(node: dict, result: list, list_stack: list, pre_depth: int,
                      last_text_node: dict | None, nodes: list, current_index: int,
-                     table_state: dict) -> tuple[str | None, int]:
+                     table_state: dict, trailing_space_state: list = None) -> tuple[str | None, int]:
+    if trailing_space_state is None:
+        trailing_space_state = [False]
+
     tag = node["tag"]
     attrs = node.get("attrs", {})
     link_href = None
@@ -115,25 +123,33 @@ def handle_start_tag(node: dict, result: list, list_stack: list, pre_depth: int,
     elif tag == "br":
         result.append("\n")
     elif tag == "strong" or tag == "b":
-        if should_add_space_before(result, last_text_node, nodes, current_index):
+        if should_add_space_before(result, last_text_node, nodes, current_index, trailing_space_state[0]):
             result.append(" ")
+            if last_text_node and last_text_node.get("has_trailing_space"):
+                trailing_space_state[0] = True
         result.append("**")
     elif tag == "em" or tag == "i":
-        if should_add_space_before(result, last_text_node, nodes, current_index):
+        if should_add_space_before(result, last_text_node, nodes, current_index, trailing_space_state[0]):
             result.append(" ")
+            if last_text_node and last_text_node.get("has_trailing_space"):
+                trailing_space_state[0] = True
         result.append("*")
     elif tag == "code":
         if pre_depth == 0:
-            if should_add_space_before(result, last_text_node, nodes, current_index):
+            if should_add_space_before(result, last_text_node, nodes, current_index, trailing_space_state[0]):
                 result.append(" ")
+                if last_text_node and last_text_node.get("has_trailing_space"):
+                    trailing_space_state[0] = True
             result.append("`")
     elif tag == "pre":
         pre_depth += 1
         result.append("\n\n```\n")
     elif tag == "a":
         link_href = strip_tracking_params(attrs.get("href", ""))
-        if should_add_space_before(result, last_text_node, nodes, current_index):
+        if should_add_space_before(result, last_text_node, nodes, current_index, trailing_space_state[0]):
             result.append(" ")
+            if last_text_node and last_text_node.get("has_trailing_space"):
+                trailing_space_state[0] = True
         result.append("[")
     elif tag == "img":
         img_md = extract_image_markdown(attrs)
@@ -273,6 +289,7 @@ def convert_nodes_to_markdown(nodes: list) -> str:
     link_href = None
     pre_depth = 0
     last_text_node = None
+    trailing_space_state = [False]
     table_state = {
         "in_table": False,
         "first_row": True,
@@ -285,7 +302,7 @@ def convert_nodes_to_markdown(nodes: list) -> str:
 
         if node_type == "start":
             new_link_href, pre_depth = handle_start_tag(
-                node, result, list_stack, pre_depth, last_text_node, nodes, i, table_state
+                node, result, list_stack, pre_depth, last_text_node, nodes, i, table_state, trailing_space_state
             )
             if new_link_href is not None:
                 link_href = new_link_href
@@ -296,6 +313,7 @@ def convert_nodes_to_markdown(nodes: list) -> str:
         elif node_type == "text":
             handle_text_node(node, result, last_text_node)
             last_text_node = node
+            trailing_space_state[0] = False
         elif node_type == "self_closing":
             handle_self_closing_tag(node, result)
 
@@ -307,12 +325,38 @@ def clean_markdown_artifacts(markdown: str) -> str:
     markdown = re.sub(r'\[​\]\([^)]+\)', '', markdown)
     markdown = re.sub(r'\[#\]\(#[^)]+\)', '', markdown)
     markdown = re.sub(r'\[\]\(#[^)]+\)', '', markdown)
+    markdown = re.sub(r'\[#\](?!\()', '', markdown)
+
+    markdown = re.sub(r'\[¶\]', '', markdown)
+    markdown = re.sub(r'\[↑\]', '', markdown)
+    markdown = re.sub(r'\[\[source\]\]\([^)]+\)', '', markdown)
+    markdown = re.sub(r'\[\[([^\]]+)\]\]\([^)]+\)', '', markdown)
+    markdown = re.sub(r'\[source\]', '', markdown)
+
     markdown = re.sub(r'\[\[(\d+)\]\]\(#cite_note-[^)]*\)', '', markdown)
     markdown = re.sub(r'\[\[(\d+)\]\]\([^)]*cite[^)]*\)', '', markdown)
+    markdown = re.sub(r'\[\d+\](?!\()', '', markdown)
+
+    markdown = re.sub(r'\(\s*\[([^\]]+)\]\(/wiki/[^)]*\)\s*\)', r'(\1)', markdown)
     markdown = re.sub(r'\[\]\(/wiki/[^)]*\)', '', markdown)
-    markdown = re.sub(r'\[([^\]]+)\]\(/wiki/[^)]*\)', r' \1 ', markdown)
+    markdown = re.sub(r'\[([^\]]+)\]\(/wiki/[^)]*\)[,.:;)\*]*', r'\1', markdown)
+
+    markdown = re.sub(r'\(#[^)]+\)', '', markdown)
+    markdown = re.sub(r'!\[\[([^\]]+)\]\]\([^)]+\)', r'\1', markdown)
+    markdown = re.sub(r'!\[\[', '![', markdown)
+
     markdown = re.sub(r'!\[\s*\]\([^)]+\)', '', markdown)
     markdown = re.sub(r'\[\s*\]\([^)]+\)', '', markdown)
+    markdown = re.sub(r'\[\]', '', markdown)
+
+    markdown = re.sub(r'\s*\.(jpg|jpeg|png|gif|webp|svg)\s*\)', '', markdown, flags=re.IGNORECASE)
+
+    markdown = re.sub(r'\(\s*\)', '', markdown)
+    markdown = re.sub(r'\)\s*,\s*\)', '),', markdown)
+    markdown = re.sub(r'\)\*\s+', ' ', markdown)
+    markdown = re.sub(r'\):\*\s+', ': ', markdown)
+    markdown = re.sub(r'\s+\)', ')', markdown)
+    markdown = re.sub(r'\(\s+', '(', markdown)
 
     replacements = {
         '%C3%A4': 'ä', '%C3%84': 'Ä',
@@ -325,6 +369,22 @@ def clean_markdown_artifacts(markdown: str) -> str:
         markdown = markdown.replace(encoded, decoded)
 
     return markdown
+
+
+# Clean non-code-block chunk of whitespace issues
+def clean_whitespace_chunk(chunk: str) -> str:
+    chunk = re.sub(r' {2,}', ' ', chunk)
+    chunk = re.sub(r'\n{3,}', '\n\n', chunk)
+    chunk = re.sub(r'\n ', '\n', chunk)
+    chunk = re.sub(r' \n', '\n', chunk)
+    chunk = re.sub(r'^(-)\s*\n+(\s*)', r'\1 ', chunk, flags=re.MULTILINE)
+    chunk = re.sub(r'^(\d+\.)\s*\n+(\s*)', r'\1 ', chunk, flags=re.MULTILINE)
+    chunk = re.sub(r'^\s*-\s*$', '', chunk, flags=re.MULTILINE)
+    chunk = re.sub(r'(- )+(?=- |##)', '', chunk, flags=re.MULTILINE)
+    chunk = re.sub(r'\*{3,}', '*, ', chunk)
+    chunk = re.sub(r'\*\*([^*]+)\*\*\(', r'**\1** (', chunk)
+    chunk = re.sub(r'\*([^*]+)\*\(', r'*\1* (', chunk)
+    return chunk
 
 
 # Remove excessive whitespace while preserving code blocks
@@ -340,11 +400,7 @@ def clean_whitespace(text: str) -> str:
         if in_code_block:
             parts.append(chunk)
         else:
-            chunk = re.sub(r' {2,}', ' ', chunk)
-            chunk = re.sub(r'\n{3,}', '\n\n', chunk)
-            chunk = re.sub(r'\n ', '\n', chunk)
-            chunk = re.sub(r' \n', '\n', chunk)
-            parts.append(chunk)
+            parts.append(clean_whitespace_chunk(chunk))
 
         parts.append('```')
         current_pos = match.end()
@@ -352,10 +408,7 @@ def clean_whitespace(text: str) -> str:
 
     chunk = text[current_pos:]
     if not in_code_block:
-        chunk = re.sub(r' {2,}', ' ', chunk)
-        chunk = re.sub(r'\n{3,}', '\n\n', chunk)
-        chunk = re.sub(r'\n ', '\n', chunk)
-        chunk = re.sub(r' \n', '\n', chunk)
+        chunk = clean_whitespace_chunk(chunk)
     parts.append(chunk)
 
     return ''.join(parts).strip()

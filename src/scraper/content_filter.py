@@ -2,7 +2,8 @@
 SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header'}
 CONTENT_TAGS = {'main', 'article', 'section', 'div', 'body'}
 NOISE_TEXT_PATTERNS = ['member-only story', 'share', 'listen', 'press enter or click to view']
-NOISE_URL_PATTERNS = ['/m/signin', 'actionUrl=', 'operation=register', 'clap_footer', 'bookmark_footer']
+NOISE_URL_PATTERNS = ['/m/signin', 'actionUrl=', 'operation=register', 'clap_footer', 'bookmark_footer', '#cite_ref', '#cite_note']
+SKIP_TABLE_CLASSES = ['infobox', 'wikitable', 'navbox', 'sidebar', 'metadata', 'mbox', 'ambox', 'tmbox']
 
 
 # ORCHESTRATOR
@@ -11,6 +12,7 @@ def filter_content(parsed: dict) -> list:
     filtered = remove_skip_tags(nodes)
     main_content = extract_main_content(filtered)
     clean_content = remove_navigation_attributes(main_content)
+    clean_content = remove_wikipedia_tables(clean_content)
     clean_content = remove_noise_links(clean_content)
     clean_content = remove_noise_text(clean_content)
     return clean_content
@@ -164,6 +166,30 @@ def remove_noise_text(nodes: list) -> list:
                 continue
             if node["content"] in ['--', 'Share', 'Listen']:
                 continue
+
+        result.append(node)
+
+    return result
+
+
+# Remove Wikipedia infoboxes and navigation tables
+def remove_wikipedia_tables(nodes: list) -> list:
+    result = []
+    skip_depth = 0
+
+    for node in nodes:
+        if node["type"] == "start" and node["tag"] == "table":
+            class_attr = node.get("attrs", {}).get("class", "").lower()
+            if any(pattern in class_attr for pattern in SKIP_TABLE_CLASSES):
+                skip_depth += 1
+                continue
+
+        if skip_depth > 0:
+            if node["type"] == "start" and node["tag"] == "table":
+                skip_depth += 1
+            elif node["type"] == "end" and node["tag"] == "table":
+                skip_depth -= 1
+            continue
 
         result.append(node)
 

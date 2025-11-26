@@ -84,6 +84,10 @@ Removes anchor tags that match noise URL patterns. Filters out signin links, cla
 
 Removes text nodes matching noise patterns. Filters out UI text like "Member-only story", "Share", "Listen", "Press enter or click to view", and specific noise strings like "--". Preserves numeric values to maintain data integrity in technical documentation, code examples, and JSON content.
 
+### remove_wikipedia_tables()
+
+Removes Wikipedia infoboxes and navigation tables that clutter article content. Filters tables with class attributes matching skip patterns: infobox, wikitable, navbox, sidebar, metadata, mbox, ambox, tmbox. Tracks nesting depth to handle tables nested within other tables. Removes entire table structure including all rows and cells when outer table matches skip pattern.
+
 ## markdown_converter.py
 
 **Purpose:** Converts filtered HTML nodes to clean markdown with proper whitespace boundaries and code block preservation.

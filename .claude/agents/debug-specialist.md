@@ -1,7 +1,7 @@
 ---
 name: debug-specialist-searxng
 description: Use this agent for systematic debugging of MCP server issues following the 5-step workflow. Reproduces bugs in debug/ directory, validates solutions against server.py and src/ modules, provides detailed impact analysis.\n\n<example>\nContext: User encounters unexpected behavior in MCP tool.\nuser: "The search_repos tool returns empty results but API works"\nassistant: "I'll use the debug-specialist agent to find the root cause and develop a validated solution."\n</example>\n\n<example>\nContext: User has MCP server startup failure.\nuser: "Server crashes on mcp.run() - need to debug this"\nassistant: "I'll launch the debug-specialist agent to reproduce and fix this systematically."\n</example>
-model: sonnet
+model: opus
 color: red
 ---
 

@@ -1,18 +1,5 @@
 # CLAUDE.MD - MCP Server Engineering Reference
 
-## WHO WE ARE
-
-### You: The Storm
-Critical software engineer. Relentless, precise, brutally intelligent.
-Think 5 times before acting. Question everything. Ask when unclear.
-Root causes, not symptoms. No assumptions.
-
-### Me: The Observer
-Extremely observant. Critical. I **will** notice everything.
-Better to clarify now than rebuild later.
-
----
-
 ## CODE PRINCIPLES
 
 **LEAN** | **SOLID** | **DRY** | **KISS** | **YAGNI**
@@ -67,6 +54,7 @@ mcp_server/
 ├── docker-compose.yml     # Container configuration (if needed)
 ├── debug/                 # Debug scripts for testing (gitignored)
 ├── bug_fixes/             # Bug fix documentation (gitignored)
+├── not_working/             # Not working bug fix documentation
 └── logs/                  # Log files (gitignored)
     └── server.log
 ```

@@ -4,322 +4,219 @@ description: Check if README.md and module DOCS.md files need updates after MCP 
 
 # MCP DOCUMENTATION UPDATE CHECK
 
-Systematic review protocol for README.md and module-level DOCS.md updates following CLAUDE.md MCP server standards.
+Systematic review workflow for README.md and module-level DOCS.md updates following CLAUDE.md MCP server standards.
 
-**Execute this command manually after making code changes to determine if documentation updates are required.**
-
----
-
-## CRITICAL RULE
-
-**WHEN IN DOUBT, ASK THE USER.**
-
-If you are uncertain whether README.md or DOCS.md should be updated or not, ALWAYS ask the user before making the decision.
+**Execute this command after making code changes to determine if documentation updates are required.**
 
 ---
 
-## OVERVIEW
+## Phase 1: Change Analysis
 
-Documentation updates are OPTIONAL - only required when changes affect the documented contract or tool behavior.
+### Step 1: Identify Modified Files
 
-**Two separate concerns:**
-- **README.md:** Usage focused (How to INSTALL and USE the MCP server)
-- **src/domain/DOCS.md:** Architecture focused (How modules in that domain WORK internally)
+List all files modified in this session:
+- server.py changes?
+- src/domain/*.py changes?
+- .mcp.json changes?
+- .env or environment changes?
+
+THEN ↓
+
+### Step 2: Categorize Changes (WHAT vs HOW)
+
+For each modified file, determine:
+
+**WHAT changed** = Contract, interface, behavior visible to users
+- New tool added
+- Parameter changed
+- Output format changed
+- Function responsibility changed
+
+**HOW changed** = Internal implementation only
+- Bug fix
+- Refactoring
+- Performance improvement
+- Algorithm change (same result)
+
+**OUTPUT:** List of changes with WHAT/HOW classification
 
 ---
 
-## README.md CHECK
+## Phase 2: README Impact Assessment
 
 **Purpose:** README documents installation, quick start, environment variables, and tool usage.
 
-### Update Required When:
+### Step 1: Check Tool Interface Changes
 
-1. **New tool added to server.py**
-   - New @mcp.tool definition
-   - New use case for the MCP server
+**README update required when:**
+- New @mcp.tool added to server.py
+- Tool parameter added/removed/renamed
+- Default values changed
+- Tool docstring changed (use case guidance)
+- Output format changed
 
-2. **Tool parameters change**
-   - New parameter added to existing tool
-   - Parameter removed or renamed
-   - Default values change
+**README update NOT required when:**
+- Bug fixes in src/ modules
+- Internal refactoring
+- Performance improvements
+- Code reorganization without interface change
 
-3. **Tool behavior changes**
-   - Output format changes
-   - New fields in response
-   - Different use case guidance in docstring
+THEN ↓
 
-4. **Environment variables change**
-   - New API keys or tokens required
-   - .env structure changes
-   - .mcp.json env section changes
+### Step 2: Check Configuration Changes
 
-5. **Installation or setup changes**
-   - New dependencies required
-   - venv setup changes
-   - .mcp.json path changes
+**README update required when:**
+- New environment variable required
+- .env structure changed
+- .mcp.json env section changed
+- New dependencies required
+- venv setup changed
+- .mcp.json paths changed
 
-### Update NOT Required When:
+THEN ↓
 
-- Bug fixes in src/ module implementation
-- Internal refactoring of workflow functions
-- Performance improvements (caching, pagination)
-- Code reorganization without changing tool interface
-- Function renaming within src/ modules
+### Step 3: Decision
 
-### Decision Workflow:
+Based on Steps 1-2, determine:
 
-1. **Read README** - Check tool descriptions and setup instructions
-2. **Identify Impact** - Does user-visible interface change?
-3. **Decision:**
-   - If tool interface/setup changes then Update README
-   - If only internal implementation changes then Document reason for skipping
-   - **If uncertain then ASK THE USER**
+```
+README ASSESSMENT
+=================
+Tool Interface Changes: YES / NO
+Configuration Changes: YES / NO
+
+DECISION: UPDATE REQUIRED / NO UPDATE / UNCERTAIN
+CONFIDENCE: [X%]
+REASON: [Brief explanation]
+```
+
+**If UNCERTAIN:** Note specific uncertainty for Phase 4
 
 ---
 
-## MODULE DOCS.md CHECK
+## Phase 3: Module DOCS Impact Assessment
 
 **Purpose:** Each domain folder in src/ has its own DOCS.md documenting its modules.
 
 **Location:** src/domain_name/DOCS.md
 
-### Update Required When:
+### Step 1: Identify Affected Domains
 
-1. **New tool module added to domain folder**
-   - Add new ## module.py section to that domain's DOCS.md
-   - Document workflow and functions
+Which src/domain/ folders contain changes?
+- List each affected domain
+- Note which modules within domain changed
 
-2. **New function added to existing module**
-   - Add ### function_name() section
-   - Describe WHAT the function does
+THEN ↓
 
-3. **Function responsibility (WHAT) changes**
-   - Function now does something different
-   - Function purpose changes
+### Step 2: Check Function Contract Changes
 
-4. **Input/Output contract changes**
-   - Function parameters change
-   - Return structure changes
-   - Error handling behavior changes
+For each affected domain, check:
 
-5. **Orchestrator call sequence changes**
-   - Functions called in different order
-   - New functions added to workflow
-   - Functions removed from sequence
+**DOCS update required when:**
+- New module added to domain folder
+- New function added to existing module
+- Function responsibility (WHAT) changed
+- Function parameters changed
+- Return structure changed
+- Orchestrator call sequence changed
+- New domain folder created (needs new DOCS.md)
 
-6. **New domain folder created**
-   - Create new DOCS.md in that folder
-   - Document all modules in the domain
-
-### Update NOT Required When:
-
+**DOCS update NOT required when:**
 - Bug fixes in function implementation (HOW)
 - Internal refactoring within function body
 - Performance improvements
-- Code reorganization without changing responsibilities
 - Variable renaming (internal only)
 - Algorithm changes that don't affect contract
 
-### Decision Workflow:
+THEN ↓
 
-1. **Identify affected domain** - Which src/domain/ folder contains changes?
-2. **Read domain DOCS.md** - Locate sections describing changed modules/functions
-3. **Identify Impact** - Does the WHAT change, or only the HOW?
-4. **Check call sequence** - Did workflow orchestrator order change?
-5. **Decision:**
-   - If WHAT changed then Update domain's DOCS.md section
-   - If only HOW changed then Document reason for skipping
-   - **If uncertain then ASK THE USER**
+### Step 3: Decision
 
----
+For each affected domain:
 
-## TEST SUITE DOCUMENTATION CHECK
-
-**Purpose:** Test suite documentation describes test domains, validation workflow, and quality monitoring procedures.
-
-**Location:** debug/scraping_suite/README.md
-
-### Update Required When:
-
-1. **New test domain added**
-   - New URL added to domains.txt
-   - New domain folder appears in baselines/
-   - Domain represents new content type or technical challenge
-
-2. **Test workflow changes**
-   - run_baseline.py execution steps modified
-   - compare_iterations.py analysis logic changed
-   - New validation procedures added
-   - Workflow phases reordered
-
-3. **Test scripts modified**
-   - run_baseline.py parameter changes
-   - compare_iterations.py output format changes
-   - New test scripts added to suite
-
-4. **Output structure changes**
-   - Baselines directory organization modified
-   - Reports directory structure changed
-   - Metadata JSON format altered
-   - Iteration numbering scheme changed
-
-### Update NOT Required When:
-
-- Bug fixes in test scripts (internal logic)
-- Internal refactoring of test functions
-- Performance improvements to test execution
-- Code reorganization without workflow changes
-- Comment updates or formatting changes
-
-### Decision Workflow:
-
-1. **Identify Test Suite Changes** - Were files in debug/scraping_suite/ modified?
-2. **Read Suite README** - Check documented workflow and structure
-3. **Identify Impact** - Does change affect documented behavior or output?
-4. **Decision:**
-   - If test workflow/structure changes then Update suite README
-   - If only internal implementation changes then Document reason for skipping
-   - **If uncertain then ASK THE USER**
-
-### Sections to Update:
-
-**Test Domains Section:**
-- Update when new domain added
-- Include URL, content type description, technical challenges tested
-
-**Usage Section:**
-- Update when command-line usage changes
-- Update when new scripts added
-
-**Workflow Section:**
-- Update when execution steps change
-- Update when decision gates modified
-
-**Output Structure Section:**
-- Update when directory structure changes
-- Update when file formats change
-
----
-
-## COMPREHENSIVE REVIEW PROTOCOL
-
-### Step 1: Analyze Changes
-List all files modified and nature of changes:
-- Which files changed? (server.py, src/*.py, .mcp.json, .env)
-- What changed in each file?
-- Are changes to tool interface or internal implementation?
-
-### Step 2: README Impact Assessment
-Ask these questions:
-1. Were new tools added to server.py?
-2. Did tool parameters change (Annotated + Field)?
-3. Did tool docstrings change (use cases)?
-4. Did environment variables or setup change?
-5. Did .mcp.json configuration change?
-
-**If YES to any then README update likely required**
-
-### Step 3: Module DOCS Impact Assessment
-Ask these questions:
-1. Were new modules added to a domain folder in src/?
-2. Were new functions added to existing modules?
-3. Do existing functions do something different (WHAT not HOW)?
-4. Did function signatures change (parameters, return types)?
-5. Did the workflow orchestrator call sequence change?
-6. Was a new domain folder created in src/?
-
-**If YES to any then that domain's DOCS.md update likely required**
-
-### Step 3.5: Test Suite DOCS Impact Assessment
-Ask these questions:
-1. Were files in debug/scraping_suite/ modified?
-2. Was a new test domain added to domains.txt?
-3. Did test workflow execution steps change?
-4. Did test output structure change (baselines/, reports/)?
-5. Were new test scripts added?
-
-**If YES to any then debug/scraping_suite/README.md update likely required**
-
-### Step 4: Document Decisions
-For each file (README, domain DOCS, test suite README), document:
 ```
-FILE: README.md / src/domain/DOCS.md / debug/scraping_suite/README.md
-CHANGE: <brief description>
-SECTION: <which section would be affected>
+DOMAIN: src/[domain_name]/
+========================
+Modules Changed: [list]
+Contract Changes: YES / NO
+Call Sequence Changed: YES / NO
+
 DECISION: UPDATE REQUIRED / NO UPDATE / UNCERTAIN
-REASON: <why WHAT changed or why only HOW changed>
-ACTION: <if update required, what to update>
-RECOMMENDATION: <formulate question + YES/NO recommendation for user>
+CONFIDENCE: [X%]
+REASON: [Brief explanation]
+SECTION TO UPDATE: [If update required, which section]
 ```
-
-**IMPORTANT:**
-- If DECISION is UNCERTAIN then Ask the user with your recommendation
-- If DECISION is UPDATE REQUIRED then Present recommendation to user for confirmation
-- If DECISION is NO UPDATE then Present recommendation to user for confirmation
 
 ---
 
-## RECOMMENDATION FORMAT
+## Phase 4: Honest Assessment & User Decision
 
-**CRITICAL:** Present a single, consolidated recommendation.
+### Step 1: Consolidate All Decisions
 
-After completing Step 4, summarize:
+Gather decisions from Phase 2 and Phase 3.
+
+THEN ↓
+
+### Step 2: Present Assessment
 
 ```
-OVERALL RECOMMENDATION:
-- README.md: UPDATE / NO UPDATE
-- src/domain/DOCS.md: UPDATE / NO UPDATE (list each affected domain)
-- debug/scraping_suite/README.md: UPDATE / NO UPDATE
+HONEST ASSESSMENT
+=================
 
-QUESTION (if applicable): [Specific uncertainty]
-RECOMMENDATION: [e.g., "Update src/scraper/DOCS.md yes, README no, test suite README no"]
-REASONING: [Brief explanation]
-```
+OVERALL CONFIDENCE: [X%] - [High 80-95% / Medium 60-80% / Low 40-60%]
 
-**Rules:**
-1. One consolidated overview, not per-change
-2. Only formulate question if uncertain
-3. User makes final decision
+Why this confidence level:
+[Explanation: What makes us confident? What creates uncertainty?]
 
 ---
 
-## MCP-SPECIFIC CHECKS
+README.md:
+- Decision: UPDATE REQUIRED / NO UPDATE / UNCERTAIN
+- Confidence: [X%]
+- Reason: [What changed or why no change needed]
+- Sections affected: [If update, which sections]
 
-### server.py Changes
-- New @mcp.tool definition then Update README and relevant domain DOCS.md
-- Import from src/domain/ added then Update that domain's DOCS.md
-- Tool parameter changed then Update README (usage) and domain DOCS.md (function signature)
-- Docstring changed then Update README (use case guidance)
-
-### src/domain/ Module Changes
-- New module file in domain then Update that domain's DOCS.md (add ## module.py section)
-- New function then Update domain's DOCS.md (add ### function_name() section)
-- Workflow call sequence changed then Update domain's DOCS.md (orchestrator description)
-- Function contract changed then Update domain's DOCS.md (input/output description)
-- New domain folder created then Create new DOCS.md in that folder
-
-### Configuration Changes
-- .mcp.json paths changed then Update README (installation section)
-- New environment variable then Update README (env vars section)
-- .gitignore updated then Usually no update needed
+src/[domain]/DOCS.md: (repeat for each affected domain)
+- Decision: UPDATE REQUIRED / NO UPDATE / UNCERTAIN
+- Confidence: [X%]
+- Reason: [What changed or why no change needed]
+- Sections affected: [If update, which sections]
 
 ---
 
-## EXECUTION CHECKLIST
+WHAT COULD BE WRONG:
+- [Uncertainty 1: What we might have missed]
+- [Uncertainty 2: Edge case not considered]
 
-After running this command, complete the following:
+=================
+```
 
-- [ ] List all files modified in this session
-- [ ] For each change, identify if WHAT or HOW changed
-- [ ] Check README sections affected by tool interface changes
-- [ ] Check domain DOCS.md sections affected by architecture changes
-- [ ] Identify which domain folders are affected
-- [ ] Document update decisions for README and each affected domain's DOCS.md
-- [ ] **Formulate recommendations for each decision**
-- [ ] **Present recommendations to user:**
-  - UNCERTAIN then Ask user with YES/NO recommendation
-  - UPDATE REQUIRED then Confirm with user before updating
-  - NO UPDATE then Document reasoning only
-- [ ] Wait for user approval before making any documentation changes
-- [ ] If approved, update sections following CLAUDE.md prose style
-- [ ] If not approved, document user's decision
+THEN ↓
+
+### Step 3: Get User Approval
+
+**CRITICAL:** Present assessment and wait for user confirmation.
+
+Use `AskUserQuestion` if decisions are UNCERTAIN:
+
+```
+Question: "Should we update [file] based on [change]?"
+Options:
+- Yes, update documentation
+- No, change is internal only
+- Need more context: [specify]
+```
+
+**If all decisions are confident (>80%):** Present recommendation and ask for confirmation.
+
+THEN ↓
+
+### Step 4: Execute Updates (After Approval)
+
+**Only after user confirms:**
+
+1. Update approved files following CLAUDE.md prose style
+2. Keep updates minimal - only document what changed
+3. Maintain existing structure and formatting
+
+**If user rejects:** Document user's decision and reasoning for future reference.
