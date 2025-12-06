@@ -88,20 +88,33 @@ def find_next_node(nodes: list, current_index: int) -> dict | None:
 
 # Check if space should be added after inline tag marker
 def should_add_space_after(result: list, nodes: list, current_index: int) -> bool:
-    next_node = find_next_node(nodes, current_index)
-    if not next_node:
-        return False
-    if next_node.get("type") == "text":
-        if next_node.get("has_leading_space"):
-            return True
-        next_content = next_node.get("content", "")
-        if not next_content:
+    idx = current_index + 1
+    while idx < len(nodes):
+        next_node = nodes[idx]
+        node_type = next_node.get("type")
+
+        if node_type == "text":
+            if next_node.get("has_leading_space"):
+                return True
+            next_content = next_node.get("content", "")
+            if not next_content:
+                return False
+            first_char = next_content[0]
+            if first_char.isalnum():
+                return True
+            if first_char in '([{':
+                return True
             return False
-        first_char = next_content[0]
-        if first_char.isalnum():
-            return True
-        if first_char in '([{':
-            return True
+
+        if node_type == "start":
+            tag = next_node.get("tag", "")
+            if tag in INLINE_TAGS:
+                idx += 1
+                continue
+            return False
+
+        return False
+
     return False
 
 

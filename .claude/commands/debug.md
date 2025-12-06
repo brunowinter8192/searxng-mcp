@@ -5,7 +5,16 @@ argument-hint: [observation/error-description]
 
 ## Problem Observation
 
-User observes: $ARGUMENTS
+User observes Probelm: $ARGUMENTS
+
+---
+
+## Step Indicator Rule
+
+**MANDATORY:** Every response in this workflow MUST start with:
+`Phase X, Step Y: [Name]`
+
+Example: `Phase 1, Step 3: Find Files`
 
 ---
 
@@ -17,8 +26,8 @@ User observes: $ARGUMENTS
 - How should they approach the problem?
 
 **Purpose B: Understand for Validation**
-- Main Agent MUST understand the code
-- Otherwise cannot evaluate if Agent-Fix makes sense
+- You MUST understand the code
+- Otherwise you cannot evaluate if Agent-Fix makes sense
 - **Validation is the most important part**
 
 ### Step 1: Check Past Attempts
@@ -28,41 +37,35 @@ User observes: $ARGUMENTS
 
 ### Step 2: Find Relevant Files
 
-Find relevant files (max 3-4, focused)
+- Find relevant files in which are causing the problem
+- Narrow down on function level
 
-### Step 3: Understand the Code
+### Step 3: Analyze Target
 
-- How does the affected code work?
-- Which modules/functions are involved?
+**Reference Files:**
+- Domains: `debug/scraping_suite/domains.txt`
+- Baselines: `debug/scraping_suite/baselines/{domain}/`
 
-### Step 4: Localize the Problem
+**DOM Analysis Workflow:**
+1. Read `domains.txt` → Which domain relates to the problem?
+2. Find newest baseline → In `baselines/{domain}/` find highest `iteration_XXX.md`
+3. Analyze baseline output → How does scraper currently process the page?
+4. Fetch raw HTML → Get live DOM structure of the URL
+5. Compare → Where does scraper output differ from expected?
 
-- Where exactly does the problem occur?
-- Gather File:Line references
-
-### Scraper-Specific: DOM + Code Analysis
-
-**The scraper consists of 4 modules:**
-- `scrape_url.py` - Orchestrator, fetches HTML via Playwright
-- `html_parser.py` - Parses HTML to node list (type, tag, attrs)
-- `content_filter.py` - Filters by tags/classes/IDs/URL patterns
-- `markdown_converter.py` - Converts to Markdown + Regex cleanup
-
-**Main Agent must understand:**
+**Questions that must be answered:**
 1. WHERE in the DOM is the problem? (Tag, class, id, structure)
 2. HOW does the scraper process it? (Which module, which function)
 3. WHY does it get through? (Which filter doesn't catch it?)
 
-**DOM Analysis Workflow:**
-1. Read baseline output → See problem in output (`debug/scraping_suite/baselines/*/`)
-2. Fetch raw HTML of URL → Find DOM structure of the problem
-3. Read scraper modules → Understand why it gets through
-4. Formulate fix approach → Which module, which function
-
 **No Overfitting:** Fixes must be general, not site-specific.
-Test against `debug/scraping_suite/domains.txt`
 
-### Step 5: Context Summary
+### Step 5: Localize the Problem
+
+- Where exactly does the problem occur?
+- Gather File:Line references
+
+### Step 6: Context Summary
 
 ```
 CONTEXT SUMMARY
@@ -85,13 +88,8 @@ PROPOSED LANES:
 ===============
 ```
 
-**STOPPER**
-
-Proceed to Phase 2?
-- Yes, launch agents
-- No, remarks/clarifications needed
-
-**CRITICAL:** Do NOT proceed to Phase 2 unless user explicitly confirms.
+**🛑 STOP** - Ask the user if he wants to proceed to Phase 2 or if he has remarks based on the summary or if there are more things to clarify
+     **CRITICAL** as long as the user dont explicitly states that he wants to proceed to phase 2, dont proceed
 
 ---
 
@@ -107,7 +105,7 @@ Proceed to Phase 2?
 Agent Prompt must contain:
 1. **Problem** - What's broken, expected vs actual
 2. **Relevant Files** - Absolute paths with line refs
-3. **Proposed Lane** - Specific focus area
+3. **Proposed Lane** - Specific focus area to solve the problem
 
 ### Step 3: Launch Agents
 
@@ -116,7 +114,7 @@ Agent Prompt must contain:
 ```
 ## Your Lane: [LANE DESCRIPTION]
 
-You are Agent [X]. Your ONLY focus is: [specific problem/road to investigate]
+You are Agent [X]. Your ONLY focus is: [specific road to investigate the problem]
 
 ## Problem Description
 [Precise description of what is failing, expected vs actual]
@@ -125,6 +123,8 @@ You are Agent [X]. Your ONLY focus is: [specific problem/road to investigate]
 [Absolute paths]:
 - /path/to/file1.py
 - /path/to/file2.py
+- domains
+- scraper output
 
 ## Your Task (Steps 1-2 only, then STOP and report)
 
@@ -142,27 +142,6 @@ You are Agent [X]. Your ONLY focus is: [specific problem/road to investigate]
 **Step 2.5: STOP and Report**
 After reproduce, provide this report and STOP:
 
-AGENT [X] CHECKPOINT REPORT
-===========================
-LANE: [Your assigned lane]
-
-ROOT CAUSE:
-- File: [module.py:line]
-- Issue: [What you found]
-- Why: [Explanation]
-
-REPRODUCTION:
-- Success: YES/NO
-- Script: debug/Agent_[X]/reproduce_[issue].py
-- Findings: [What reproduction revealed]
-
-PLANNED FIX:
-- Approach: [How you plan to fix it]
-- Files to modify: [List]
-
-AWAITING: GO/REDIRECT instruction
-===========================
-
 ## CRITICAL Rules
 - Stay on YOUR lane only
 - NO mocks - copy production code 1:1
@@ -179,7 +158,7 @@ AWAITING: GO/REDIRECT instruction
 ### Step 1: Review Agent Reports
 
 For each agent, check:
-- Lane adherence: Is agent still on assigned problem?
+- Lane adherence: Is agent still on assigned solution pathway for the problem?
 - Reproduction success: Did agent reproduce the bug?
 
 ### Step 2: Assessment Summary
@@ -203,13 +182,8 @@ AGENT 2 (if used):
 =====================
 ```
 
-**STOPPER**
-
-Resume agents for fix?
-- Yes, GO
-- No, REDIRECT with corrections
-
-**CRITICAL:** Do NOT proceed to Phase 4 unless user explicitly confirms.
+**🛑 STOP** - Ask the user if he wants to proceed to Phase 2 or if he has remarks based on the summary or if there are more things to clarify
+     **CRITICAL** as long as the user dont explicitly states that he wants to proceed to phase 2, dont proceed
 
 ---
 
@@ -234,26 +208,6 @@ Resume each agent with GO or REDIRECT instruction:
 
 **Step 4: Final Report**
 
-AGENT [X] FINAL REPORT
-======================
-LANE: [Your lane]
-
-ROOT CAUSE CONFIRMED:
-- File: [module.py:line]
-- Issue: [Final diagnosis]
-
-FIX IMPLEMENTED:
-- Solution script: debug/Agent_[X]/solution_[issue].py
-- What was changed: [Specific code changes]
-- Validation: [How you confirmed it works]
-
-PRODUCTION FIX:
-- Files to modify: [List with line numbers]
-- Exact changes needed: [Code diff or description]
-
-CONFIDENCE: [HIGH/MEDIUM/LOW]
-- Why: [What makes you confident or uncertain]
-======================
 ```
 
 ### Step 2: Wait for Agent Reports
@@ -297,14 +251,8 @@ WHAT COULD BE WRONG:
 - Does the fix make sense based on Phase 1 code understanding?
 - Is the fix general (no overfitting)?
 
-**STOPPER**
-
-Proceed to implementation?
-- Yes, write plan
-- No, investigate further
-
-**CRITICAL:** Do NOT proceed to Phase 6 unless user explicitly confirms.
-
+**🛑 STOP** - Ask the user if he wants to proceed to Phase 2 or if he has remarks based on the summary or if there are more things to clarify
+     **CRITICAL** as long as the user dont explicitly states that he wants to proceed to phase 2, dont proceed
 ---
 
 ## Phase 6: Write Plan
@@ -332,28 +280,3 @@ Commit changes.
 ---
 
 ## Phase 8: User Testing
-
-### Step 1: Handoff
-
-```
-FIX IMPLEMENTED
-===============
-
-Files modified:
-- [List of changed files with line numbers]
-
-Changes made:
-- [Summary of what was changed]
-
-Ready for user testing.
-===============
-```
-
-### Step 2: User Validates
-
-User runs production code with real scenarios.
-
-### Step 3: Documentation
-
-- If fix works → Run `/document-fix` to document in `bug_fixes/`
-- If fix fails → Return to Phase 1 with new findings, document in `not_working/`

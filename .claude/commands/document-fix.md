@@ -131,24 +131,6 @@ Collect from conversation history and ask user if needed:
 
 ---
 
-## Examples
-
-**Example 1: Success**
-```bash
-/document-fix success
-```
-
-Output: `bug_fixes/api_response_parsing_20251122_173000.md`
-
-**Example 2: Failed**
-```bash
-/document-fix failed
-```
-
-Output: `not_working/api_response_parsing_20251122_173000_failed.md`
-
----
-
 ## Important
 
 - **CONCISE:** Documentation must be short - no prose, only facts
