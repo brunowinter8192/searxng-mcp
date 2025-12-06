@@ -9,38 +9,45 @@ User observes: $ARGUMENTS
 
 ---
 
-## Phase 1: Context Gathering + Agent Strategy
+## Phase 1: Context Gathering
 
-### Step 1: Clarification (if needed)
+User defines the problem in arguments. Main Agent gathers context:
 
-**BEFORE analyzing:** Is the problem 100% clear?
-- WHERE does it occur?
-- WHAT exactly is the symptom?
-- WHEN does it happen?
+1. Check `bug_fixes/` for similar past issues
+2. Check `not_working/` for fixes that failed
+3. Find relevant files (max 3-4, focused)
+4. Gather: Error messages, stack traces, File:Line references
 
-**If unclear:** Use `AskUserQuestion` immediately.
+### Phase 1 Output: Context Summary
 
-### Step 2: Context Gathering
+```
+CONTEXT SUMMARY
+===============
 
-1. Identify affected modules based on observation
-2. Check `bug_fixes/` for similar past issues
-3. Check `not_working/` for fixes that not worked out in the past
-4. Find relevant files (max 3-4, focused)
-5. Gather: Error messages, stack traces, File:Line references
+PROBLEM: [User's problem from arguments]
 
-### Step 3: Decide Agent Strategy
+RELEVANT FILES:
+- /path/to/file1.py - [why relevant]
+- /path/to/file2.py - [why relevant]
 
-**YOU (Main Agent) are the ORCHESTRATOR. Analyze problem complexity:**
+PAST ATTEMPTS:
+- bug_fixes/xyz.md - [what was tried]
+- not_working/abc.md - [what failed and why]
 
-**1 Agent - Single Lane:**
-- One clear problem with one investigation path
-- Small, focused bug
+PROPOSED LANES:
+- Agent 1: [Lane description]
+- Agent 2: [Lane description] (if needed)
 
-**2 Agents - Parallel Lanes:**
-- Two independent problems → Agent 1: Problem A, Agent 2: Problem B
-- One complex problem with multiple possible causes → Agent 1: Road 1, Agent 2: Road 2
+===============
+```
 
-**CRITICAL:** Each agent stays on their assigned lane. No cross-assessment, no reassignment mid-debug.
+**STOPPER**
+
+Proceed to Phase 2?
+- Yes, launch agents
+- No, remarks/clarifications needed
+
+**CRITICAL:** Do NOT proceed to Phase 2 unless user explicitly confirms.
 
 ---
 
@@ -50,7 +57,10 @@ User observes: $ARGUMENTS
 - Agent 1 → `debug/Agent_1/`
 - Agent 2 → `debug/Agent_2/` (if used)
 
-**MANDATORY:** Launch agents with clear lane assignment.
+**Agent Prompt must contain:**
+1. **Problem** - What's broken, expected vs actual
+2. **Relevant Files** - Absolute paths with line refs
+3. **Proposed Lane** - Specific focus area
 
 **Agent Prompt Template:**
 
@@ -61,9 +71,6 @@ You are Agent [X]. Your ONLY focus is: [specific problem/road to investigate]
 
 ## Problem Description
 [Precise description of what is failing, expected vs actual]
-
-## Investigation Results
-[Findings from Phase 1: errors, stack traces, File:Line refs]
 
 ## Relevant Production Files
 [Absolute paths]:
@@ -120,21 +127,9 @@ AWAITING: GO/REDIRECT instruction
 
 ## Phase 3: Checkpoint Assessment
 
-**After agents return with Checkpoint Reports:**
-
-### Quick Assessment per Agent
-
-For each agent, check:
-
-1. **Lane Check:** Is agent still on assigned problem?
-   - YES → Continue
-   - NO → Redirect back to lane
-
-2. **Reproduce Check:** Did agent reproduce the bug?
-   - YES → Continue
-   - NO → Investigate why (wrong lane? wrong assumption?)
-
-### Decision Format
+Review agent checkpoint reports. Check:
+- Lane adherence: Is agent still on assigned problem?
+- Reproduction success: Did agent reproduce the bug?
 
 ```
 CHECKPOINT ASSESSMENT
@@ -152,15 +147,22 @@ AGENT 2 (if used):
 - Decision: GO / REDIRECT
 - Instruction: [If redirect, what to fix]
 
-PROCEEDING: Resuming [X] agent(s)
 =====================
 ```
+
+**STOPPER**
+
+Resume agents for fix?
+- Yes, GO
+- No, REDIRECT with corrections
+
+**CRITICAL:** Do NOT proceed to Phase 4 unless user explicitly confirms.
 
 ---
 
 ## Phase 4: Resume Agents for Fix
 
-**Resume each agent with GO or REDIRECT:**
+Resume each agent with GO or REDIRECT instruction:
 
 ```
 ## [GO/REDIRECT] - Continue to Fix
@@ -201,99 +203,65 @@ CONFIDENCE: [HIGH/MEDIUM/LOW]
 
 ---
 
-## Phase 5: Synthesis + Honest Assessment
+## Phase 5: Synthesis
 
-**After all agents complete, synthesize results:**
+Combine agent findings into recommendation:
 
 ```
-HONEST ASSESSMENT & SYNTHESIS
-=============================
-
-CONFIDENCE LEVEL: [X%] - [High 80-95% / Medium 60-80% / Low 40-60%]
-
-Why this confidence level:
-[Honest explanation based on agent findings]
-
----
+SYNTHESIS
+=========
 
 AGENT FINDINGS:
 
 Agent 1 ([Lane]):
 - Root Cause: [What they found]
 - Fix: [Their solution]
-- Validation: [How they tested]
 - Confidence: [Their self-assessment]
 
 Agent 2 ([Lane]) - if used:
 - Root Cause: [What they found]
 - Fix: [Their solution]
-- Validation: [How they tested]
 - Confidence: [Their self-assessment]
 
----
-
-SYNTHESIS:
-
-[If 2 agents on same problem]:
-- Agreement: [Do they agree on root cause?]
-- Best approach: [Which fix looks more robust and why]
-
-[If 2 agents on different problems]:
-- Problem A: [Agent 1's findings and fix]
-- Problem B: [Agent 2's findings and fix]
-
----
-
-RECOMMENDED FIX(ES):
+RECOMMENDED FIX:
 [Concrete recommendation based on agent findings]
 
 WHAT COULD BE WRONG:
 - [Uncertainty 1]
 - [Uncertainty 2]
 
-PROBABILITY FIX WORKS: [X%]
-Reasoning: [Why this probability]
-
-=============================
-USER DECISION
-=============================
-
-Proceed with implementation?
-- Yes, implement fix(es)
-- No, investigate further: [what]
-- Different approach: [specify]
+=========
 ```
 
-**WAIT for user confirmation before implementing.**
+**STOPPER**
+
+Proceed to implementation?
+- Yes, write plan
+- No, investigate further
+
+**CRITICAL:** Do NOT proceed to Phase 6 unless user explicitly confirms.
 
 ---
 
-## Phase 6: Implementation (After Approval)
+## Phase 6: Write Plan
 
-### 6.1 Implement Fix
-- Apply the fix to production code
-- Follow agent's recommended changes
-
-### 6.2 MANDATORY STOP
-
-**CRITICAL: After implementing the fix, STOP IMMEDIATELY.**
-
-- DO NOT run tests yourself
-- DO NOT validate the fix yourself
-- DO NOT iterate on the fix if you "notice" something
-- DO NOT run baseline scripts or any validation
-
-**Your job ends at implementation. User validates.**
-
-If you test and find issues, you have already violated the workflow. The user decides what happens next, not you.
+1. Write fix plan to system plan file (path from Plan Mode system message)
+2. Call ExitPlanMode
 
 ---
 
-## Phase 7: User Testing
+## Phase 7: Implementation
 
-**After implementation, user validates fix in production environment.**
+1. Implement the fix
+2. Commit changes
 
-### 7.1 Handoff to User
+---
+
+## Phase 8: User Testing
+
+User validates fix in production environment.
+
+### Handoff
 
 ```
 FIX IMPLEMENTED
@@ -309,13 +277,6 @@ Ready for user testing.
 ===============
 ```
 
-### 7.2 User Tests
-- User runs production code with real scenarios
-- User confirms fix works / reports issues
-
-### 7.3 After User Confirmation
+### After User Confirmation
 - If fix works → Run `/document-fix` to document in `bug_fixes/`
 - If fix fails → Return to Phase 1 with new findings, document in `not_working/`
-
----
-
