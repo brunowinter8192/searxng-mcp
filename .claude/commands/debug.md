@@ -11,28 +11,58 @@ User observes: $ARGUMENTS
 
 ## Phase 1: Context Gathering
 
-User defines the problem in arguments. Main Agent gathers context:
+**Zweck A: Agent Prompt vorbereiten**
+- Was ist das Problem?
+- Welche Files müssen Agents anschauen?
+- Wie sollen sie das Problem angehen?
+
+**Zweck B: Selbst verstehen für Validierung**
+- Main Agent MUSS den Code verstehen
+- Sonst kann er nicht bewerten ob Agent-Fix Sinn macht
+- **Validierung ist das Wichtigste**
+
+### Step 1: Check Past Attempts
 
 1. Check `bug_fixes/` for similar past issues
 2. Check `not_working/` for fixes that failed
-3. Find relevant files (max 3-4, focused)
-4. Gather: Error messages, stack traces, File:Line references
 
-### Scraper-Specific Context
+### Step 2: Find Relevant Files
 
-**CRITICAL: No Overfitting**
+Find relevant files (max 3-4, focused)
 
-We build a GENERAL scraper, not one that overfits to the 6 baseline sites. Fixes must work for ANY website, not just the test domains.
+### Step 3: Understand the Code
 
-**Understand the Problem:**
+- Wie funktioniert der betroffene Code?
+- Welche Module/Funktionen sind involviert?
 
-Read the latest iteration in `debug/scraping_suite/baselines/*/` to see what user's problem description actually looks like in the output.
+### Step 4: Localize the Problem
 
-**Test Domains:**
+- Wo genau tritt das Problem auf?
+- File:Line references sammeln
 
-Agents test against URLs from `debug/scraping_suite/domains.txt`
+### Scraper-Specific: DOM + Code Analyse
 
-### Phase 1 Output: Context Summary
+**Der Scraper besteht aus 4 Modulen:**
+- `scrape_url.py` - Orchestrator, holt HTML via Playwright
+- `html_parser.py` - Parst HTML zu Node-Liste (type, tag, attrs)
+- `content_filter.py` - Filtert nach Tags/Klassen/IDs/URL-Patterns
+- `markdown_converter.py` - Konvertiert zu Markdown + Regex-Cleanup
+
+**Main Agent muss verstehen:**
+1. WO im DOM sitzt das Problem? (Tag, class, id, Struktur)
+2. WIE verarbeitet der Scraper das? (Welches Modul, welche Funktion)
+3. WARUM kommt es durch? (Welcher Filter greift nicht?)
+
+**DOM-Analyse Workflow:**
+1. Baseline-Output lesen → Problem im Output sehen (`debug/scraping_suite/baselines/*/`)
+2. Raw HTML der URL holen → DOM-Struktur des Problems finden
+3. Scraper-Module lesen → Verstehen warum es durchkommt
+4. Fix-Ansatz formulieren → Welches Modul, welche Funktion
+
+**No Overfitting:** Fixes müssen allgemein sein, nicht site-spezifisch.
+Test gegen `debug/scraping_suite/domains.txt`
+
+### Step 5: Context Summary
 
 ```
 CONTEXT SUMMARY
@@ -67,14 +97,19 @@ Proceed to Phase 2?
 
 ## Phase 2: Launch Debug Agents
 
-**Workspaces:**
+### Step 1: Prepare Workspaces
+
 - Agent 1 → `debug/Agent_1/`
 - Agent 2 → `debug/Agent_2/` (if used)
 
-**Agent Prompt must contain:**
+### Step 2: Write Agent Prompts
+
+Agent Prompt must contain:
 1. **Problem** - What's broken, expected vs actual
 2. **Relevant Files** - Absolute paths with line refs
 3. **Proposed Lane** - Specific focus area
+
+### Step 3: Launch Agents
 
 **Agent Prompt Template:**
 
@@ -141,9 +176,13 @@ AWAITING: GO/REDIRECT instruction
 
 ## Phase 3: Checkpoint Assessment
 
-Review agent checkpoint reports. Check:
+### Step 1: Review Agent Reports
+
+For each agent, check:
 - Lane adherence: Is agent still on assigned problem?
 - Reproduction success: Did agent reproduce the bug?
+
+### Step 2: Assessment Summary
 
 ```
 CHECKPOINT ASSESSMENT
@@ -175,6 +214,8 @@ Resume agents for fix?
 ---
 
 ## Phase 4: Resume Agents for Fix
+
+### Step 1: Send GO/REDIRECT
 
 Resume each agent with GO or REDIRECT instruction:
 
@@ -215,11 +256,15 @@ CONFIDENCE: [HIGH/MEDIUM/LOW]
 ======================
 ```
 
+### Step 2: Wait for Agent Reports
+
+Collect final reports from all agents.
+
 ---
 
 ## Phase 5: Synthesis
 
-Combine agent findings into recommendation:
+### Step 1: Combine Findings
 
 ```
 SYNTHESIS
@@ -247,6 +292,11 @@ WHAT COULD BE WRONG:
 =========
 ```
 
+### Step 2: Validate Against Own Understanding
+
+- Does the fix make sense based on Phase 1 code understanding?
+- Is the fix general (no overfitting)?
+
 **STOPPER**
 
 Proceed to implementation?
@@ -259,23 +309,31 @@ Proceed to implementation?
 
 ## Phase 6: Write Plan
 
-1. Write fix plan to system plan file (path from Plan Mode system message)
-2. Call ExitPlanMode
+### Step 1: Write to System Plan File
+
+Write fix plan to system plan file (path from Plan Mode system message).
+
+### Step 2: Exit Plan Mode
+
+Call ExitPlanMode.
 
 ---
 
 ## Phase 7: Implementation
 
-1. Implement the fix
-2. Commit changes
+### Step 1: Implement Fix
+
+Apply the fix to production code.
+
+### Step 2: Commit
+
+Commit changes.
 
 ---
 
 ## Phase 8: User Testing
 
-User validates fix in production environment.
-
-### Handoff
+### Step 1: Handoff
 
 ```
 FIX IMPLEMENTED
@@ -291,6 +349,11 @@ Ready for user testing.
 ===============
 ```
 
-### After User Confirmation
+### Step 2: User Validates
+
+User runs production code with real scenarios.
+
+### Step 3: Documentation
+
 - If fix works → Run `/document-fix` to document in `bug_fixes/`
 - If fix fails → Return to Phase 1 with new findings, document in `not_working/`
