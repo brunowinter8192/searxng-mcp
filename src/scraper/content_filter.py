@@ -1,5 +1,5 @@
 # INFRASTRUCTURE
-SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header'}
+SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header', 'title'}
 CONTENT_TAGS = {'main', 'article', 'section', 'div', 'body'}
 NOISE_TEXT_PATTERNS = ['member-only story', 'share', 'listen', 'press enter or click to view']
 NOISE_URL_PATTERNS = ['/m/signin', 'actionUrl=', 'operation=register', 'clap_footer', 'bookmark_footer', '#cite_ref', '#cite_note']
@@ -37,7 +37,7 @@ def remove_navigation_attributes(nodes: list) -> list:
             nav_patterns = ['vector-', 'mw-portlet', 'mw-panel', 'navigation', 'noprint', 'toc', 'sidebar', 'menu', 'tools', 'p-lang', 'p-tb', 'p-navigation', 'p-interaction', 'wmde-banner', 'cn-fundraising', 'frb']
 
             should_skip = (
-                role_attr in ['navigation', 'complementary', 'banner'] or
+                role_attr in ['navigation', 'complementary', 'banner', 'tab', 'tablist', 'tabpanel'] or
                 any(pattern in class_attr for pattern in nav_patterns) or
                 any(pattern in id_attr for pattern in nav_patterns)
             )
