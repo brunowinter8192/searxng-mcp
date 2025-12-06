@@ -1,8 +1,8 @@
 # INFRASTRUCTURE
 SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header', 'title'}
 CONTENT_TAGS = {'main', 'article', 'section', 'div', 'body'}
-NOISE_TEXT_PATTERNS = ['member-only story', 'share', 'listen', 'press enter or click to view']
-NOISE_URL_PATTERNS = ['/m/signin', 'actionUrl=', 'operation=register', 'clap_footer', 'bookmark_footer', '#cite_ref', '#cite_note']
+NOISE_TEXT_PATTERNS = ['member-only story', 'share', 'listen', 'press enter or click to view', 'min read']
+NOISE_URL_PATTERNS = ['/m/signin', 'actionUrl=', 'operation=register', 'clap_footer', 'bookmark_footer', '#cite_ref', '#cite_note', '/@']
 SKIP_TABLE_CLASSES = ['infobox', 'wikitable', 'navbox', 'sidebar', 'metadata', 'mbox', 'ambox', 'tmbox']
 
 
@@ -34,7 +34,7 @@ def remove_navigation_attributes(nodes: list) -> list:
             id_attr = attrs.get("id", "").lower()
             role_attr = attrs.get("role", "").lower()
 
-            nav_patterns = ['vector-', 'mw-portlet', 'mw-panel', 'navigation', 'noprint', 'toc', 'sidebar', 'menu', 'tools', 'p-lang', 'p-tb', 'p-navigation', 'p-interaction', 'wmde-banner', 'cn-fundraising', 'frb']
+            nav_patterns = ['vector-', 'mw-portlet', 'mw-panel', 'navigation', 'noprint', 'toc', 'sidebar', 'menu', 'tools', 'p-lang', 'p-tb', 'p-navigation', 'p-interaction', 'wmde-banner', 'cn-fundraising', 'frb', 'gallery', 'sphx-glr']
 
             should_skip = (
                 role_attr in ['navigation', 'complementary', 'banner', 'tab', 'tablist', 'tabpanel'] or
