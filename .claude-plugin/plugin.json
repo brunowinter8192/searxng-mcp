@@ -1,0 +1,17 @@
+{
+  "name": "searxng",
+  "version": "1.0.0",
+  "description": "SearXNG MCP server - web search and URL scraping with markdown conversion",
+  "author": {
+    "name": "Bruno Winter"
+  },
+  "keywords": ["searxng", "search", "scraper", "mcp", "web"],
+  "skills": ["./skills/searxng/", "./skills/agent-web-research/"],
+  "agents": ["./agents/web-research.md"],
+  "mcpServers": {
+    "searxng": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/mcp-start.sh",
+      "args": []
+    }
+  }
+}

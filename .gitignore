@@ -5,6 +5,8 @@ debug/scraping_suite/reports/
 logs/
 bug_fixes/
 venv/
+.venv/
+not_working/
 __pycache__/
 *.pyc
 .env

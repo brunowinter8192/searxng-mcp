@@ -1,0 +1,6 @@
+fastmcp
+requests
+playwright
+nest-asyncio
+mcp
+pydantic
