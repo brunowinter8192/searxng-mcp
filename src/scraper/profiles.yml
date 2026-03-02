@@ -17,7 +17,7 @@ profiles:
     wait_until: domcontentloaded
     selector_timeout: 5000
     content_selectors: ["main", "article"]
-    skip_table_classes: ["infobox", "wikitable", "navbox", "sidebar", "metadata", "mbox", "ambox", "tmbox"]
+    skip_table_classes: ["infobox", "wikitable", "navbox", "sidebar", "metadata", "mbox", "ambox", "tmbox", "userboxes"]
     nav_patterns:
       - "vector-"
       - "mw-portlet"
