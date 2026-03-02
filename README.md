@@ -1,12 +1,33 @@
 # SearXNG MCP Server
 
-Web search and URL scraping tools for LLM workflows.
+Web search and URL scraping tools for Claude Code via a local SearXNG instance.
 
-**Remote:** https://github.com/brunowinter8192/searxng-mcp
+## Installation
 
-After major changes, push to remote:
-```bash
-git add -A && git commit -m "Your message" && git push
+### As Plugin (recommended)
+
+In a Claude Code session:
+
+```
+/plugin marketplace add brunowinter8192/claude-plugins
+/plugin install searxng
+```
+
+Restart the session after installation.
+
+### Manual (.mcp.json)
+
+Add to your project's `.mcp.json` (all paths must be absolute):
+
+```json
+{
+  "mcpServers": {
+    "searxng": {
+      "command": "/absolute/path/to/venv/bin/fastmcp",
+      "args": ["run", "/absolute/path/to/server.py"]
+    }
+  }
+}
 ```
 
 ## Prerequisites
@@ -14,7 +35,7 @@ git add -A && git commit -m "Your message" && git push
 - Docker and Docker Compose
 - Python 3.10+
 
-## Quick Start
+### SearXNG Setup
 
 1. Start SearXNG container:
 ```bash
@@ -26,109 +47,89 @@ docker compose up -d
 curl "http://localhost:8080/search?q=test&format=json"
 ```
 
-3. Install dependencies:
+SearXNG runs on `localhost:8080` by default. Configuration: `searxng/settings.yml`.
+
+### Updating SearXNG
+
+The Docker image uses `searxng/searxng:latest`. Pull updates regularly:
+
 ```bash
-pip install fastmcp requests pydantic playwright
-playwright install chromium
+docker compose pull && docker compose up -d
 ```
 
-4. Run MCP server:
-```bash
-fastmcp run server.py
-```
+## Plugin Components
 
-## Tools
+| Component | Name | Description |
+|-----------|------|-------------|
+| **Skill** | `searxng` | Tool usage context and search strategy |
+| **MCP Server** | `searxng` | 2 tools: web search + URL scraper |
+| **Subagent** | `web-research` | Deep web research specialist |
+
+## MCP Tools
 
 ### search_web
-Search the web with category filtering.
 
-**Parameters:**
-- `query`: Search string
-- `category`: general | news | it | science (default: general)
+Search the web with category filtering via SearXNG.
 
-**Returns:** Plain text numbered list with title, URL, snippet per result (max 20).
-
-**Output Format:**
-```
-Found 15 results for "query"
-
-1. Title
-   URL: https://...
-   Snippet: First 200 chars...
-```
-
-**Search Strategy:** Start with 1-2 core keywords, check results, then refine. Too many keywords yields poor results. Iterate: broad query first, then progressively more specific.
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | string | required | Search query (start broad, then refine) |
+| `category` | `"general"` / `"news"` / `"it"` / `"science"` | `"general"` | Category filter |
 
 **Category Guide:**
+
 | Question Type | Category |
 |--------------|----------|
-| Code/implementation | it |
-| Recent news | news |
+| Code, implementation | it |
+| Recent events | news |
 | Academic papers | science |
-| General | general |
+| Everything else | general |
 
 ### scrape_url
+
 Fetch full page content as markdown with JavaScript rendering.
 
-**Parameters:**
-- `url`: Single URL to scrape
-- `max_content_length`: Maximum content length in characters (default: 15000)
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `url` | string | required | URL to scrape |
+| `max_content_length` | int | `15000` | Maximum content length in characters |
 
-**Returns:** Markdown content with header showing source URL.
+Use after `search_web` identifies relevant URLs that need full content extraction.
 
-**Output Format:**
+## Directory Structure
+
 ```
-# Content from: https://example.com
-
-[Full markdown content]
-
-[Content truncated...]
+searxng/
+├── .claude-plugin/          # Plugin distribution
+│   └── plugin.json          # Plugin metadata
+├── agents/                  # Subagent definitions
+│   └── web-research.md
+├── skills/                  # Skill definitions
+│   ├── searxng/SKILL.md
+│   └── agent-web-research/SKILL.md
+├── src/                     # Source modules
+│   ├── searxng/             # Search module
+│   │   ├── search_web.py
+│   │   └── DOCS.md
+│   └── scraper/             # Scraper module
+│       ├── scrape_url.py
+│       ├── html_parser.py
+│       ├── markdown_converter.py
+│       ├── content_filter.py
+│       └── DOCS.md
+├── searxng/                 # SearXNG Docker config
+│   └── settings.yml
+├── server.py                # MCP entry point
+├── docker-compose.yml       # SearXNG container
+├── mcp-start.sh             # Plugin startup script
+└── requirements.txt         # Python dependencies
 ```
-
-**When to use:** After search_web identifies relevant URLs that need full content extraction. Uses networkidle wait strategy for complete JavaScript rendering.
-
-## Configuration
-
-SearXNG settings: `src/searxng/settings.yml`
-
-### MCP Registration
-
-Two configuration files are provided:
-
-- **`.mcp.json.example`** - Template for integrating into other projects. Copy and adjust paths.
-- **`.mcp.json`** - Production configuration with absolute paths for active development.
-
-To use in Claude Code:
-```bash
-cp .mcp.json.example .mcp.json
-# Edit .mcp.json with your absolute paths
-```
-
-## Development
-
-Bug fixes and debugging scripts go in `bug_fixes/` directory. This folder is gitignored and not tracked in version control.
-
-## Testing
-
-The scraping suite provides continuous quality monitoring for the URL scraper. Located in `debug/scraping_suite/`, it tests content extraction across diverse web page types and detects regressions.
-
-### Running Tests
-
-Generate baseline for all test domains:
-```bash
-python debug/scraping_suite/run_baseline.py
-```
-
-Compare with previous iteration:
-```bash
-python debug/scraping_suite/compare_iterations.py
-```
-
-See `debug/scraping_suite/README.md` for detailed documentation on test domains, workflow, and output structure.
 
 ## Documentation
 
-Module documentation lives in each source directory:
-- `src/searxng/DOCS.md` - SearXNG search module and configuration
-- `src/scraper/DOCS.md` - URL scraper module documentation
-- `debug/scraping_suite/README.md` - Test suite documentation
+| Doc | Content |
+|-----|---------|
+| `src/searxng/DOCS.md` | Search module implementation details |
+| `src/scraper/DOCS.md` | Scraper module implementation details |
+| `skills/searxng/SKILL.md` | Tool usage guide |
+| `agents/web-research.md` | Subagent instructions |
