@@ -10,9 +10,9 @@ TABLE_TAGS = {'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td'}
 
 
 # ORCHESTRATOR
-def to_markdown(nodes: list, max_content_length: int) -> str:
+def to_markdown(nodes: list, max_content_length: int, cleanup_tags: list = []) -> str:
     raw_markdown = convert_nodes_to_markdown(nodes)
-    cleaned = clean_markdown_artifacts(raw_markdown)
+    cleaned = clean_markdown_artifacts(raw_markdown, cleanup_tags)
     cleaned = clean_whitespace(cleaned)
     return cleaned
 
@@ -333,28 +333,72 @@ def convert_nodes_to_markdown(nodes: list) -> str:
     return "".join(result)
 
 
-# Remove documentation artifacts from Markdown
-def clean_markdown_artifacts(markdown: str) -> str:
+# Run profile-selected and generic cleanup on markdown
+def clean_markdown_artifacts(markdown: str, cleanup_tags: list) -> str:
+    cleanup_map = {
+        "wiki_citations": clean_wiki_citations,
+        "wiki_links": clean_wiki_links,
+        "sphinx_source": clean_sphinx_source,
+        "german_url_decode": clean_german_url_decode,
+    }
+
+    for tag in cleanup_tags:
+        if tag in cleanup_map:
+            markdown = cleanup_map[tag](markdown)
+
+    markdown = clean_generic_artifacts(markdown)
+    return markdown
+
+
+# Remove Wikipedia citation references
+def clean_wiki_citations(markdown: str) -> str:
+    markdown = re.sub(r'\[\[(\d+)\]\]\(#cite_note-[^)]*\)', '', markdown)
+    markdown = re.sub(r'\[\[(\d+)\]\]\([^)]*cite[^)]*\)', '', markdown)
+    markdown = re.sub(r'\[\d+\](?!\()', '', markdown)
+    return markdown
+
+
+# Remove Wikipedia internal /wiki/ links, keep link text
+def clean_wiki_links(markdown: str) -> str:
+    markdown = re.sub(r'\(\s*\[([^\]]+)\]\(/wiki/[^)]*\)\s*\)', r'(\1)', markdown)
+    markdown = re.sub(r'\[\]\(/wiki/[^)]*\)', '', markdown)
+    markdown = re.sub(r'\[([^\]]+)\]\(/wiki/[^)]*\)[,.:;)\*]*', r'\1', markdown)
+    return markdown
+
+
+# Remove Sphinx [source] buttons and paragraph markers
+def clean_sphinx_source(markdown: str) -> str:
+    markdown = re.sub(r'\[\[source\]\]\([^)]+\)', '', markdown)
+    markdown = re.sub(r'\[source\]', '', markdown)
+    markdown = re.sub(r'\[¶\]', '', markdown)
+    markdown = re.sub(r'\[↑\]', '', markdown)
+    return markdown
+
+
+# Decode German URL-encoded characters
+def clean_german_url_decode(markdown: str) -> str:
+    replacements = {
+        '%C3%A4': 'ä', '%C3%84': 'Ä',
+        '%C3%BC': 'ü', '%C3%9C': 'Ü',
+        '%C3%B6': 'ö', '%C3%96': 'Ö',
+        '%C3%9F': 'ß',
+        '%28': '(', '%29': ')',
+    }
+    for encoded, decoded in replacements.items():
+        markdown = markdown.replace(encoded, decoded)
+    return markdown
+
+
+# Remove generic markdown artifacts that apply to all profiles
+def clean_generic_artifacts(markdown: str) -> str:
     markdown = re.sub(r'\[​\]\([^)]+\)', '', markdown)
     markdown = re.sub(r'\[#\]\(#[^)]+\)', '', markdown)
     markdown = re.sub(r'\[\]\(#[^)]+\)', '', markdown)
     markdown = re.sub(r'\[#\](?!\()', '', markdown)
 
-    markdown = re.sub(r'\[¶\]', '', markdown)
-    markdown = re.sub(r'\[↑\]', '', markdown)
-    markdown = re.sub(r'\[\[source\]\]\([^)]+\)', '', markdown)
     markdown = re.sub(r'\[\[([^\]]+)\]\]\([^)]+\)', '', markdown)
-    markdown = re.sub(r'\[source\]', '', markdown)
-
-    markdown = re.sub(r'\[\[(\d+)\]\]\(#cite_note-[^)]*\)', '', markdown)
-    markdown = re.sub(r'\[\[(\d+)\]\]\([^)]*cite[^)]*\)', '', markdown)
-    markdown = re.sub(r'\[\d+\](?!\()', '', markdown)
-
-    markdown = re.sub(r'\(\s*\[([^\]]+)\]\(/wiki/[^)]*\)\s*\)', r'(\1)', markdown)
-    markdown = re.sub(r'\[\]\(/wiki/[^)]*\)', '', markdown)
-    markdown = re.sub(r'\[([^\]]+)\]\(/wiki/[^)]*\)[,.:;)\*]*', r'\1', markdown)
-
     markdown = re.sub(r'\(#[^)]+\)', '', markdown)
+
     markdown = re.sub(r'!\[\[([^\]]+)\]\]\([^)]+\)', r'\1', markdown)
     markdown = re.sub(r'!\[\[', '![', markdown)
 
@@ -370,16 +414,6 @@ def clean_markdown_artifacts(markdown: str) -> str:
     markdown = re.sub(r'\):\*\s+', ': ', markdown)
     markdown = re.sub(r'\s+\)', ')', markdown)
     markdown = re.sub(r'\(\s+', '(', markdown)
-
-    replacements = {
-        '%C3%A4': 'ä', '%C3%84': 'Ä',
-        '%C3%BC': 'ü', '%C3%9C': 'Ü',
-        '%C3%B6': 'ö', '%C3%96': 'Ö',
-        '%C3%9F': 'ß',
-        '%28': '(', '%29': ')',
-    }
-    for encoded, decoded in replacements.items():
-        markdown = markdown.replace(encoded, decoded)
 
     return markdown
 

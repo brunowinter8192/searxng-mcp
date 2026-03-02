@@ -1,27 +1,31 @@
 # INFRASTRUCTURE
 SKIP_TAGS = {'aside', 'script', 'style', 'noscript', 'iframe', 'svg', 'nav', 'footer', 'header', 'title'}
 CONTENT_TAGS = {'main', 'article', 'section', 'div', 'body'}
-NOISE_TEXT_PATTERNS = ['member-only story', 'share', 'listen', 'press enter or click to view', 'min read']
-NOISE_URL_PATTERNS = ['/m/signin', 'actionUrl=', 'operation=register', 'clap_footer', 'bookmark_footer', '#cite_ref', '#cite_note', '/@']
-SKIP_TABLE_CLASSES = ['infobox', 'wikitable', 'navbox', 'sidebar', 'metadata', 'mbox', 'ambox', 'tmbox']
 
 
 # ORCHESTRATOR
-def filter_content(parsed: dict) -> list:
+def filter_content(parsed: dict, profile: dict) -> list:
     nodes = parsed.get("nodes", [])
     filtered = remove_skip_tags(nodes)
     main_content = extract_main_content(filtered)
-    clean_content = remove_navigation_attributes(main_content)
-    clean_content = remove_wikipedia_tables(clean_content)
-    clean_content = remove_noise_links(clean_content)
-    clean_content = remove_noise_text(clean_content)
+    nav_patterns = profile.get("nav_patterns", [])
+    clean_content = remove_navigation_attributes(main_content, nav_patterns)
+    skip_classes = profile.get("skip_table_classes", [])
+    if skip_classes:
+        clean_content = remove_skip_tables(clean_content, skip_classes)
+    noise_urls = profile.get("noise_url_patterns", [])
+    if noise_urls:
+        clean_content = remove_noise_links(clean_content, noise_urls)
+    noise_text = profile.get("noise_text_patterns", [])
+    if noise_text:
+        clean_content = remove_noise_text(clean_content, noise_text)
     return clean_content
 
 
 # FUNCTIONS
 
 # Remove navigation elements by attributes
-def remove_navigation_attributes(nodes: list) -> list:
+def remove_navigation_attributes(nodes: list, nav_patterns: list) -> list:
     result = []
     skip_depth = 0
     current_skip_tag = None
@@ -33,8 +37,6 @@ def remove_navigation_attributes(nodes: list) -> list:
             class_attr = attrs.get("class", "").lower()
             id_attr = attrs.get("id", "").lower()
             role_attr = attrs.get("role", "").lower()
-
-            nav_patterns = ['vector-', 'mw-portlet', 'mw-panel', 'navigation', 'noprint', 'toc', 'sidebar', 'menu', 'tools', 'p-lang', 'p-tb', 'p-navigation', 'p-interaction', 'wmde-banner', 'cn-fundraising', 'frb', 'gallery', 'sphx-glr']
 
             should_skip = (
                 role_attr in ['navigation', 'complementary', 'banner', 'tab', 'tablist', 'tabpanel'] or
@@ -132,15 +134,15 @@ def find_matching_end(nodes: list, start_idx: int) -> int:
     return -1
 
 
-# Remove links that match noise URL patterns (signin, clap, bookmark)
-def remove_noise_links(nodes: list) -> list:
+# Remove links that match noise URL patterns
+def remove_noise_links(nodes: list, patterns: list) -> list:
     result = []
     skip_until_link_end = False
 
     for node in nodes:
         if node["type"] == "start" and node["tag"] == "a":
             href = node.get("attrs", {}).get("href", "")
-            if any(pattern in href for pattern in NOISE_URL_PATTERNS):
+            if any(pattern in href for pattern in patterns):
                 skip_until_link_end = True
                 continue
 
@@ -156,15 +158,16 @@ def remove_noise_links(nodes: list) -> list:
 
 
 # Remove text nodes that match noise patterns
-def remove_noise_text(nodes: list) -> list:
+def remove_noise_text(nodes: list, patterns: list) -> list:
     result = []
+    exact_matches = {'--', 'Share', 'Listen'}
 
     for node in nodes:
         if node["type"] == "text":
             content_lower = node["content"].lower()
-            if any(pattern in content_lower for pattern in NOISE_TEXT_PATTERNS):
+            if any(pattern in content_lower for pattern in patterns):
                 continue
-            if node["content"] in ['--', 'Share', 'Listen']:
+            if node["content"] in exact_matches:
                 continue
 
         result.append(node)
@@ -172,15 +175,15 @@ def remove_noise_text(nodes: list) -> list:
     return result
 
 
-# Remove Wikipedia infoboxes and navigation tables
-def remove_wikipedia_tables(nodes: list) -> list:
+# Remove tables matching skip class patterns
+def remove_skip_tables(nodes: list, skip_classes: list) -> list:
     result = []
     skip_depth = 0
 
     for node in nodes:
         if node["type"] == "start" and node["tag"] == "table":
             class_attr = node.get("attrs", {}).get("class", "").lower()
-            if any(pattern in class_attr for pattern in SKIP_TABLE_CLASSES):
+            if any(pattern in class_attr for pattern in skip_classes):
                 skip_depth += 1
                 continue
 

@@ -1,20 +1,48 @@
 # Scraper Module
 
-URL scraping tool with JavaScript rendering for SearXNG MCP server.
+URL scraping tool with profile-based routing and JavaScript rendering for SearXNG MCP server.
+
+## routing.py
+
+**Purpose:** URL-based profile routing. Matches incoming URLs against domain patterns to select the appropriate scraping profile.
+**Input:** URL string.
+**Output:** Profile configuration dictionary with all scraping parameters.
+
+### resolve_profile()
+
+Main orchestrator. Takes URL, loads config from profiles.yml, matches domain against routing patterns, returns profile dict. Falls back to "default" profile when no routing pattern matches.
+
+### load_config()
+
+Loads and caches YAML config from profiles.yml. Uses module-level cache to avoid repeated file reads.
+
+### match_url_to_profile()
+
+Matches URL hostname against routing patterns using fnmatch for wildcard support (e.g., `*.wikipedia.org`). Returns profile name string or "default" if no match.
+
+## profiles.yml
+
+**Purpose:** Configuration file defining scraping profiles and URL-to-profile routing.
+
+Each profile defines scraping parameters optimized for a category of websites. The routing section maps domain patterns to profile names. Adding a new domain requires one line in the routing section.
+
+Profile parameters control three pipeline phases: fetch (wait_until, selector_timeout, content_selectors), filter (skip_table_classes, nav_patterns, noise_url_patterns, noise_text_patterns), and markdown cleanup (markdown_cleanup tag list selecting which cleanup functions to run).
+
+Available profiles: default (generic, no site-specific filters), wiki (Wikipedia with citation/table/navigation removal), sphinx (Sphinx documentation with source button/paragraph marker removal), blog (Medium-style with paywall/UI noise removal), js_rendered (SPA sites with networkidle wait strategy).
 
 ## scrape_url.py
 
-**Purpose:** Main orchestrator for single URL scraping with JavaScript rendering. Coordinates HTML parsing, content filtering, and markdown conversion.
+**Purpose:** Main orchestrator for single URL scraping with profile-based configuration. Resolves profile from URL, then coordinates HTML parsing, content filtering, and markdown conversion using profile parameters.
 **Input:** Single URL string and optional maximum content length.
 **Output:** Plain markdown content string wrapped in TextContent, or error message string on failure.
 
 ### scrape_url_workflow()
 
-Main orchestrator function. Coordinates browser initialization, URL content fetching, and content extraction. Manages browser lifecycle and ensures cleanup. Returns plain markdown directly in TextContent on success, or error message on failure. Called directly by server.py tool definition. Uses domcontentloaded wait strategy for fast page loading without waiting for all network activity.
+Main orchestrator function. Resolves scraping profile from URL via routing.py, coordinates browser initialization, URL content fetching with profile-specific wait strategy and selectors, and content extraction with profile-specific filters and cleanup. Manages browser lifecycle and ensures cleanup.
 
 ### extract_single_content()
 
-Converts single HTML string to markdown with URL header. Takes URL, HTML string, and maximum content length. Orchestrates parsing (html_parser), filtering (content_filter), and markdown conversion (markdown_converter) pipeline. Prepends source URL header to output for clear provenance.
+Converts single HTML string to markdown with URL header. Passes profile to filter_content and cleanup_tags to to_markdown for profile-specific processing.
 
 ### init_browser()
 
@@ -22,7 +50,7 @@ Initializes headless Chromium browser instance using Playwright. Returns browser
 
 ### fetch_url_content()
 
-Fetches HTML content from URL using Playwright with stealth browser context. Creates isolated browser context with realistic user agent and viewport, navigates to URL with domcontentloaded wait strategy, then waits for content selectors (main, article, content class, h1) to become visible before extracting HTML. This two-phase approach handles both traditional server-rendered pages and SPAs that render content via JavaScript after initial DOM load. Returns raw HTML string or exception on failure.
+Fetches HTML content from URL using Playwright with stealth browser context. Uses profile-configured wait_until strategy (domcontentloaded or networkidle), content_selectors, and selector_timeout. Creates isolated browser context with realistic user agent and viewport. Returns raw HTML string or exception on failure.
 
 ### cleanup_browser()
 
@@ -48,21 +76,21 @@ Custom HTMLParser subclass that builds structured representation of HTML documen
 
 ## content_filter.py
 
-**Purpose:** Filters parsed HTML nodes to extract main content while removing navigation, scripts, and other non-content elements.
-**Input:** Parsed nodes dictionary from html_parser.
+**Purpose:** Filters parsed HTML nodes to extract main content while removing navigation, scripts, and other non-content elements. Uses profile configuration for site-specific filtering.
+**Input:** Parsed nodes dictionary from html_parser and profile configuration dict.
 **Output:** Filtered list of nodes containing only main content.
 
 ### filter_content()
 
-Main orchestrator. Filters parsed content to extract main content. Removes navigation, footer, script, header, and other non-content elements. Extracts content from main or article tags when present. Applies noise filtering to remove UI elements like signin links, share buttons, and standalone numbers.
+Main orchestrator. Takes parsed content and profile dict. Applies universal skip-tag removal, main content extraction, then profile-configured nav_patterns, skip_table_classes, noise_url_patterns, and noise_text_patterns. Filter functions only execute when their corresponding profile list is non-empty.
 
 ### remove_skip_tags()
 
-Removes all nodes belonging to skip tags like aside, script, style, noscript, iframe, svg, nav, footer. Tracks nesting depth to handle nested skip tags correctly.
+Removes all nodes belonging to universal skip tags (aside, script, style, noscript, iframe, svg, nav, footer, header, title). Always applied regardless of profile. Tracks nesting depth to handle nested skip tags correctly.
 
 ### remove_navigation_attributes()
 
-Removes navigation elements by analyzing HTML attributes. Filters div, section, aside, ul, ol, li, span, label, button, input, form elements with navigation-related class, id, or role attributes. Uses pattern matching against common navigation identifiers like vector-, mw-portlet, navigation, sidebar, menu.
+Removes navigation elements by analyzing HTML attributes against profile-provided nav_patterns list. Filters div, section, aside, ul, ol, li, span, label, button, input, form elements with matching class, id, or role attributes.
 
 ### extract_main_content()
 
@@ -70,7 +98,7 @@ Extracts content from main, article, or section tags when present. Returns all n
 
 ### find_content_tag_start()
 
-Finds index of first content tag with improved priority detection. Searches for main, article, or section tags. For section tags, checks class and id attributes for content-related keywords like content, main, or article.
+Finds index of first content tag with improved priority detection.
 
 ### find_matching_end()
 
@@ -78,74 +106,98 @@ Finds index of matching end tag for given start tag. Tracks nesting depth to han
 
 ### remove_noise_links()
 
-Removes anchor tags that match noise URL patterns. Filters out signin links, clap buttons, bookmark buttons, and other UI action links that disrupt content flow. Skips entire link including inner content when href matches patterns like /m/signin, actionUrl=, clap_footer, or bookmark_footer.
+Removes anchor tags matching profile-provided noise URL patterns. Takes nodes list and patterns list as parameters.
 
 ### remove_noise_text()
 
-Removes text nodes matching noise patterns. Filters out UI text like "Member-only story", "Share", "Listen", "Press enter or click to view", and specific noise strings like "--". Preserves numeric values to maintain data integrity in technical documentation, code examples, and JSON content.
+Removes text nodes matching profile-provided noise text patterns. Takes nodes list and patterns list. Also removes hardcoded exact matches ('--', 'Share', 'Listen').
 
-### remove_wikipedia_tables()
+### remove_skip_tables()
 
-Removes Wikipedia infoboxes and navigation tables that clutter article content. Filters tables with class attributes matching skip patterns: infobox, wikitable, navbox, sidebar, metadata, mbox, ambox, tmbox. Tracks nesting depth to handle tables nested within other tables. Removes entire table structure including all rows and cells when outer table matches skip pattern.
+Removes tables matching profile-provided skip class patterns. Generalized replacement for the former remove_wikipedia_tables function. Takes nodes list and skip_classes list as parameters.
 
 ## markdown_converter.py
 
-**Purpose:** Converts filtered HTML nodes to clean markdown with proper whitespace boundaries and code block preservation.
-**Input:** Filtered nodes list from content_filter and maximum content length.
+**Purpose:** Converts filtered HTML nodes to clean markdown with profile-selective cleanup, proper whitespace boundaries, and code block preservation.
+**Input:** Filtered nodes list from content_filter, maximum content length, and cleanup_tags list from profile.
 **Output:** Clean markdown string with normalized whitespace.
 
 ### to_markdown()
 
-Main orchestrator. Converts filtered nodes to markdown string with configurable maximum length. Orchestrates node conversion, artifact cleaning, and whitespace normalization. The workflow executes three steps: converts HTML nodes to raw markdown, removes Wikipedia-specific artifacts like citations and broken links, and normalizes whitespace patterns while preserving code blocks.
-
-### strip_tracking_params()
-
-Removes tracking query parameters from URLs. Takes URL string and returns clean URL without query string. Preserves scheme, host, path, and fragment while stripping all query parameters. Used to clean links from tracking suffixes like ?source=post_page or ?utm_source.
-
-### sanitize_image_alt()
-
-Sanitizes image alt text for markdown compatibility. Removes file extensions (.jpg, .png, .gif, .webp, .svg, .bmp), strips markdown-breaking characters (brackets, parentheses), and truncates to 100 characters with ellipsis if exceeding limit. Returns cleaned alt text suitable for markdown image syntax.
-
-### extract_image_markdown()
-
-Extracts image markdown with lazy loading support and size filtering. Checks src attribute first, falls back to data-src, data-lazy-src, or srcset for lazy-loaded images. Returns empty string if no valid source found (prevents ghost exclamation marks). Filters out small images (width or height below 100px) and avatar-sized images (Medium resize:fill patterns). Returns properly formatted markdown image syntax with alt text.
-
-### handle_start_tag()
-
-Processes opening HTML tags and appends markdown equivalent to result buffer. Handles headings, paragraphs, line breaks, bold, italic, code, pre blocks, links, images, lists, blockquotes, and tables. For tables, tracks state including header row detection and cell counting for separator row generation. Returns updated link_href and pre_depth state. Mutates result list, list_stack, and table_state in place.
-
-### handle_end_tag()
-
-Processes closing HTML tags and appends markdown equivalent to result buffer. Handles heading newlines, bold/italic/code closing markers with trailing space detection, pre block closing fences, link closing with href, list stack management, and table elements. For table rows, generates markdown separator row after header row using tracked cell count. Returns updated link_href and pre_depth state.
-
-### handle_text_node()
-
-Processes text content nodes with whitespace normalization. Preserves literal whitespace for text inside pre blocks (in_pre flag). For regular text, detects leading and trailing space metadata to insert boundary spaces when adjacent to alphanumeric characters. Mutates result list in place.
-
-### handle_self_closing_tag()
-
-Processes self-closing HTML tags (br, img, hr). Appends line break for br, image markdown for img (using extract_image_markdown), and horizontal rule for hr. Mutates result list in place.
-
-### convert_nodes_to_markdown()
-
-Orchestrates node-to-markdown conversion by delegating to specialized handlers. Iterates through nodes and dispatches to handle_start_tag, handle_end_tag, handle_text_node, or handle_self_closing_tag based on node type. Maintains conversion state including result buffer, list stack for nesting, link href for anchors, pre depth for code blocks, last text node for whitespace tracking, and table state for GitHub-flavored markdown table generation.
-
-### should_add_space_before()
-
-Helper function to check if space should be added before inline tag marker. Examines result buffer for trailing alphanumeric characters, checks parser whitespace flags, and applies smart spacing for inline formatting tags (strong, b, em, i, code). Adds space when previous text ends with alphanumeric character and current tag is inline formatting, even when parser flags indicate no explicit whitespace.
-
-### find_next_node()
-
-Helper function to find next node in list. Returns None if current node is last.
-
-### should_add_space_after()
-
-Helper function to check if space should be added after inline tag marker. Examines next text node's has_leading_space metadata and content start character. Adds space after inline formatting closing markers when next text starts with alphanumeric character, improving readability when HTML source lacks explicit whitespace.
+Main orchestrator. Converts filtered nodes to markdown string. Executes three steps: converts HTML nodes to raw markdown, runs profile-selected cleanup functions followed by generic cleanup, normalizes whitespace while preserving code blocks.
 
 ### clean_markdown_artifacts()
 
-Removes documentation artifacts from markdown output to improve readability and LLM processing quality. Handles both general documentation patterns (zero-width space anchors, hash self-reference anchors, empty bracket anchors) and Wikipedia-specific patterns (citation references, wiki links). Also decodes URL-encoded characters common in German Wikipedia. Applied after node-to-markdown conversion and before whitespace normalization.
+Dispatcher function. Takes markdown string and cleanup_tags list. Runs each tag's cleanup function from cleanup_map, then always runs clean_generic_artifacts. Available cleanup tags: wiki_citations, wiki_links, sphinx_source, german_url_decode.
+
+### clean_wiki_citations()
+
+Removes Wikipedia citation references. Handles [[N]](#cite_note) patterns, [[N]](cite...) patterns, and standalone [N] number brackets.
+
+### clean_wiki_links()
+
+Removes Wikipedia internal /wiki/ links while preserving link text. Handles parenthesized wiki links, empty wiki links, and standard wiki links with trailing punctuation.
+
+### clean_sphinx_source()
+
+Removes Sphinx documentation artifacts: [[source]](url) buttons, standalone [source] text, paragraph markers [¶], and back-to-top arrows [↑].
+
+### clean_german_url_decode()
+
+Decodes German URL-encoded characters (umlauts and parentheses) commonly found in German Wikipedia URLs.
+
+### clean_generic_artifacts()
+
+Removes generic markdown artifacts that apply to all profiles regardless of cleanup_tags. Handles zero-width space anchors, hash self-reference anchors, double-bracket link patterns [[X]](url), anchor-only parenthetical links (#section), empty image/link brackets, broken image extensions, and malformed parentheses.
+
+### strip_tracking_params()
+
+Removes tracking query parameters from URLs. Preserves scheme, host, path, and fragment.
+
+### sanitize_image_alt()
+
+Sanitizes image alt text for markdown compatibility. Removes file extensions, strips markdown-breaking characters, truncates to 100 characters.
+
+### extract_image_markdown()
+
+Extracts image markdown with lazy loading support and size filtering. Filters out small and avatar-sized images.
+
+### handle_start_tag()
+
+Processes opening HTML tags and appends markdown equivalent to result buffer.
+
+### handle_end_tag()
+
+Processes closing HTML tags and appends markdown equivalent to result buffer.
+
+### handle_text_node()
+
+Processes text content nodes with whitespace normalization.
+
+### handle_self_closing_tag()
+
+Processes self-closing HTML tags (br, img, hr).
+
+### convert_nodes_to_markdown()
+
+Orchestrates node-to-markdown conversion by delegating to specialized handlers.
+
+### should_add_space_before()
+
+Checks if space should be added before inline tag marker.
+
+### find_next_node()
+
+Finds next node in list. Returns None if current node is last.
+
+### should_add_space_after()
+
+Checks if space should be added after inline tag marker.
 
 ### clean_whitespace()
 
-Normalizes whitespace patterns in markdown text while preserving code blocks. Detects code fence markers and applies different rules inside vs outside code blocks. Outside code blocks collapses multiple consecutive spaces to single space, limits newlines to maximum of two, removes leading and trailing spaces around newlines. Inside code blocks preserves all whitespace literally including indentation.
+Normalizes whitespace patterns in markdown text while preserving code blocks.
+
+### clean_whitespace_chunk()
+
+Cleans non-code-block chunk of whitespace issues.

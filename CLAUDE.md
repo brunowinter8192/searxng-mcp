@@ -171,6 +171,18 @@ def format_response(raw_data: dict) -> dict:
 
 ---
 
+## PROFILE ASSIGNMENT RULE
+
+**CRITICAL:** When assigning cleanup patterns or filter rules to scraper profiles:
+
+- Categorize by **actual effect**, not by origin ("built for Sphinx" ≠ "Sphinx-only")
+- Before assigning a regex/pattern to a specific profile: test it against ALL test domains in `debug/scraping_suite/domains.txt`
+- If a pattern is harmless on all domains → put it in `clean_generic_artifacts` (always runs)
+- If a pattern causes false positives on other domains → put it in a profile-specific cleanup tag
+- Document the decision: "Generic because X" or "Profile-specific because breaks Y on domain Z"
+
+---
+
 ## TOOL PARAMETER DESIGN
 
 **CRITICAL:** Parameters must be intuitive for LLM understanding
