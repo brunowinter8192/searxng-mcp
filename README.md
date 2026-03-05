@@ -64,6 +64,7 @@ docker compose pull && docker compose up -d
 | **Skill** | `searxng` | Tool usage context and search strategy |
 | **MCP Server** | `searxng` | 2 tools: web search + URL scraper |
 | **Subagent** | `web-research` | Deep web research specialist |
+| **Command** | `crawl-site` | Crawl website to Markdown, optionally spawn RAG indexing worker (`/crawl-site [url]`) |
 
 ## MCP Tools
 
@@ -100,12 +101,12 @@ Use after `search_web` identifies relevant URLs that need full content extractio
 
 ### crawl_site.py
 
-Crawl an entire website and save pages as Markdown files. Uses Crawl4AI BFS (Breadth-First Search) with automatic link discovery.
+Crawl an entire website and save pages as Markdown files. Uses Crawl4AI BFS (Breadth-First Search) with automatic link discovery. This is the first half of a crawl-to-RAG pipeline -- the output Markdown files can be indexed into a vector database using a RAG tool (e.g., the RAG MCP plugin).
 
 ```bash
 venv/bin/python crawl_site.py \
   --url "https://docs.searxng.org/" \
-  --collection "SearXNG_Docs" \
+  --output-dir "./output/SearXNG_Docs" \
   --depth 3 \
   --max-pages 100
 ```
@@ -113,11 +114,13 @@ venv/bin/python crawl_site.py \
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `--url` | required | Seed URL to start crawling |
-| `--collection` | required | Output folder name |
+| `--output-dir` | required | Directory to save markdown files |
 | `--depth` | 3 | Maximum crawl depth |
 | `--max-pages` | 100 | Maximum pages to crawl |
 
-Output is saved to the RAG data directory as individual `.md` files per page. Uses `raw_markdown` (preserves HTML in code blocks) with only permalink artifact cleanup.
+Output is saved as individual `.md` files per page. Uses `raw_markdown` (preserves HTML in code blocks) with only permalink artifact cleanup.
+
+The `/crawl-site` command wraps this script and optionally spawns a tmux worker for RAG indexing (requires the RAG plugin with `web-md-index` command).
 
 ## Directory Structure
 
@@ -127,6 +130,8 @@ searxng/
 │   └── plugin.json          # Plugin metadata
 ├── agents/                  # Subagent definitions
 │   └── web-research.md
+├── commands/                # Slash commands
+│   └── crawl-site.md
 ├── skills/                  # Skill definitions
 │   ├── searxng/SKILL.md
 │   └── agent-web-research/SKILL.md

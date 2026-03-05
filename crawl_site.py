@@ -10,22 +10,21 @@ from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, DomainFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
-RAG_DATA = Path("/Users/brunowinter2000/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents")
 PERMALINK_PATTERN = re.compile(r'\[¶\]\([^)]+\)')
 TRAILING_SLASH = re.compile(r'/$')
 
 
 # ORCHESTRATOR
-async def crawl_site_workflow(url: str, collection: str, depth: int, max_pages: int):
-    output_dir = RAG_DATA / collection
-    output_dir.mkdir(parents=True, exist_ok=True)
+async def crawl_site_workflow(url: str, output_dir: str, depth: int, max_pages: int):
+    target = Path(output_dir)
+    target.mkdir(parents=True, exist_ok=True)
 
     domain = urlparse(url).netloc
     results = await crawl_website(url, domain, depth, max_pages)
     unique = deduplicate(results)
-    saved = save_markdown(unique, url, output_dir)
+    saved = save_markdown(unique, url, target)
 
-    print(f"\nDone: {saved} files saved to {output_dir}")
+    print(f"\nDone: {saved} files saved to {target}")
 
 
 # FUNCTIONS
@@ -111,9 +110,9 @@ def url_to_filename(url: str, seed_url: str) -> str:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Crawl a website and save as Markdown")
     parser.add_argument("--url", required=True, help="Seed URL to crawl")
-    parser.add_argument("--collection", required=True, help="Output folder name")
+    parser.add_argument("--output-dir", required=True, help="Directory to save markdown files")
     parser.add_argument("--depth", type=int, default=3, help="Max crawl depth")
     parser.add_argument("--max-pages", type=int, default=100, help="Max pages to crawl")
     args = parser.parse_args()
 
-    asyncio.run(crawl_site_workflow(args.url, args.collection, args.depth, args.max_pages))
+    asyncio.run(crawl_site_workflow(args.url, args.output_dir, args.depth, args.max_pages))
