@@ -386,10 +386,10 @@ FastMCP handles exceptions and communicates errors to client.
 - Environment variables
 - NO link to central DOCS.md (doesn't exist)
 
-### DOCS.md (module level only)
-Each domain folder in src/ has its own DOCS.md documenting its modules.
+### DOCS.md (module level)
+Every module folder has its own DOCS.md documenting its contents. This applies to src/ domains AND debug/ suites.
 
-**Location:** src/domain_name/DOCS.md
+**Location:** src/domain_name/DOCS.md, debug/suite_name/DOCS.md
 
 **Content:**
 - Documents ALL files in that domain folder
