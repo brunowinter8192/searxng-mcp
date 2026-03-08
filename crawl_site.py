@@ -46,6 +46,7 @@ async def crawl_website(url: str, domain: str, depth: int, max_pages: int) -> li
     run_config = CrawlerRunConfig(
         deep_crawl_strategy=strategy,
         cache_mode=CacheMode.BYPASS,
+        wait_until="networkidle",
         markdown_generator=DefaultMarkdownGenerator(),
     )
 

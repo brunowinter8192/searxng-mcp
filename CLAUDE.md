@@ -18,8 +18,8 @@ Long-term thinking. Brutal honesty. No overengineering.
 ## CRITICAL STANDARDS
 
 - NO comments inside function bodies (only function header comments + section markers)
-- NO test files in root (ONLY in debug/ folders - root or per-module)
-- NO debug/ or logs/ folders in version control (MUST be in .gitignore)
+- NO test files in root (ONLY in dev/ folders - root or per-module)
+- NO logs/ folders in version control (MUST be in .gitignore)
 - NO emojis in production code, READMEs, DOCS.md, logs
 - NO verbose console output (use logging instead)
 
@@ -52,7 +52,7 @@ mcp_server/
 ├── CLAUDE.md              # Engineering standards
 ├── .mcp.json              # Claude Code MCP registration
 ├── docker-compose.yml     # Container configuration (if needed)
-├── debug/                 # Debug scripts for testing (gitignored)
+├── dev/                   # Development suites (scripts tracked, output gitignored)
 ├── bug_fixes/             # Bug fix documentation (gitignored)
 ├── not_working/             # Not working bug fix documentation
 └── logs/                  # Log files (gitignored)
@@ -178,7 +178,7 @@ def format_response(raw_data: dict) -> dict:
 1. Read `requirements.txt` to identify which library handles the functionality
 2. Look up the library's GitHub repo — read source code, issues, docs
 3. Build the fix based on actual library API, not assumptions
-4. Test with a debug script in `debug/` before modifying production code
+4. Test with a debug script in `dev/` before modifying production code
 
 ---
 
@@ -387,9 +387,9 @@ FastMCP handles exceptions and communicates errors to client.
 - NO link to central DOCS.md (doesn't exist)
 
 ### DOCS.md (module level)
-Every module folder has its own DOCS.md documenting its contents. This applies to src/ domains AND debug/ suites.
+Every module folder has its own DOCS.md documenting its contents. This applies to src/ domains AND dev/ suites.
 
-**Location:** src/domain_name/DOCS.md, debug/suite_name/DOCS.md
+**Location:** src/domain_name/DOCS.md, dev/suite_name/DOCS.md
 
 **Content:**
 - Documents ALL files in that domain folder
@@ -513,8 +513,44 @@ claude mcp list
 
 ---
 
+## PIPELINE
+
+### MCP Tools (real-time, in-conversation)
+
+1. **`search_web`** — SearXNG web search. Returns URLs + snippets.
+2. **`scrape_url`** — Single URL scrape. Returns cleaned markdown (cleaned_html + PruningFilter 0.48 + networkidle).
+3. **`explore_site`** — Site structure reconnaissance. Discovers URL tree: levels, URL count per depth, estimated total size. User decides crawl scope based on this.
+
+### Skill Command (async, long-running)
+
+4. **`crawl-site`** — Full website crawl. Triggered via SearXNG skill, not MCP tool. Crawls all URLs, exports markdown files to target directory.
+
+**Default export path:** `~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/<website>/`
+
+### Typical Flow
+
+```
+search_web("topic")          → find interesting URLs
+scrape_url("url")            → quick single-page check
+explore_site("domain.com")   → site structure + URL count
+  → user decides crawl scope (depth, subtree, max_pages)
+crawl-site                   → full crawl, export MDs to RAG documents dir
+```
+
+### Crawl4AI Config (Production)
+
+All scraping/crawling uses:
+- `wait_until="networkidle"` — required for JS-heavy sites (Chroma, Medium)
+- `content_source="cleaned_html"` — best balance of content vs noise
+- `PruningFilter(threshold=0.48)` — for scrape_url (noise reduction)
+- `BrowserConfig(headless=True, verbose=False)`
+
+**Config changes:** When evaluating config changes, test BOTH volume (char counts) AND content integrity (code blocks, formatting). PruningFilter is known to strip whitespace from code blocks — any config change must re-verify code-block integrity via dev/scraping_suite scripts.
+
+---
+
 ## COMPLIANCE
 
-Scripts in `debug/` folders (root-level or per-module) are exempt from CLAUDE.md compliance requirements.
+Scripts in `dev/` folders (root-level or per-module) are exempt from CLAUDE.md compliance requirements.
 
 All other code must follow these standards strictly.

@@ -1,0 +1,15 @@
+# Test Domains for Scraping Suite
+# Used by debug/crawl4ai_test.py
+
+# --- wiki ---
+https://de.wikipedia.org/wiki/Biber
+
+# --- docs ---
+https://docs.searxng.org/admin/settings/settings_engines.html#example-multilingual-search
+https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
+
+# --- article ---
+https://medium.com/@karpathy/yes-you-should-understand-backprop-e2f06eab496b
+
+# --- api docs ---
+https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams

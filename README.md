@@ -145,8 +145,7 @@ searxng/
 │       └── DOCS.md
 ├── searxng/                 # SearXNG Docker config
 │   └── settings.yml
-├── debug/                   # Debug/test scripts (gitignored)
-│   ├── crawl4ai_test.py     # Single-URL Crawl4AI tester
+├── dev/                     # Development suites (scripts tracked, output gitignored)
 │   ├── crawling_suite/      # URL discovery testing
 │   └── scraping_suite/      # Scraper quality testing
 ├── crawl_site.py            # Website crawler (standalone script)

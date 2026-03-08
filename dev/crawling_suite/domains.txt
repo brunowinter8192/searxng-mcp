@@ -1,0 +1,20 @@
+# Crawling Suite Domains
+# Format: label|url|depth|max_pages
+
+# Wiki — complex HTML, nested structures, multilingual
+wikipedia|https://de.wikipedia.org/wiki/Biber|2|30
+
+# Sphinx Docs — code blocks, YAML, technical content
+searxng_docs|https://docs.searxng.org|2|50
+
+# API Docs (sklearn) — parameter tables, code examples
+sklearn_docs|https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html|2|30
+
+# JS-heavy article — dynamic content, embedded media
+medium|https://medium.com/@karpathy/yes-you-should-understand-backprop-e2f06eab496b|1|10
+
+# Modern docs — JS-rendered, interactive elements
+chroma_docs|https://docs.trychroma.com/docs/overview/telemetry|2|30
+
+# API docs — JSON payloads, WebSocket specs
+binance_docs|https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams|2|30

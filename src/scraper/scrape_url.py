@@ -12,6 +12,7 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
     browser_config = BrowserConfig(headless=True, verbose=False)
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
+        wait_until="networkidle",
         markdown_generator=DefaultMarkdownGenerator(
             content_filter=PruningContentFilter(
                 threshold=0.48,
