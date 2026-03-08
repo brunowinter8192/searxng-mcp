@@ -27,6 +27,8 @@ Long-term thinking. Brutal honesty. No overengineering.
 
 **Fail-Fast:** Let exceptions fly. No try-catch that silently swallows errors affecting business logic. Script must fail if it cannot fulfill its purpose.
 
+**Dev Suite Testing:** ALL testing and verification happens via numbered scripts in `dev/` suites (e.g., `dev/crawling_suite/02_test_filters.py`). Scripts have minimal or no direct console output and export results as Markdown reports to numbered output directories (e.g., `02_reports/`). NEVER test by running production scripts directly from CLI.
+
 ---
 
 ## MCP SERVER ARCHITECTURE
@@ -518,7 +520,7 @@ claude mcp list
 ### MCP Tools (real-time, in-conversation)
 
 1. **`search_web`** — SearXNG web search. Returns URLs + snippets.
-2. **`scrape_url`** — Single URL scrape. Returns cleaned markdown (cleaned_html + PruningFilter 0.48 + networkidle).
+2. **`scrape_url`** — Single URL scrape. Returns raw markdown (DefaultMarkdownGenerator + networkidle).
 3. **`explore_site`** — Site structure reconnaissance. Discovers URL tree: levels, URL count per depth, estimated total size. User decides crawl scope based on this.
 
 ### Skill Command (async, long-running)
@@ -541,11 +543,13 @@ crawl-site                   → full crawl, export MDs to RAG documents dir
 
 All scraping/crawling uses:
 - `wait_until="networkidle"` — required for JS-heavy sites (Chroma, Medium)
-- `content_source="cleaned_html"` — best balance of content vs noise
-- `PruningFilter(threshold=0.48)` — for scrape_url (noise reduction)
+- `DefaultMarkdownGenerator()` without content filter — raw_markdown preserves code blocks
 - `BrowserConfig(headless=True, verbose=False)`
+- crawl_site.py: `ContentTypeFilter(text/html)` always active, optional `URLPatternFilter` via CLI
 
-**Config changes:** When evaluating config changes, test BOTH volume (char counts) AND content integrity (code blocks, formatting). PruningFilter is known to strip whitespace from code blocks — any config change must re-verify code-block integrity via dev/scraping_suite scripts.
+PruningFilter was removed because it destroys code block formatting (spaces stripped, indentation lost). Verified across 86 URLs: 54-76% code integrity with filter vs 94-100% without. Content noise (nav, sidebars) is handled by the downstream cleanup agent in the RAG pipeline.
+
+**Config changes:** When evaluating config changes, test via dev/scraping_suite and dev/crawling_suite scripts. Always export results as MD reports.
 
 ---
 

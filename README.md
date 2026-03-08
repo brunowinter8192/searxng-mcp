@@ -117,6 +117,8 @@ venv/bin/python crawl_site.py \
 | `--output-dir` | required | Directory to save markdown files |
 | `--depth` | 3 | Maximum crawl depth |
 | `--max-pages` | 100 | Maximum pages to crawl |
+| `--exclude-patterns` | none | Comma-separated URL patterns to exclude (e.g. `/genindex*,/search*`) |
+| `--include-patterns` | none | Comma-separated URL patterns to include (e.g. `/docs/*,/api/*`) |
 
 Output is saved as individual `.md` files per page. Uses `raw_markdown` (preserves HTML in code blocks) with only permalink artifact cleanup.
 
