@@ -79,5 +79,4 @@ def build_site_map(seed_url: str, domain: str, results: list) -> dict:
         "total_pages": len(urls),
         "total_chars": total_chars,
         "depth_distribution": depth_distribution,
-        "urls": sorted(urls, key=lambda u: (u["depth"], u["url"])),
     }
