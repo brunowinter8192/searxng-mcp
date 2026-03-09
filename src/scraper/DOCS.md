@@ -16,6 +16,24 @@ Main orchestrator. Creates Crawl4AI browser and run configuration, fetches URL, 
 
 Truncates content if exceeding maximum length. Attempts to break at paragraph boundary for clean truncation. Appends truncation notice when content is cut.
 
+## explore_site.py
+
+**Purpose:** Site structure reconnaissance. Crawls a website using BFS to discover all pages and build a site map with depth distribution, page counts, and character counts. No file export — analysis only.
+**Input:** URL string and optional max_pages limit (default 200).
+**Output:** Dict with seed_url, domain, total_pages, total_chars, depth_distribution (count + chars per level), and sorted URL list with per-URL depth and chars.
+
+### explore_site_workflow()
+
+Main orchestrator. Extracts domain from URL, runs BFS discovery crawl, builds site map from results.
+
+### crawl_for_discovery()
+
+BFS crawl with DomainFilter + ContentTypeFilter (text/html). Uses max_depth=10 internally to discover full site structure. Returns raw CrawlResult list.
+
+### build_site_map()
+
+Aggregates crawl results into site map. Deduplicates URLs (trailing slash normalization), extracts depth from `result.metadata["depth"]` (set by Crawl4AI BFS strategy), computes per-depth statistics.
+
 ## Architecture
 
 Content extraction is delegated entirely to Crawl4AI (v0.8.0):

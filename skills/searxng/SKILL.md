@@ -5,6 +5,16 @@ description: SearXNG web search and URL scraping strategy
 
 # SearXNG MCP Tools — Search & Scraping Strategy
 
+## Pipeline Overview
+
+```
+search_web("topic")          → find interesting URLs
+scrape_url("url")            → quick single-page check
+explore_site("domain.com")   → site structure reconnaissance (depth, page counts, total size)
+  → user decides crawl scope (depth, subtree, max_pages)
+/crawl-site                  → full crawl, export MDs to target directory
+```
+
 ## Search Strategy
 
 Two fundamentally different workflows:
@@ -33,6 +43,8 @@ Two fundamentally different workflows:
 | Research a topic in depth | search_web | scrape_url (top 3-5) |
 | Compare information across sources | search_web | scrape_url (multiple) |
 | Extract documentation content | scrape_url | — |
+| Understand site structure before crawling | explore_site | — |
+| Crawl entire site to markdown files | /crawl-site | explore_site (optional) |
 
 ## Subagent Dispatch (web-research)
 
@@ -98,6 +110,60 @@ Focus on: Concrete configuration examples, performance tuning, security hardenin
 1. Spot-check at least 1 URL by calling `scrape_url`
 2. Verify summary matches actual page content
 3. Never present agent summaries without at least 1 verification
+
+## Site Exploration (explore_site)
+
+Use `explore_site` when the user wants to understand a website's structure before committing to a full crawl.
+
+**Output:** Site map with depth distribution, page counts per level, total character count, and full URL list.
+
+**Typical workflow:**
+1. `explore_site("https://docs.example.com")` — see structure
+2. User reviews depth distribution and total size
+3. User decides: crawl everything, limit depth, or use filters
+4. `/crawl-site https://docs.example.com` — full crawl with chosen settings
+
+**Parameters:**
+- `url` — seed URL to explore
+- `max_pages` — discovery limit (default 200, increase for large sites)
+
+**When to use:**
+- User asks "how big is this site?"
+- Before crawling an unknown site
+- When deciding crawl scope (depth, filters)
+
+**When NOT to use:**
+- User already knows the site and wants to crawl directly → `/crawl-site`
+- Single page → `scrape_url`
+
+## Crawl Site (/crawl-site)
+
+Slash command for full website crawling. Crawls all pages via BFS, exports as individual markdown files.
+
+**Usage:** `/crawl-site https://docs.example.com`
+
+**The command walks through 3 phases:**
+1. **Confirm Parameters** — URL, output directory, depth, max-pages
+2. **Crawl** — runs `crawl_site.py` with Crawl4AI BFS strategy
+3. **RAG Indexing** — optional: spawns tmux worker for `/rag:web-md-index`
+
+**crawl_site.py CLI reference:**
+```bash
+${CLAUDE_PLUGIN_ROOT}/venv/bin/python ${CLAUDE_PLUGIN_ROOT}/crawl_site.py \
+  --url "https://docs.example.com" \
+  --output-dir "/path/to/output" \
+  --depth 3 \
+  --max-pages 100 \
+  --exclude-patterns "/genindex*,/search*" \
+  --include-patterns "/docs/*,/api/*"
+```
+
+**Filters:**
+- `--exclude-patterns` — comma-separated URL patterns to exclude (e.g., index pages, search pages)
+- `--include-patterns` — comma-separated URL patterns to include (e.g., only docs subtree)
+- ContentTypeFilter (text/html) is always active
+
+**Default export path:** `~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/<website>/`
 
 ## Scraping Tips
 
