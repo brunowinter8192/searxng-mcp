@@ -27,6 +27,8 @@ Long-term thinking. Brutal honesty. No overengineering.
 
 **Fail-Fast:** Let exceptions fly. No try-catch that silently swallows errors affecting business logic. Script must fail if it cannot fulfill its purpose.
 
+**Python Execution:** ALL Python commands MUST use `./venv/bin/python` (not `python` or `python3`). The system Python does not have project dependencies installed.
+
 **Dev Suite Testing:** ALL testing and verification happens via numbered scripts in `dev/` suites (e.g., `dev/crawling_suite/02_test_filters.py`). Scripts have minimal or no direct console output and export results as Markdown reports to numbered output directories (e.g., `02_reports/`). NEVER test by running production scripts directly from CLI.
 
 ---
