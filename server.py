@@ -1,9 +1,10 @@
 # INFRASTRUCTURE
 import asyncio
 import nest_asyncio
-from typing import Literal
+from typing import Annotated, Literal
 from fastmcp import FastMCP
 from mcp.types import TextContent
+from pydantic import Field
 
 nest_asyncio.apply()
 
@@ -18,11 +19,31 @@ mcp = FastMCP("SearXNG")
 
 @mcp.tool
 def search_web(
-    query: str,
-    category: Literal["general", "news", "it", "science"] = "general"
+    query: Annotated[str, Field(description="Search query string (e.g., 'python async web scraping')")],
+    category: Annotated[
+        Literal["general", "news", "it", "science"],
+        Field(description="Search category: general (web), news (recent articles), it (tech/packages), science (academic)")
+    ] = "general",
+    language: Annotated[
+        str,
+        Field(description="Language code (e.g., 'en', 'de', 'fr'). Default: 'en'")
+    ] = "en",
+    time_range: Annotated[
+        Literal["day", "month", "year"] | None,
+        Field(description="Filter by time: day (last 24h), month (last 30d), year (last 365d)")
+    ] = None,
+    engines: Annotated[
+        str | None,
+        Field(description="Comma-separated engine list (e.g., 'google,brave'). Default: all engines in category")
+    ] = None,
+    pageno: Annotated[
+        int,
+        Field(description="Page number for pagination. Default: 1")
+    ] = 1
 ) -> list[TextContent]:
-    """Search web."""
-    return search_web_workflow(query, category)
+    """Use when user needs web search results. Searches via SearXNG meta-search engine.
+    Good for finding documentation, articles, code examples, news."""
+    return search_web_workflow(query, category, language, time_range, engines, pageno)
 
 
 @mcp.tool

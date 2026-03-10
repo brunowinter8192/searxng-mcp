@@ -29,7 +29,7 @@ Long-term thinking. Brutal honesty. No overengineering.
 
 **Python Execution:** ALL Python commands MUST use `./venv/bin/python` (not `python` or `python3`). The system Python does not have project dependencies installed.
 
-**Dev Suite Testing:** ALL testing and verification happens via numbered scripts in `dev/` suites (e.g., `dev/crawling_suite/02_test_filters.py`). Scripts have minimal or no direct console output and export results as Markdown reports to numbered output directories (e.g., `02_reports/`). NEVER test by running production scripts directly from CLI.
+**Dev Suite Testing:** ALL testing and verification happens via numbered scripts in `dev/` suites (e.g., `dev/crawling_suite/02_test_filters.py`). Scripts have minimal or no direct console output and export results as Markdown reports to numbered output directories (e.g., `02_reports/`). NEVER test by running production scripts directly from CLI. When a suite script makes multiple HTTP requests to external services (e.g., SearXNG API), include a 1-2s delay between requests to avoid triggering rate limits or engine suspensions.
 
 ---
 
@@ -552,6 +552,17 @@ All scraping/crawling uses:
 PruningFilter was removed because it destroys code block formatting (spaces stripped, indentation lost). Verified across 86 URLs: 54-76% code integrity with filter vs 94-100% without. Content noise (nav, sidebars) is handled by the downstream cleanup agent in the RAG pipeline.
 
 **Config changes:** When evaluating config changes, test via dev/scraping_suite and dev/crawling_suite scripts. Always export results as MD reports.
+
+### SearXNG Engine Types
+
+SearXNG engines come in two variants for some search providers:
+
+- **Scraper engines** (e.g., `brave`, `google`, `duckduckgo`): Parse the web UI HTML. No API key needed but get blocked (CAPTCHA, rate limits, HTTP 403) because the search provider sees bot traffic. Unreliable for sustained use from a single IP.
+- **API engines** (e.g., `braveapi`): Use the official REST API with an API key. Stable and reliable but require registration and often payment.
+
+Before activating a new engine in settings.yml: check the SearXNG Docs (RAG collection `SearXNG_Docs` or `dev_engines_online_<name>.md`) for known issues, rate limits, and whether an API variant exists. Do not blindly enable engines — Bing produces spam results (porn, unrelated sites) via its scraper engine.
+
+Current reliable engines: Startpage (Google proxy, most stable), DuckDuckGo (intermittent CAPTCHA), Brave (intermittent rate limits), Google (frequently blocked). Tor proxy recommended for Google/Brave/DDG stability.
 
 ---
 
