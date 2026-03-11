@@ -6,16 +6,18 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, DomainFilter, ContentTypeFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from mcp.types import TextContent
 
 MAX_DEPTH = 10
 DEFAULT_MAX_PAGES = 200
 
 
 # ORCHESTRATOR
-async def explore_site_workflow(url: str, max_pages: int = DEFAULT_MAX_PAGES) -> dict:
+async def explore_site_workflow(url: str, max_pages: int = DEFAULT_MAX_PAGES) -> list[TextContent]:
     domain = urlparse(url).netloc
     results = await crawl_for_discovery(url, domain, max_pages)
-    return build_site_map(url, domain, results)
+    site_map = build_site_map(url, domain, results)
+    return [TextContent(type="text", text=format_site_map(site_map))]
 
 
 # FUNCTIONS
@@ -38,7 +40,7 @@ async def crawl_for_discovery(url: str, domain: str, max_pages: int) -> list:
     run_config = CrawlerRunConfig(
         deep_crawl_strategy=strategy,
         cache_mode=CacheMode.BYPASS,
-        wait_until="networkidle",
+        wait_until="domcontentloaded",
         markdown_generator=DefaultMarkdownGenerator(),
     )
 
@@ -80,3 +82,19 @@ def build_site_map(seed_url: str, domain: str, results: list) -> dict:
         "total_chars": total_chars,
         "depth_distribution": depth_distribution,
     }
+
+
+# Format site map as readable Markdown
+def format_site_map(site_map: dict) -> str:
+    lines = [
+        f"# Site Map: {site_map['domain']}",
+        f"Seed: {site_map['seed_url']}",
+        f"Pages: {site_map['total_pages']} | Chars: {site_map['total_chars']:,}",
+        "",
+        "## Depth Distribution",
+    ]
+
+    for depth, stats in site_map["depth_distribution"].items():
+        lines.append(f"- Depth {depth}: {stats['count']} pages, {stats['chars']:,} chars")
+
+    return "\n".join(lines)

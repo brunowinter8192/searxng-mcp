@@ -59,7 +59,7 @@ def scrape_url(
 def explore_site(
     url: str,
     max_pages: int = 200
-) -> dict:
+) -> list[TextContent]:
     """Use when user wants to understand a website's structure before crawling.
     Shows URL tree with depth levels, page counts, and estimated total size.
     Good for deciding crawl scope (depth, filters, max_pages) before running crawl_site."""

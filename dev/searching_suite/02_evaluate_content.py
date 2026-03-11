@@ -9,9 +9,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
-from crawl4ai.content_filter_strategy import PruningContentFilter
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from src.scraper.scrape_url import scrape_url_workflow
 
 TOP_N_PER_QUERY = 3
 EXCERPT_LENGTH = 4000
@@ -82,36 +81,33 @@ def parse_search_report(report_path: Path) -> list[dict]:
 
 # Scrape all URLs across all queries with fallback to snippet
 async def scrape_all_urls(queries_with_urls: list[dict]) -> list[dict]:
-    browser_config = BrowserConfig(headless=True, verbose=False)
-    run_config = CrawlerRunConfig(
-        cache_mode=CacheMode.BYPASS,
-        wait_until="networkidle",
-        markdown_generator=DefaultMarkdownGenerator(
-            content_filter=PruningContentFilter(threshold=0.48)
-        ),
-    )
-
     results = []
-    async with AsyncWebCrawler(config=browser_config) as crawler:
-        for query_data in queries_with_urls:
-            scraped_urls = []
-            for url_data in query_data["urls"]:
-                content, source = await scrape_with_fallback(crawler, run_config, url_data)
-                scraped_urls.append({**url_data, "content": content, "source": source})
-                time.sleep(DELAY_BETWEEN_REQUESTS)
+    for query_data in queries_with_urls:
+        scraped_urls = []
+        for url_data in query_data["urls"]:
+            content, source = await scrape_with_fallback(url_data)
+            scraped_urls.append({**url_data, "content": content, "source": source})
+            await asyncio.sleep(DELAY_BETWEEN_REQUESTS)
 
-            results.append({"query": query_data["query"], "results": scraped_urls})
+        results.append({"query": query_data["query"], "results": scraped_urls})
 
     return results
 
 
 # Scrape URL with fallback chain: scrape → snippet → error
-async def scrape_with_fallback(crawler, run_config, url_data: dict) -> tuple[str, str]:
+async def scrape_with_fallback(url_data: dict) -> tuple[str, str]:
     try:
-        result = await crawler.arun(url=url_data["url"], config=run_config)
-        content = result.markdown.fit_markdown if result.markdown else ""
+        result = await scrape_url_workflow(url_data["url"], max_content_length=EXCERPT_LENGTH)
+        content = result[0].text if result else ""
 
-        if content and len(content) >= MIN_USEFUL_CONTENT:
+        if content.startswith("Error scraping"):
+            if url_data.get("snippet"):
+                return url_data["snippet"], "snippet (scrape returned empty)"
+            return "[No content available]", "failed"
+
+        content = content.split("\n\n", 1)[1] if "\n\n" in content else content
+
+        if len(content) >= MIN_USEFUL_CONTENT:
             return truncate_content(content, EXCERPT_LENGTH), "scraped"
 
         if content and is_garbage_content(content):
@@ -119,11 +115,11 @@ async def scrape_with_fallback(crawler, run_config, url_data: dict) -> tuple[str
                 return url_data["snippet"], "snippet (scraped content was garbage)"
             return content, "scraped (low quality)"
 
-        if not content and url_data.get("snippet"):
-            return url_data["snippet"], "snippet (scrape returned empty)"
-
         if content:
             return content, "scraped (short)"
+
+        if url_data.get("snippet"):
+            return url_data["snippet"], "snippet (scrape returned empty)"
 
         return "[No content available]", "failed"
 

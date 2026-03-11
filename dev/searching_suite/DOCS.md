@@ -50,13 +50,13 @@ Writes report to 01_reports/ with timestamped filename.
 
 ## 02_evaluate_content.py
 
-**Purpose:** Scrape top URLs from a search report and extract content for relevance evaluation.
+**Purpose:** Scrape top URLs from a search report and evaluate content quality. Uses the same scraping pipeline as the MCP scrape_url tool.
 **Input:** Latest search report from 01_reports/ (or path via CLI argument).
 **Output:** Summary report in 02_reports/ plus individual .md files per URL in 02_content_<report_stem>/.
 
-Uses Crawl4AI with PruningContentFilter (threshold 0.48) and fit_markdown for noise-filtered content. Scrapes top 3 URLs per query with 2s delay between requests. Content truncated to 4000 chars at paragraph boundary.
+Imports `scrape_url_workflow` from `src/scraper/scrape_url` to ensure identical scraping behavior as the MCP tool (same filters, fallbacks, cookie removal). Scrapes top 3 URLs per query with 2s delay between requests. Content truncated to 4000 chars at paragraph boundary.
 
-Fallback chain when scraping fails: fit_markdown (filtered content) → SearXNG snippet (from 01-report) → error marker. Each result is tagged with its source (scraped, snippet, failed) for traceability. Garbage detection flags content dominated by cookie banners, cloudflare pages, or login walls.
+Fallback chain when scraping fails: scrape_url_workflow (with all filters and networkidle→domcontentloaded fallback) → SearXNG snippet (from 01-report) → error marker. Each result is tagged with its source (scraped, snippet, failed) for traceability. Garbage detection flags content dominated by cookie banners, cloudflare pages, or login walls.
 
 ### evaluate_content()
 
@@ -72,11 +72,11 @@ Regex-parses 01-report markdown. Extracts query text, URLs, scores, domains, tit
 
 ### scrape_all_urls()
 
-Iterates all queries and their top URLs. Creates single AsyncWebCrawler session, scrapes sequentially with delay.
+Iterates all queries and their top URLs. Calls scrape_url_workflow per URL with asyncio.sleep delay between requests.
 
 ### scrape_with_fallback()
 
-Scrapes URL with fallback chain. Returns content string and source label. Classifies results: scraped (success), scraped (short) for content under 200 chars, snippet with reason when falling back to SearXNG content field, or failed when nothing available.
+Calls scrape_url_workflow, checks result for error messages. Falls back to snippet on empty/error results. Returns content string and source label.
 
 ### is_garbage_content()
 
