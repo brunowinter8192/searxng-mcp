@@ -40,31 +40,70 @@ Checks URL against PLUGIN_HINTS dict. Returns hint string for domains with dedic
 
 ## explore_site.py
 
-**Purpose:** Site structure reconnaissance. Crawls a website using BFS to discover all pages and build a summary with depth distribution, page counts, and character counts. No file export — analysis only.
-**Input:** URL string and optional max_pages limit (default 200).
-**Output:** TextContent with formatted Markdown summary (page count, total chars, depth distribution).
+**Purpose:** Site structure reconnaissance. Fast URL discovery via prefetch mode (~200-500ms per page instead of 2-5s). Returns page counts, depth distribution, and URL samples for noise pattern identification. No file export — analysis only.
+**Input:** URL string, optional max_pages limit (default 200), optional url_pattern wildcard filter.
+**Output:** TextContent with formatted Markdown summary (page count, total chars, depth distribution, 5 URL samples per depth). Partial results on timeout (120s) with warning.
 
 ### explore_site_workflow()
 
-Main orchestrator. Extracts domain from URL, runs BFS discovery crawl, builds site map, formats as Markdown.
+Main orchestrator. Extracts domain from URL, runs BFS discovery crawl with timeout, builds site map with URL samples, formats as Markdown. Returns tuple-based results from crawl_for_discovery (timed_out, results).
 
 ### crawl_for_discovery()
 
-BFS crawl with DomainFilter + ContentTypeFilter (text/html). Uses `wait_until="domcontentloaded"` for performance (explore only needs links, not rendered content). max_depth=10 internally. Returns raw CrawlResult list.
+BFS crawl with DomainFilter + ContentTypeFilter (text/html) + optional URLPatternFilter. Uses `prefetch=True` — skips markdown generation and content extraction, only fetches HTML and extracts links. Wrapped in `asyncio.wait_for()` with 120s timeout. Returns tuple `(timed_out: bool, results: list)`. max_depth=10 internally.
 
 ### build_site_map()
 
-Aggregates crawl results into summary dict. Deduplicates URLs (trailing slash normalization), extracts depth from metadata, computes per-depth statistics.
+Aggregates crawl results into summary dict. Deduplicates URLs (trailing slash normalization), extracts depth from metadata, computes per-depth statistics, picks URL samples via `pick_url_samples()`. Includes `timed_out` flag in output.
+
+### pick_url_samples()
+
+Selects 5 evenly-spaced URLs per depth level for noise pattern identification. If fewer than 5 URLs at a depth, returns all. Used by LLM to identify URL noise patterns (version switchers, unrelated sections) before crawling.
 
 ### format_site_map()
 
-Formats site map dict as readable Markdown. Includes domain, seed URL, total pages, total chars, and depth distribution. No individual URL listing (keeps output compact for LLM context).
+Formats site map dict as readable Markdown. Includes domain, seed URL, total pages, total chars, depth distribution, and URL samples per depth. Shows partial results warning on timeout.
+
+## crawl_site.py (root level)
+
+**Purpose:** Full website crawl with markdown export. Two-phase approach: fast prefetch URL discovery, then parallel content crawl via `arun_many()` with `SemaphoreDispatcher(concurrency=10)`. Falls back to serial BFS with full rendering for JS-heavy/SPA sites via `--no-prefetch` flag.
+**Input:** URL, output directory, depth, max_pages, optional include/exclude URL patterns, optional --no-prefetch flag.
+**Output:** Markdown files in output directory (one per page), with source URL comment header.
+
+### crawl_site_workflow()
+
+Main orchestrator. Two modes based on `no_prefetch` flag: (1) Default: discover_urls → crawl_urls parallel, (2) --no-prefetch: crawl_bfs serial. Deduplicates results, saves as markdown files.
+
+### discover_urls()
+
+Phase 1: BFS crawl with `prefetch=True` for fast URL discovery. Applies DomainFilter, ContentTypeFilter, optional URLPatternFilter. Returns deduplicated URL list.
+
+### crawl_urls()
+
+Phase 2: Parallel crawl of discovered URLs via `arun_many()` with `SemaphoreDispatcher(max_session_permit=10)`. Uses `networkidle` wait strategy and `DefaultMarkdownGenerator` for full content extraction.
+
+### crawl_bfs()
+
+Fallback: Serial BFS crawl with full browser rendering. For JS-heavy/SPA sites where prefetch cannot discover links (e.g., developer.apple.com). Same filters as discover_urls but with `networkidle` and `DefaultMarkdownGenerator`.
+
+### CLI
+
+```bash
+# Default (prefetch + parallel) — for static/SSR sites
+python crawl_site.py --url "https://sbert.net" --output-dir "./output" --depth 2 --max-pages 100
+
+# SPA/JS-heavy sites — serial BFS with full rendering
+python crawl_site.py --url "https://developer.apple.com/documentation/metal" --output-dir "./output" --no-prefetch
+
+# With URL pattern filter
+python crawl_site.py --url "https://docs.pytorch.org/docs/stable/mps.html" --output-dir "./output" --include-patterns "*stable*mps*"
+```
 
 ## Architecture
 
 Content extraction is delegated entirely to Crawl4AI (v0.8.0):
 - **Browser management:** Crawl4AI manages Playwright/Patchright internally
-- **JavaScript rendering:** scrape_url uses `networkidle` with `domcontentloaded` fallback; explore_site uses `domcontentloaded` only
+- **JavaScript rendering:** scrape_url uses `networkidle` with `domcontentloaded` fallback; explore_site uses `prefetch=True` (HTML + links only, no rendering)
 - **Noise removal:** Three layers — DOM cleanup (overlays), CSS selector exclusion (cookie banners), content scoring (PruningFilter)
 - **Markdown generation:** Two modes depending on use case:
   - **scrape_url (MCP tool):** PruningContentFilter(0.48) + fit_markdown — noise-filtered, for relevance assessment

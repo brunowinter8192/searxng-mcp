@@ -9,19 +9,34 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, DomainFilter, URLPatternFilter, ContentTypeFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
+from crawl4ai.async_dispatcher import SemaphoreDispatcher
 
 PERMALINK_PATTERN = re.compile(r'\[¶\]\([^)]+\)')
 TRAILING_SLASH = re.compile(r'/$')
+DEFAULT_CONCURRENCY = 10
 
 
 # ORCHESTRATOR
 async def crawl_site_workflow(url: str, output_dir: str, depth: int, max_pages: int,
-                              exclude_patterns: str = None, include_patterns: str = None):
+                              exclude_patterns: str = None, include_patterns: str = None,
+                              no_prefetch: bool = False):
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
 
     domain = urlparse(url).netloc
-    results = await crawl_website(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+
+    if no_prefetch:
+        print(f"Crawling {url} via BFS with full rendering (depth={depth}, max_pages={max_pages})")
+        results = await crawl_bfs(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+    else:
+        print(f"Phase 1: Discovering URLs via prefetch (depth={depth}, max_pages={max_pages})")
+        discovered_urls = await discover_urls(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+        print(f"Discovered {len(discovered_urls)} URLs")
+
+        print(f"\nPhase 2: Crawling {len(discovered_urls)} URLs in parallel (concurrency={DEFAULT_CONCURRENCY})")
+        results = await crawl_urls(discovered_urls)
+
+    print(f"Crawled {len(results)} pages")
     unique = deduplicate(results)
     saved = save_markdown(unique, url, target)
 
@@ -30,9 +45,54 @@ async def crawl_site_workflow(url: str, output_dir: str, depth: int, max_pages: 
 
 # FUNCTIONS
 
-# Crawl website using BFS strategy
-async def crawl_website(url: str, domain: str, depth: int, max_pages: int,
-                        exclude_patterns: str = None, include_patterns: str = None) -> list:
+# Phase 1: Fast URL discovery via prefetch BFS
+async def discover_urls(url: str, domain: str, depth: int, max_pages: int,
+                        exclude_patterns: str = None, include_patterns: str = None) -> list[str]:
+    filters = [
+        DomainFilter(allowed_domains=[domain]),
+        ContentTypeFilter(allowed_types=["text/html"]),
+    ]
+    if exclude_patterns:
+        filters.append(URLPatternFilter(patterns=exclude_patterns.split(","), reverse=True))
+    if include_patterns:
+        filters.append(URLPatternFilter(patterns=include_patterns.split(","), reverse=False))
+    filter_chain = FilterChain(filters)
+
+    strategy = BFSDeepCrawlStrategy(
+        max_depth=depth,
+        include_external=False,
+        filter_chain=filter_chain,
+        max_pages=max_pages
+    )
+
+    browser_config = BrowserConfig(headless=True, verbose=False)
+    run_config = CrawlerRunConfig(
+        deep_crawl_strategy=strategy,
+        cache_mode=CacheMode.BYPASS,
+        wait_until="domcontentloaded",
+        prefetch=True,
+    )
+
+    async with AsyncWebCrawler(config=browser_config) as crawler:
+        results = await crawler.arun(url=url, config=run_config)
+
+    if not isinstance(results, list):
+        results = [results]
+
+    seen = set()
+    urls = []
+    for r in results:
+        normalized = TRAILING_SLASH.sub('', r.url) if hasattr(r, 'url') and r.url else None
+        if normalized and normalized not in seen:
+            seen.add(normalized)
+            urls.append(normalized)
+
+    return urls
+
+
+# BFS crawl with full rendering (for JS-heavy/SPA sites)
+async def crawl_bfs(url: str, domain: str, depth: int, max_pages: int,
+                    exclude_patterns: str = None, include_patterns: str = None) -> list:
     filters = [
         DomainFilter(allowed_domains=[domain]),
         ContentTypeFilter(allowed_types=["text/html"]),
@@ -58,16 +118,30 @@ async def crawl_website(url: str, domain: str, depth: int, max_pages: int,
         markdown_generator=DefaultMarkdownGenerator(),
     )
 
-    print(f"Crawling {url} (depth={depth}, max_pages={max_pages}, domain={domain})")
-
     async with AsyncWebCrawler(config=browser_config) as crawler:
         results = await crawler.arun(url=url, config=run_config)
 
     if not isinstance(results, list):
         results = [results]
 
-    print(f"Crawled {len(results)} pages")
     return results
+
+
+# Phase 2: Parallel crawl of discovered URLs
+async def crawl_urls(urls: list[str]) -> list:
+    browser_config = BrowserConfig(headless=True, verbose=False)
+    run_config = CrawlerRunConfig(
+        cache_mode=CacheMode.BYPASS,
+        wait_until="networkidle",
+        markdown_generator=DefaultMarkdownGenerator(),
+    )
+
+    dispatcher = SemaphoreDispatcher(max_session_permit=DEFAULT_CONCURRENCY)
+
+    async with AsyncWebCrawler(config=browser_config) as crawler:
+        results = await crawler.arun_many(urls=urls, config=run_config, dispatcher=dispatcher)
+
+    return results if isinstance(results, list) else list(results)
 
 
 # Remove duplicate URLs (trailing slash normalization)
@@ -126,7 +200,9 @@ if __name__ == "__main__":
                         help="Comma-separated URL patterns to exclude (e.g. '/genindex*,/search*')")
     parser.add_argument("--include-patterns", type=str, default=None,
                         help="Comma-separated URL patterns to include (e.g. '/docs/*,/api/*')")
+    parser.add_argument("--no-prefetch", action="store_true",
+                        help="Use serial BFS with full rendering (for JS-heavy/SPA sites where prefetch finds no links)")
     args = parser.parse_args()
 
     asyncio.run(crawl_site_workflow(args.url, args.output_dir, args.depth, args.max_pages,
-                                    args.exclude_patterns, args.include_patterns))
+                                    args.exclude_patterns, args.include_patterns, args.no_prefetch))

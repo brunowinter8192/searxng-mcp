@@ -57,13 +57,17 @@ def scrape_url(
 
 @mcp.tool
 def explore_site(
-    url: str,
-    max_pages: int = 200
+    url: Annotated[str, Field(description="Seed URL to start exploration (e.g., 'https://docs.example.com')")],
+    max_pages: Annotated[int, Field(description="Maximum number of pages to discover (default: 200)")] = 200,
+    url_pattern: Annotated[
+        str | None,
+        Field(description="Wildcard URL filter to limit exploration scope (e.g., '*mps*', '*/api/*'). Only URLs matching this pattern are followed.")
+    ] = None
 ) -> list[TextContent]:
     """Use when user wants to understand a website's structure before crawling.
     Shows URL tree with depth levels, page counts, and estimated total size.
     Good for deciding crawl scope (depth, filters, max_pages) before running crawl_site."""
-    return asyncio.run(explore_site_workflow(url, max_pages))
+    return asyncio.run(explore_site_workflow(url, max_pages, url_pattern))
 
 
 if __name__ == "__main__":

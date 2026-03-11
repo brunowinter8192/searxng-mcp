@@ -31,8 +31,22 @@ python dev/crawling_suite/02_test_filters.py https://docs.searxng.org --exclude-
 
 ContentTypeFilter (text/html) is always active in both runs. The report shows baseline count, filtered count, removed URLs, and marks removed URLs in the full baseline list.
 
+## 03_test_explore_strategies.py
+
+**Purpose:** Benchmarks explore_site crawl strategies. Compares baseline (domcontentloaded + DefaultMarkdownGenerator), prefetch + domcontentloaded, and prefetch without wait_until. Measures time per strategy, pages discovered, per-page latency, and speedup vs baseline.
+**Output:** `03_reports/explore_strategies_<domain>_<timestamp>.md`
+
+```bash
+python dev/crawling_suite/03_test_explore_strategies.py https://docs.crawl4ai.com --max-pages 50
+python dev/crawling_suite/03_test_explore_strategies.py --depth 3
+```
+
+Default test URL: docs.crawl4ai.com. Report includes results table, speedup calculation, and depth distribution per strategy.
+
 ## Report Formats
 
 **01_reports:** JSON with summary (total fetched, unique URLs, duplicates, content/empty counts, total chars) and URL list with per-URL content status and character counts. Reports are consumed by the scraping suite's `05_compare_content_source.py`.
 
 **02_reports:** Markdown with summary table, removed URLs list, and full baseline URL list with [REMOVED] markers.
+
+**03_reports:** Markdown with strategy comparison table (pages, time, per-page ms, duplicates), speedup vs baseline, and depth distribution per strategy.
