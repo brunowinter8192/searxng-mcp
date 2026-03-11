@@ -536,10 +536,27 @@ claude mcp list
 ```
 search_web("topic")          → find interesting URLs
 scrape_url("url")            → quick single-page check
-explore_site("domain.com")   → site structure + URL count
-  → user decides crawl scope (depth, subtree, max_pages)
+explore_site("domain.com", max_pages=20)
+  → check URL samples for noise patterns
+  → if only 1 page found: site is SPA/JS-heavy → use --no-prefetch for crawl
+  → if URLs contain version noise (e.g. /v1.0/, /v2.0/): narrow url_pattern
+  → user decides crawl scope (depth, subtree, max_pages, pattern)
 crawl-site                   → full crawl, export MDs to RAG documents dir
 ```
+
+### Crawl Strategy Selection (CRITICAL)
+
+**explore_site is the diagnostic tool.** Always run with `max_pages=20` first to:
+1. Check URL samples — identify noise patterns (version switchers, unrelated sections)
+2. Determine if prefetch works — if only 1 page discovered, the site loads links via JS
+
+**crawl_site.py has two modes:**
+- **Default (prefetch):** Two-phase: fast URL discovery via prefetch, then parallel content crawl with `arun_many()` + `SemaphoreDispatcher(concurrency=10)`. 5-10x faster. Works for static/SSR sites (sbert.net, docs.crawl4ai.com, Sphinx docs).
+- **`--no-prefetch`:** Serial BFS with full browser rendering. Slower but required for JS-heavy/SPA sites where navigation links are loaded via JavaScript (developer.apple.com, React SPAs).
+
+**Decision rule:**
+- `explore_site(url, max_pages=20)` returns >1 page → prefetch works → default mode
+- `explore_site(url, max_pages=20)` returns 1 page → SPA/JS-heavy → `--no-prefetch`
 
 ### Crawl4AI Config (Production)
 
