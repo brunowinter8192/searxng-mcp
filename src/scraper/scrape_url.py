@@ -1,5 +1,6 @@
 # INFRASTRUCTURE
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 from mcp.types import TextContent
@@ -13,13 +14,15 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
         wait_until="networkidle",
-        markdown_generator=DefaultMarkdownGenerator(),
+        markdown_generator=DefaultMarkdownGenerator(
+            content_filter=PruningContentFilter(threshold=0.48)
+        ),
     )
 
     async with AsyncWebCrawler(config=browser_config) as crawler:
         result = await crawler.arun(url=url, config=run_config)
 
-    content = result.markdown.raw_markdown if result.markdown else ""
+    content = result.markdown.fit_markdown if result.markdown else ""
 
     if not content:
         return [TextContent(type="text", text=f"Error scraping {url}: No content extracted")]

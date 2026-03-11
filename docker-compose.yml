@@ -3,6 +3,12 @@ services:
     image: peterdavehello/tor-socks-proxy:latest
     container_name: tor
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --socks5-hostname localhost:9150 https://check.torproject.org/api/ip || exit 1"]
+      interval: 120s
+      timeout: 15s
+      start_period: 30s
+      retries: 3
 
   searxng:
     image: searxng/searxng:latest

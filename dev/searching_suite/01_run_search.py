@@ -79,8 +79,6 @@ def build_report(all_results: dict, settings_hash: str) -> str:
     all_items = [item for results in all_results.values() for item in results]
     multi_engine = sum(1 for item in all_items if len(item.get("engines", [])) > 1)
     multi_engine_pct = (multi_engine / len(all_items) * 100) if all_items else 0
-    high_priority = sum(1 for item in all_items if item.get("priority") == "high")
-    high_priority_pct = (high_priority / len(all_items) * 100) if all_items else 0
     avg_score = sum(item.get("score", 0) for item in all_items) / len(all_items) if all_items else 0
 
     domain_counts = Counter(extract_domain(item.get("url", "")) for item in all_items)
@@ -96,7 +94,6 @@ def build_report(all_results: dict, settings_hash: str) -> str:
     lines.append(f"- Total results: {total_results}")
     lines.append(f"- Avg results per query: {avg_results:.1f}")
     lines.append(f"- Multi-engine results (>1 engine): {multi_engine_pct:.0f}% ({multi_engine}/{len(all_items)})")
-    lines.append(f"- High-priority results: {high_priority_pct:.0f}% ({high_priority}/{len(all_items)})")
     lines.append(f"- Avg score: {avg_score:.1f}")
     lines.append("")
     lines.append("### Top Domains")
@@ -117,17 +114,17 @@ def build_report(all_results: dict, settings_hash: str) -> str:
             lines.append("")
             continue
 
-        lines.append("| # | Score | Pri | Engines | Domain | Title |")
-        lines.append("|---|-------|-----|---------|--------|-------|")
+        lines.append("| # | Score | Engines | Domain | Title | URL | Snippet |")
+        lines.append("|---|-------|---------|--------|-------|-----|---------|")
 
         for idx, item in enumerate(results, 1):
             score = item.get("score", 0)
-            priority = item.get("priority", "")
             engines = ", ".join(item.get("engines", []))
             domain = extract_domain(item.get("url", ""))
             title = item.get("title", "")[:80]
-            pri_display = priority if priority else ""
-            lines.append(f"| {idx} | {score:.1f} | {pri_display} | {engines} | {domain} | {title} |")
+            url = item.get("url", "")
+            snippet = item.get("content", "")[:200].replace("\n", " ").replace("|", "/")
+            lines.append(f"| {idx} | {score:.1f} | {engines} | {domain} | {title} | {url} | {snippet} |")
 
         lines.append("")
 

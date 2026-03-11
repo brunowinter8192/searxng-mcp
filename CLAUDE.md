@@ -543,13 +543,17 @@ crawl-site                   → full crawl, export MDs to RAG documents dir
 
 ### Crawl4AI Config (Production)
 
-All scraping/crawling uses:
+Two scraping modes with different content filter strategies:
+
+- **scrape_url (MCP tool):** `PruningContentFilter(threshold=0.48)` + `fit_markdown` — filters navigation, sidebars, cookie banners. Optimized for readability and relevance assessment. Trade-off: code block formatting is destroyed (whitespace stripped). Acceptable for the MCP use case (quick page check, not code extraction).
+- **crawl_site (export script):** `DefaultMarkdownGenerator()` without content filter + `raw_markdown` — full fidelity, preserves code blocks. Content noise handled by downstream cleanup agent in RAG pipeline.
+
+Both use:
 - `wait_until="networkidle"` — required for JS-heavy sites (Chroma, Medium)
-- `DefaultMarkdownGenerator()` without content filter — raw_markdown preserves code blocks
 - `BrowserConfig(headless=True, verbose=False)`
 - crawl_site.py: `ContentTypeFilter(text/html)` always active, optional `URLPatternFilter` via CLI
 
-PruningFilter was removed because it destroys code block formatting (spaces stripped, indentation lost). Verified across 86 URLs: 54-76% code integrity with filter vs 94-100% without. Content noise (nav, sidebars) is handled by the downstream cleanup agent in the RAG pipeline.
+PruningFilter code block impact verified across 86 URLs: 54-76% code integrity with filter vs 94-100% without.
 
 **Config changes:** When evaluating config changes, test via dev/scraping_suite and dev/crawling_suite scripts. Always export results as MD reports.
 

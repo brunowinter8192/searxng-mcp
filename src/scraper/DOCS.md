@@ -1,16 +1,16 @@
 # Scraper Module
 
-URL scraping tool powered by Crawl4AI for SearXNG MCP server. Extracts LLM-friendly raw markdown from any URL with JavaScript rendering.
+URL scraping tool powered by Crawl4AI for SearXNG MCP server. Extracts LLM-friendly filtered markdown from any URL with JavaScript rendering.
 
 ## scrape_url.py
 
-**Purpose:** URL scraping orchestrator. Uses Crawl4AI's AsyncWebCrawler with DefaultMarkdownGenerator to extract full page content as raw markdown.
+**Purpose:** URL scraping orchestrator. Uses Crawl4AI's AsyncWebCrawler with PruningContentFilter to extract noise-filtered page content as markdown. Optimized for readability and relevance assessment — navigation menus, sidebars, footers and cookie banners are filtered out.
 **Input:** URL string and optional maximum content length (default 15000).
-**Output:** Raw markdown content wrapped in TextContent, or error message on failure.
+**Output:** Filtered markdown content wrapped in TextContent, or error message on failure.
 
 ### scrape_url_workflow()
 
-Main orchestrator. Creates Crawl4AI browser and run configuration, fetches URL, extracts raw_markdown (unfiltered content preserving code blocks and formatting). Truncates at paragraph boundary if exceeding max_content_length.
+Main orchestrator. Creates Crawl4AI browser and run configuration with PruningContentFilter (threshold 0.48), fetches URL, extracts fit_markdown (noise-filtered content). Truncates at paragraph boundary if exceeding max_content_length. Note: PruningFilter destroys code block formatting (whitespace stripped) — this is acceptable for the MCP use case (relevance assessment). For full-fidelity content export, use crawl_site.py which uses raw_markdown without filter.
 
 ### truncate_content()
 
@@ -39,7 +39,7 @@ Aggregates crawl results into summary. Deduplicates URLs (trailing slash normali
 Content extraction is delegated entirely to Crawl4AI (v0.8.0):
 - **Browser management:** Crawl4AI manages Playwright/Patchright internally
 - **JavaScript rendering:** `wait_until="networkidle"` ensures JS-heavy sites are fully rendered
-- **Markdown generation:** DefaultMarkdownGenerator without content filter produces raw_markdown preserving all content including code blocks
+- **Markdown generation:** Two modes depending on use case:
+  - **scrape_url (MCP tool):** PruningContentFilter(0.48) + fit_markdown — noise-filtered, readable, for relevance assessment. Code blocks may lose formatting.
+  - **crawl_site (export script):** DefaultMarkdownGenerator without filter + raw_markdown — full fidelity, preserves code blocks. Noise handled by downstream cleanup agent in RAG pipeline.
 - **No per-site configuration needed:** Works generically across all website types
-
-Previous versions used PruningContentFilter (threshold 0.48) with fit_markdown, but this destroyed code block formatting (spaces removed, indentation lost). Verified across 86 URLs: 54-76% code integrity with filter vs 94-100% without.
