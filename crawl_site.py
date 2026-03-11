@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from urllib.parse import urlparse
 
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai import AsyncWebCrawler, AsyncUrlSeeder, BrowserConfig, CrawlerRunConfig, CacheMode, SeedingConfig
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, DomainFilter, URLPatternFilter, ContentTypeFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
@@ -19,22 +19,52 @@ DEFAULT_CONCURRENCY = 10
 # ORCHESTRATOR
 async def crawl_site_workflow(url: str, output_dir: str, depth: int, max_pages: int,
                               exclude_patterns: str = None, include_patterns: str = None,
-                              no_prefetch: bool = False):
+                              no_prefetch: bool = False, strategy: str = "auto",
+                              url_file: str = None):
     target = Path(output_dir)
     target.mkdir(parents=True, exist_ok=True)
 
     domain = urlparse(url).netloc
 
-    if no_prefetch:
+    if url_file:
+        print(f"Reading URLs from {url_file}")
+        urls = read_url_file(url_file)
+        print(f"Loaded {len(urls)} URLs")
+        results = await crawl_urls(urls)
+    elif strategy == "bfs":
+        print(f"Strategy: BFS full rendering (depth={depth}, max_pages={max_pages})")
+        results = await crawl_bfs(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+    elif strategy == "sitemap":
+        print(f"Strategy: Sitemap discovery")
+        urls = await discover_urls_sitemap(domain, include_patterns)
+        if not urls:
+            print("No sitemap found. Aborting.")
+            return
+        print(f"Sitemap: {len(urls)} URLs")
+        results = await crawl_urls(urls)
+    elif strategy == "prefetch":
+        print(f"Strategy: Prefetch BFS (depth={depth}, max_pages={max_pages})")
+        urls = await discover_urls(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+        print(f"Prefetch: {len(urls)} URLs")
+        results = await crawl_urls(urls)
+    elif strategy == "auto":
+        print("Auto-detection: trying sitemap...")
+        urls = await discover_urls_sitemap(domain, include_patterns)
+        if urls:
+            print(f"Sitemap: {len(urls)} URLs")
+            results = await crawl_urls(urls)
+        else:
+            print("No sitemap. Trying prefetch BFS...")
+            urls = await discover_urls(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+            if len(urls) > 1:
+                print(f"Prefetch: {len(urls)} URLs")
+                results = await crawl_urls(urls)
+            else:
+                print(f"SPA detected (prefetch found {len(urls)} URLs). Falling back to BFS full rendering.")
+                results = await crawl_bfs(url, domain, depth, max_pages, exclude_patterns, include_patterns)
+    else:
         print(f"Crawling {url} via BFS with full rendering (depth={depth}, max_pages={max_pages})")
         results = await crawl_bfs(url, domain, depth, max_pages, exclude_patterns, include_patterns)
-    else:
-        print(f"Phase 1: Discovering URLs via prefetch (depth={depth}, max_pages={max_pages})")
-        discovered_urls = await discover_urls(url, domain, depth, max_pages, exclude_patterns, include_patterns)
-        print(f"Discovered {len(discovered_urls)} URLs")
-
-        print(f"\nPhase 2: Crawling {len(discovered_urls)} URLs in parallel (concurrency={DEFAULT_CONCURRENCY})")
-        results = await crawl_urls(discovered_urls)
 
     print(f"Crawled {len(results)} pages")
     unique = deduplicate(results)
@@ -44,6 +74,25 @@ async def crawl_site_workflow(url: str, output_dir: str, depth: int, max_pages: 
 
 
 # FUNCTIONS
+
+# Discover URLs via sitemap (fastest strategy, no rendering needed)
+async def discover_urls_sitemap(domain: str, include_patterns: str = None) -> list[str]:
+    config = SeedingConfig(source="sitemap")
+    if include_patterns:
+        config.pattern = include_patterns.split(",")[0]
+    try:
+        seeder = AsyncUrlSeeder()
+        results = await seeder.aget_urls(f"https://{domain}", config=config)
+        return [r["url"] for r in results if "url" in r]
+    except Exception:
+        return []
+
+
+# Read URL list from text file (one URL per line)
+def read_url_file(path: str) -> list[str]:
+    with open(path, "r", encoding="utf-8") as f:
+        return [line.strip() for line in f if line.strip()]
+
 
 # Phase 1: Fast URL discovery via prefetch BFS
 async def discover_urls(url: str, domain: str, depth: int, max_pages: int,
@@ -202,7 +251,12 @@ if __name__ == "__main__":
                         help="Comma-separated URL patterns to include (e.g. '/docs/*,/api/*')")
     parser.add_argument("--no-prefetch", action="store_true",
                         help="Use serial BFS with full rendering (for JS-heavy/SPA sites where prefetch finds no links)")
+    parser.add_argument("--strategy", choices=["auto", "sitemap", "prefetch", "bfs"], default="auto",
+                        help="Force discovery strategy: auto (cascade: sitemap→prefetch→bfs), sitemap, prefetch, bfs")
+    parser.add_argument("--url-file", type=str, default=None,
+                        help="Path to text file with URLs (one per line) — skips discovery entirely")
     args = parser.parse_args()
 
     asyncio.run(crawl_site_workflow(args.url, args.output_dir, args.depth, args.max_pages,
-                                    args.exclude_patterns, args.include_patterns, args.no_prefetch))
+                                    args.exclude_patterns, args.include_patterns, args.no_prefetch,
+                                    args.strategy, args.url_file))
