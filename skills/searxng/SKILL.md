@@ -7,13 +7,25 @@ description: SearXNG web search and URL scraping strategy
 
 ## Pipeline Overview
 
+### MCP Tools (ad-hoc, in-conversation)
+
 ```
 search_web("topic")          → find interesting URLs
 scrape_url("url")            → quick single-page check
-explore_site("domain.com")   → site structure reconnaissance (depth, page counts, total size)
-  → user decides crawl scope (depth, subtree, max_pages)
-/crawl-site                  → full crawl, export MDs to target directory
+explore_site("domain.com")   → ad-hoc site check (max 50 pages, strategy recommendation)
 ```
+
+### Crawl Pipeline (structured, multi-step via /crawl-site)
+
+```
+explore_site.py --url X      → strategy auto-detect + full URL list as file
+  review URL samples         → grep/stichproben for noise patterns
+  filter noise               → grep -v, produce filtered list
+crawl_site.py --url-file     → batch crawl filtered URLs
+  (optional) RAG indexing    → /rag:web-md-index
+```
+
+MCP explore_site is for quick ad-hoc checks in chat. The crawl pipeline uses explore_site.py (CLI script) for full discovery — they are separate tools for separate purposes.
 
 ## Search Strategy
 

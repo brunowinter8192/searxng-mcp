@@ -45,11 +45,33 @@ async def explore_site_workflow(url: str, strategy: str, max_pages: int, output:
             duration = time.time() - start
             print(f"Prefetch: {len(urls)} URLs found in {duration:.1f}s")
 
+    print_url_samples(urls)
     save_url_list(urls, output)
     print(f"Saved {len(urls)} URLs to {output}")
 
 
 # FUNCTIONS
+
+# Print URL samples for noise pattern identification
+def print_url_samples(urls: list[str], max_samples: int = 15) -> None:
+    if not urls:
+        return
+    total = len(urls)
+    indices = set()
+    for i in range(min(5, total)):
+        indices.add(i)
+    for i in range(max(0, total - 5), total):
+        indices.add(i)
+    if total > 10:
+        step = total // 5
+        for i in range(5):
+            indices.add(min(i * step, total - 1))
+    sorted_indices = sorted(indices)[:max_samples]
+    print(f"\n=== URL Samples ({len(sorted_indices)} of {total}) ===")
+    for i in sorted_indices:
+        print(f"[{i+1:>4}] {urls[i]}")
+    print()
+
 
 # Save URL list to text file (one URL per line)
 def save_url_list(urls: list[str], output_path: str) -> None:

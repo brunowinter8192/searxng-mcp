@@ -81,9 +81,9 @@ async def discover_urls_sitemap(domain: str, include_patterns: str = None) -> li
     if include_patterns:
         config.pattern = include_patterns.split(",")[0]
     try:
-        seeder = AsyncUrlSeeder()
-        results = await seeder.aget_urls(f"https://{domain}", config=config)
-        return [r["url"] for r in results if "url" in r]
+        async with AsyncUrlSeeder() as seeder:
+            results = await seeder.urls(f"https://{domain}", config=config)
+            return [r["url"] for r in results if "url" in r]
     except Exception:
         return []
 
@@ -234,6 +234,10 @@ def save_markdown(results: list, seed_url: str, output_dir: Path) -> int:
 # Convert URL to safe filename
 def url_to_filename(url: str, seed_url: str) -> str:
     path = url.replace(seed_url.rstrip('/'), '').strip('/')
+    if not path:
+        return "index.md"
+    if path.startswith('http'):
+        path = urlparse(url).path.strip('/')
     if not path:
         return "index.md"
     return path.replace('/', '_').replace('.html', '') + '.md'

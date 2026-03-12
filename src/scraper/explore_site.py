@@ -3,25 +3,46 @@ import asyncio
 from collections import defaultdict
 from urllib.parse import urlparse
 
-from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
+from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode, AsyncUrlSeeder, SeedingConfig
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, DomainFilter, ContentTypeFilter, URLPatternFilter
 from mcp.types import TextContent
 
 MAX_DEPTH = 10
-DEFAULT_MAX_PAGES = 200
+DEFAULT_MAX_PAGES = 50
 CRAWL_TIMEOUT = 120
 
 
 # ORCHESTRATOR
 async def explore_site_workflow(url: str, max_pages: int = DEFAULT_MAX_PAGES, url_pattern: str | None = None) -> list[TextContent]:
     domain = urlparse(url).netloc
+
+    sitemap_count = await check_sitemap(domain)
     timed_out, results = await crawl_for_discovery(url, domain, max_pages, url_pattern)
     site_map = build_site_map(url, domain, results, timed_out)
+
+    if sitemap_count > 0:
+        site_map["recommended_strategy"] = f"sitemap ({sitemap_count} URLs in sitemap)"
+    elif site_map["total_pages"] > 1:
+        site_map["recommended_strategy"] = "prefetch"
+    else:
+        site_map["recommended_strategy"] = "bfs (JS-heavy, prefetch found only 1 page)"
+
     return [TextContent(type="text", text=format_site_map(site_map))]
 
 
 # FUNCTIONS
+
+# Check if site has a sitemap and count URLs
+async def check_sitemap(domain: str) -> int:
+    try:
+        async with AsyncUrlSeeder() as seeder:
+            config = SeedingConfig(source="sitemap")
+            urls = await seeder.urls(domain, config)
+            return len(urls) if urls else 0
+    except Exception:
+        return 0
+
 
 # BFS crawl to discover site structure with timeout
 async def crawl_for_discovery(url: str, domain: str, max_pages: int, url_pattern: str | None = None) -> tuple[bool, list]:
@@ -123,6 +144,7 @@ def format_site_map(site_map: dict) -> str:
         f"# Site Map: {site_map['domain']}",
         f"Seed: {site_map['seed_url']}",
         f"Pages: {site_map['total_pages']} | Chars: {site_map['total_chars']:,}",
+        f"Recommended Strategy: {site_map.get('recommended_strategy', 'unknown')}",
     ]
 
     if site_map.get("timed_out"):

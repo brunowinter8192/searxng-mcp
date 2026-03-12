@@ -519,44 +519,34 @@ claude mcp list
 
 ## PIPELINE
 
-### MCP Tools (real-time, in-conversation)
+### MCP Tools (ad-hoc, in-conversation)
 
 1. **`search_web`** — SearXNG web search. Returns URLs + snippets.
 2. **`scrape_url`** — Single URL scrape. Returns raw markdown (DefaultMarkdownGenerator + networkidle).
-3. **`explore_site`** — Site structure reconnaissance. Discovers URL tree: levels, URL count per depth, estimated total size. User decides crawl scope based on this.
+3. **`explore_site`** — Ad-hoc site check (max 50 pages). Returns strategy recommendation + URL samples. NOT part of the crawl pipeline — use for quick chat-based site assessment only.
 
-### Skill Command (async, long-running)
+### Crawl Pipeline (structured, via /crawl-site)
 
-4. **`crawl-site`** — Full website crawl. Triggered via SearXNG skill, not MCP tool. Crawls all URLs, exports markdown files to target directory.
+```
+explore_site.py --url X      → strategy auto-detect (sitemap→prefetch→BFS) + full URL list
+  review URL samples         → grep/stichproben for noise patterns
+  filter noise               → grep -v, produce filtered URL list
+crawl_site.py --url-file     → batch crawl filtered URLs to markdown
+  (optional) RAG indexing    → /rag:web-md-index
+```
 
 **Default export path:** `~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/<website>/`
 
-### Typical Flow
+### Crawl Strategy Selection
 
-```
-search_web("topic")          → find interesting URLs
-scrape_url("url")            → quick single-page check
-explore_site("domain.com", max_pages=20)
-  → check URL samples for noise patterns
-  → if only 1 page found: site is SPA/JS-heavy → use --no-prefetch for crawl
-  → if URLs contain version noise (e.g. /v1.0/, /v2.0/): narrow url_pattern
-  → user decides crawl scope (depth, subtree, max_pages, pattern)
-crawl-site                   → full crawl, export MDs to RAG documents dir
-```
+**crawl_site.py has a 3-level auto-detection cascade** (`--strategy auto`, default):
+1. **Sitemap** (AsyncUrlSeeder) — seconds for thousands of URLs, no rendering
+2. **Prefetch BFS** — ~200-500ms per page, HTML+links only
+3. **BFS full rendering** — ~2-5s per page, networkidle (fallback for SPA/JS-heavy)
 
-### Crawl Strategy Selection (CRITICAL)
+Each level falls back to the next if it fails. Force a specific strategy with `--strategy sitemap|prefetch|bfs`.
 
-**explore_site is the diagnostic tool.** Always run with `max_pages=20` first to:
-1. Check URL samples — identify noise patterns (version switchers, unrelated sections)
-2. Determine if prefetch works — if only 1 page discovered, the site loads links via JS
-
-**crawl_site.py has two modes:**
-- **Default (prefetch):** Two-phase: fast URL discovery via prefetch, then parallel content crawl with `arun_many()` + `SemaphoreDispatcher(concurrency=10)`. 5-10x faster. Works for static/SSR sites (sbert.net, docs.crawl4ai.com, Sphinx docs).
-- **`--no-prefetch`:** Serial BFS with full browser rendering. Slower but required for JS-heavy/SPA sites where navigation links are loaded via JavaScript (developer.apple.com, React SPAs).
-
-**Decision rule:**
-- `explore_site(url, max_pages=20)` returns >1 page → prefetch works → default mode
-- `explore_site(url, max_pages=20)` returns 1 page → SPA/JS-heavy → `--no-prefetch`
+**explore_site.py** uses the same cascade and outputs a `recommended_strategy` plus URL samples for noise identification.
 
 ### Crawl4AI Config (Production)
 
