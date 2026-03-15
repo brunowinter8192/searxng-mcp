@@ -82,9 +82,21 @@ async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: 
         content = result.markdown.fit_markdown
         if len(content) < MIN_CONTENT_THRESHOLD and result.markdown.raw_markdown:
             content = result.markdown.raw_markdown
+        if is_crawl4ai_error(content):
+            return ""
         return content
     except Exception:
         return ""
+
+
+# Detect Crawl4AI error messages returned as markdown content instead of raised exceptions
+def is_crawl4ai_error(content: str) -> bool:
+    error_patterns = [
+        "Crawl4AI Error:",
+        "Document is empty",
+        "page is not fully supported",
+    ]
+    return any(pattern in content for pattern in error_patterns)
 
 
 # Truncate content at paragraph boundary if too long
