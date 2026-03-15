@@ -21,11 +21,16 @@ On empty result, returns error message with plugin hint if URL matches a known d
 
 ### try_scrape()
 
-Attempts a single scrape with given browser config, optional crawler strategy, and wait strategy. Content selection: `fit_markdown` if >= 200 chars (MIN_CONTENT_THRESHOLD), otherwise falls back to `raw_markdown`. This prevents PruningContentFilter from destroying table-heavy content (e.g. Wikipedia). Checks content via `is_crawl4ai_error()` — if Crawl4AI returned an error message as markdown content, returns empty string to trigger fallback chain.
+Attempts a single scrape with given browser config, optional crawler strategy, and wait strategy. Content selection: `fit_markdown` if >= 200 chars (MIN_CONTENT_THRESHOLD), otherwise falls back to `raw_markdown`. This prevents PruningContentFilter from destroying table-heavy content (e.g. Wikipedia). Checks content via `is_garbage_content()` — if content is an error page, cookie wall, or Crawl4AI error message, returns empty string to trigger fallback chain.
 
-### is_crawl4ai_error()
+### is_garbage_content()
 
-Detects Crawl4AI error messages that are returned as markdown content instead of raised exceptions. Checks for patterns: "Crawl4AI Error:", "Document is empty", "page is not fully supported". Returns True if any pattern found. Called by `try_scrape()` after content extraction.
+Detects three categories of garbage content returned as markdown:
+1. **Crawl4AI errors:** "Crawl4AI Error:", "Document is empty", "page is not fully supported"
+2. **HTTP error pages:** Short content (<1000 chars) with 404/403/NOT_FOUND/Access Denied keywords
+3. **Cookie consent walls:** High density of cookie-related terms (>15 occurrences of "cookie"/"consent"/"duration" in first 5000 chars + "consent preferences" or "cookieyes" present)
+
+Called by both `try_scrape()` and `try_scrape_raw()` after content extraction.
 
 ### truncate_content()
 
@@ -37,7 +42,7 @@ Checks URL against PLUGIN_HINTS dict. Returns hint string for domains with dedic
 
 ### Constants
 
-- `COOKIE_CONSENT_SELECTOR` — CSS selector string matching common cookie consent frameworks: CookieYes (cky-consent, cky-banner), OneTrust, Cookiebot, cc-banner, GDPR, cookie-banner, cookie-consent, cookie-notice, cookie-law. Note: `cky-*` is intentionally specific (not `[class*='cky-']`) to avoid matching `sticky-header` elements.
+- `COOKIE_CONSENT_SELECTOR` — CSS selector string matching common cookie consent frameworks: CookieYes (cky-consent, cky-banner, cky-modal), OneTrust, Cookiebot, cc-banner, GDPR, cookie-banner, cookie-consent, cookie-notice, cookie-law. Note: `cky-modal` is critical — CookieYes stores the full Consent Preferences dialog (12K+ chars of cookie descriptions) in this container. Without it, only the small banner (236 chars) is removed.
 - `PLUGIN_HINTS` — Dict mapping domains to plugin usage hints
 - `DEFAULT_MAX_CONTENT_LENGTH` — 15000 chars
 - `MIN_CONTENT_THRESHOLD` — 200 chars. fit_markdown below this triggers raw_markdown fallback.
@@ -116,3 +121,4 @@ Content extraction is delegated entirely to Crawl4AI (v0.8.0):
   - **scrape_url_raw (MCP tool):** DefaultMarkdownGenerator + raw_markdown — full fidelity, saves to file for RAG indexing
   - **crawl_site (export script):** DefaultMarkdownGenerator + raw_markdown — full fidelity, batch crawl, noise handled by downstream RAG cleanup agent
 - **Known issue:** Crawl4AI captures stdout — always write debug output to files, not print()
+- **Cookie-Wall debugging:** Inject JS to enumerate `[class*='cky']` elements and check textLen per element. The largest container is usually the unmissed consent dialog. Add its class to COOKIE_CONSENT_SELECTOR.

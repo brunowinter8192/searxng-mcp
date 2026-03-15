@@ -13,3 +13,9 @@ https://medium.com/@karpathy/yes-you-should-understand-backprop-e2f06eab496b
 
 # --- api docs ---
 https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
+
+# --- error pages ---
+https://blog.lancedb.com/advanced-rag-precise-zero-shot-dense-retrieval-with-hyde-0946c54-fdcb/
+
+# --- cookie walls ---
+https://towardsdatascience.com/langchains-parent-document-retriever-revisited-1fca8791f5a0/

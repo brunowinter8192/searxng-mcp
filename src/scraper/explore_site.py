@@ -39,7 +39,9 @@ async def check_sitemap(domain: str) -> list[str]:
         async with AsyncUrlSeeder() as seeder:
             config = SeedingConfig(source="sitemap")
             urls = await seeder.urls(domain, config)
-            return list(urls) if urls else []
+            if not urls:
+                return []
+            return [u if isinstance(u, str) else u.get("url", str(u)) for u in urls]
     except Exception:
         return []
 
@@ -109,7 +111,7 @@ def build_site_map(seed_url: str, domain: str, results: list, timed_out: bool = 
         depth_urls[depth].append(url)
 
     for raw_url in (sitemap_urls or []):
-        url = raw_url.rstrip('/')
+        url = (raw_url if isinstance(raw_url, str) else raw_url.get("url", str(raw_url))).rstrip('/')
         if not url or url in seen:
             continue
         seen.add(url)

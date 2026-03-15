@@ -19,7 +19,7 @@ COOKIE_CONSENT_SELECTOR = ", ".join([
     "[class*='cookie-consent']", "[id*='cookie-consent']",
     "[class*='cookie-notice']", "[id*='cookie-notice']",
     "[class*='cookie-law']", "[id*='cookie-law']",
-    "[class*='cky-consent']", "[class*='cky-banner']",
+    "[class*='cky-consent']", "[class*='cky-banner']", "[class*='cky-modal']",
     "[class*='onetrust']", "[id*='onetrust']",
     "[id*='CookiebotDialog']", "[class*='CookiebotWidget']",
     "[class*='cc-banner']", "[class*='cc-window']",
@@ -82,21 +82,35 @@ async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: 
         content = result.markdown.fit_markdown
         if len(content) < MIN_CONTENT_THRESHOLD and result.markdown.raw_markdown:
             content = result.markdown.raw_markdown
-        if is_crawl4ai_error(content):
+        if is_garbage_content(content):
             return ""
         return content
     except Exception:
         return ""
 
 
-# Detect Crawl4AI error messages returned as markdown content instead of raised exceptions
-def is_crawl4ai_error(content: str) -> bool:
-    error_patterns = [
-        "Crawl4AI Error:",
-        "Document is empty",
-        "page is not fully supported",
-    ]
-    return any(pattern in content for pattern in error_patterns)
+# Detect garbage content: error pages, cookie walls, login walls
+def is_garbage_content(content: str) -> bool:
+    lower = content.lower()
+
+    # Crawl4AI error messages returned as content
+    crawl4ai_errors = ["crawl4ai error:", "document is empty", "page is not fully supported"]
+    if any(p in lower for p in crawl4ai_errors):
+        return True
+
+    # HTTP error pages (404, 403, etc.) — short content with error keywords
+    if len(content) < 1000:
+        error_keywords = ["not_found", "404", "403", "forbidden", "access denied", "page not found"]
+        if any(k in lower for k in error_keywords):
+            return True
+
+    # Cookie consent walls — high density of cookie-related terms
+    sample = lower[:5000]
+    cookie_signals = sample.count("cookie") + sample.count("consent") + sample.count("duration")
+    if cookie_signals > 15 and ("consent preferences" in sample or "cookieyes" in sample):
+        return True
+
+    return False
 
 
 # Truncate content at paragraph boundary if too long
@@ -181,6 +195,8 @@ async def try_scrape_raw(browser_config, crawler_strategy, markdown_generator, u
             return ""
         content = result.markdown.raw_markdown
         if not content or len(content) < MIN_CONTENT_THRESHOLD:
+            return ""
+        if is_garbage_content(content):
             return ""
         return content
     except Exception:
