@@ -8,6 +8,10 @@
 ---
 
 [Sitemap](https://medium.com/sitemap/sitemap.xml)
+[Open in app](https://play.google.com/store/apps/details?id=com.medium.reader&referrer=utm_source%3DmobileNavBar&source=post_page---top_nav_layout_nav-----------------------------------------)
+Sign up
+Get app
+Sign up
 # **Understanding Walk Forward Validation in Time Series Analysis: A Practical Guide**
 Follow
 7 min read Oct 28, 2024
@@ -42,6 +46,8 @@ Splits the data into k equal parts (folds). The model is trained on k-1 folds an
   * Non-time series problems
   * Time series without strong temporal dependencies
 
+
+Press enter or click to view image in full size
 _Source:_[_scikit-learn 1.5.2 documentation_](https://scikit-learn.org/stable/modules/cross_validation.html)
 ### 2. Leave-One-Out Cross-Validation (LOOCV)
 This is a special case of k-fold where _k_ equals the number of observations. Each observation is used as the test set while the remaining data is used for training, repeating for every observation.
@@ -62,24 +68,5 @@ This is a special case of k-fold where _k_ equals the number of observations. Ea
   * Very small datasets
   * When computational cost isn’t a concern
 
-_Source:_[_Dataaspirant_](https://dataaspirant.com/leave-one-out-cross-validation-loocv/)
-### 3. Bootstrapping Validation
-Involves randomly sampling data with replacement to create multiple training sets. This approach helps estimate the accuracy and variance of the model by training on different subsets of the original data.
-**Advantages:**
-  * Works well with small datasets
-  * Provides confidence intervals
-  * Robust performance estimation
-
-
-**Disadvantages:**
-  * Breaks temporal order
-  * Can include future data in training
-  * Not suitable for time series
-  * Computationally intensive
-
-
-**Usage:**
-  * Small non-time series datasets
-  * When uncertainty estimation is important
 
 [Content truncated...]

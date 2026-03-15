@@ -13,6 +13,11 @@
 
 Joshua Gordon
 June 20, 2023
+CONTENTS 
+  * [Four Important Types of Time-Series Features](https://dotdata.com/blog/practical-guide-for-feature-engineering-of-time-series-data/#content-heading-3)
+
+
+###  Join Our Newsletter 
 ## Introduction
 Time series modeling is one of the most impactful machine learning use cases with broad applications across industries. Traditional time series modeling techniques, such as ARIMA, often automatically incorporate the time component of the data by using lagged values of the target variable as model inputs. While these techniques provide interpretable coefficients that aid in understanding the contribution of each variable to the forecast, they can be sensitive to outliers, missing data, and changes in the underlying data-generating process over time. As a result, their accuracy may be compromised. 
 On the other hand, machine learning combined with feature engineering offers a more robust approach to time series modeling. This approach can handle complex, non-linear relationships and is well-suited for large relational datasets with more complex relationships and intricate interdependencies.
@@ -32,7 +37,6 @@ The **Train** dataset contains the following columns:
   * Store: The store where the sale took place.
   * Item: The item that was sold.
   * Promotion: Whether or not a promotion was active for the item on the date of the sale.
-  * Sales: gives the total sales for a product family at a particular store at a given date.
-
+  * Sales: gives the total sales for a product family at a particular store at a given date
 
 [Content truncated...]

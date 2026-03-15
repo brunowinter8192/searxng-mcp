@@ -8,11 +8,12 @@
 ---
 
 Firecrawl CLI gives agents the complete web data toolkit for scraping, searching, and browsing. [Try it now →](https://docs.firecrawl.dev/sdks/cli)
+·
+[Products](https://www.firecrawl.dev/blog/best-vector-databases)[Playground](https://www.firecrawl.dev/playground)[Docs](https://docs.firecrawl.dev)[Pricing](https://www.firecrawl.dev/pricing)[Integrations](https://www.firecrawl.dev/blog/best-vector-databases)[Blog](https://www.firecrawl.dev/blog)[Resources](https://www.firecrawl.dev/blog/best-vector-databases)
 //
 //
 ### Ready to build?
 Start getting Web Data for free and scale seamlessly as your project expands. No credit card needed.
-[Start for free](https://www.firecrawl.dev/signin)[See our plans](https://www.firecrawl.dev/pricing)
 #### Table of Contents
 Best Vector Databases in 2026: A Complete Comparison Guide
 Bex TuychievFeb 18, 2026 (updated)
@@ -32,7 +33,6 @@ Vector databases power any application that retrieves information by meaning rat
   * **RAG applications** : The most common use case today. Your LLM doesn't know your internal documentation, your product catalog, or your customer records. RAG solves this by retrieving relevant context from a vector database and passing it to the model before generation. The quality of that retrieval determines the quality of the answer.
   * **Semantic search** : Search that understands intent rather than matching keywords. A user searching for "running shoes for wide feet" finds relevant results even if the product description says "broad-fit athletic footwear." This powers product discovery in e-commerce and knowledge retrieval in enterprise tools.
   * **Recommendation systems** : Match users to products, articles, or content based on behavioral embeddings. Instead of collaborative filtering on explicit ratings, you find items close to a user's embedding in vector space - capturing preferences that users never explicitly stated.
-  * **Image and video search** : Find visually similar images, detect duplicate content, or retrieve video segments matching a description. Multi-modal vector databases like Marqo handle text and image embeddings in the same index.
-  * **Anomaly detection** : In fraud detection and security monitoring, flag transactions or events that are far from the expected cluster in embedding space. Vector similarity identif
+  * **Image and video search** : Find visually similar images, detect duplicate content, or retrieve video segments matching a description. Multi-modal
 
 [Content truncated...]

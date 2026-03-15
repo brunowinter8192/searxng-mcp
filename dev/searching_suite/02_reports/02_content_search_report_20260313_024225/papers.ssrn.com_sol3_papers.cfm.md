@@ -11,5 +11,5 @@
 ## Sicherheitsüberprüfung wird durchgeführt
 Diese Website nutzt einen Sicherheitsservice, um sich vor böswilligen Bots zu schützen. Diese Seite wird angezeigt, solange die Website überprüft, dass Sie kein Bot sind.
 ## Überprüfung erfolgreich. Warten auf Antwort von papers.ssrn.com
-Ray ID: `9db75c2069db31bc`
+Ray ID: `9dc6f1f59b8b6e96`
 Performance und Sicherheit von [Cloudflare](https://www.cloudflare.com?utm_source=challenge&utm_campaign=m)[Privatsphäre](https://www.cloudflare.com/de-de/privacypolicy/)

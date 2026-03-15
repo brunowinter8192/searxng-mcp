@@ -7,13 +7,14 @@
 
 ---
 
+[ Skip to main content ](https://pmc.ncbi.nlm.nih.gov/articles/PMC4375844/#main-content)
 **Official websites use .gov** A **.gov** website belongs to an official government organization in the United States. 
 **Secure .gov websites use HTTPS** A **lock** (  Lock Locked padlock icon  ) or **https://** means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. 
   * View on publisher site
   * Download PDF
   * Add to Collections
-  * Cite
   * Permalink
+## PERMALINK
 
 
 As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health. Learn more: [PMC Disclaimer](https://pmc.ncbi.nlm.nih.gov/about/disclaimer/) | [ PMC Copyright Notice ](https://pmc.ncbi.nlm.nih.gov/about/copyright/)

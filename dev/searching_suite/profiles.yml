@@ -1,0 +1,29 @@
+general:
+  category: general
+  language: en
+  time_range: null
+  engines: null
+
+science:
+  category: science
+  language: en
+  time_range: year
+  engines: "google scholar"
+
+it:
+  category: general
+  language: en
+  time_range: year
+  engines: null
+
+research:
+  category: general
+  language: en
+  time_range: null
+  engines: "google,brave,startpage,duckduckgo,google scholar"
+
+recent:
+  category: general
+  language: en
+  time_range: month
+  engines: null

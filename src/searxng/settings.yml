@@ -12,6 +12,8 @@ search:
   formats:
     - html
     - json
+  ban_time_on_fail: 5
+  max_ban_time_on_fail: 120
   suspended_times:
     SearxEngineAccessDenied: 600
     SearxEngineCaptcha: 600
@@ -62,6 +64,7 @@ engines:
     engine: google_scholar
     disabled: false
     weight: 2
+    timeout: 10
 
 hostnames:
   high_priority:
@@ -72,9 +75,17 @@ hostnames:
     - '(.*\.)?docs\.python\.org$'
     - '(.*\.)?developer\.mozilla\.org$'
     - '(.*\.)?arxiv\.org$'
+    - '(.*\.)?huggingface\.co$'
+    - '(.*\.)?pytorch\.org$'
+    - '(.*\.)?readthedocs\.io$'
+    - '(.*\.)?anthropic\.com$'
+    - '(.*\.)?openai\.com$'
   low_priority:
     - '(.*\.)?pinterest\.'
     - '(.*\.)?quora\.com$'
     - '(.*\.)?w3schools\.com$'
+    - '(.*\.)?hub\.docker\.com$'
+    - '(.*\.)?linkedin\.com$'
+    - '(.*\.)?amazon\.'
   remove:
     - '(.*\.)?pinterest\.'

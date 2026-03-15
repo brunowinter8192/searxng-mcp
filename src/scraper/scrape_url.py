@@ -7,6 +7,7 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from mcp.types import TextContent
 
 DEFAULT_MAX_CONTENT_LENGTH = 15000
+MIN_CONTENT_THRESHOLD = 200
 
 PLUGIN_HINTS = {
     "reddit.com": "Use the Reddit MCP plugin (reddit search_posts/get_post_comments) for Reddit content.",
@@ -18,7 +19,7 @@ COOKIE_CONSENT_SELECTOR = ", ".join([
     "[class*='cookie-consent']", "[id*='cookie-consent']",
     "[class*='cookie-notice']", "[id*='cookie-notice']",
     "[class*='cookie-law']", "[id*='cookie-law']",
-    "[class*='cky-']",
+    "[class*='cky-consent']", "[class*='cky-banner']",
     "[class*='onetrust']", "[id*='onetrust']",
     "[id*='CookiebotDialog']", "[class*='CookiebotWidget']",
     "[class*='cc-banner']", "[class*='cc-window']",
@@ -31,17 +32,23 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
     markdown_generator = DefaultMarkdownGenerator(
         content_filter=PruningContentFilter(threshold=0.48)
     )
-    browser_config = BrowserConfig(headless=True, verbose=False, enable_stealth=True)
-    adapter = UndetectedAdapter()
-    crawler_strategy = AsyncPlaywrightCrawlerStrategy(
-        browser_config=browser_config,
-        browser_adapter=adapter
-    )
 
-    content = await try_scrape(browser_config, crawler_strategy, markdown_generator, url, "networkidle")
+    # Phase 1: Normal browser (works for most sites, avoids UndetectedAdapter issues)
+    normal_config = BrowserConfig(headless=True, verbose=False)
+    content = await try_scrape(normal_config, None, markdown_generator, url, "networkidle")
 
     if not content:
-        content = await try_scrape(browser_config, crawler_strategy, markdown_generator, url, "domcontentloaded")
+        content = await try_scrape(normal_config, None, markdown_generator, url, "domcontentloaded")
+
+    # Phase 2: Stealth browser (for anti-bot protected sites)
+    if not content:
+        stealth_config = BrowserConfig(headless=True, verbose=False, enable_stealth=True)
+        adapter = UndetectedAdapter()
+        stealth_strategy = AsyncPlaywrightCrawlerStrategy(
+            browser_config=stealth_config,
+            browser_adapter=adapter
+        )
+        content = await try_scrape(stealth_config, stealth_strategy, markdown_generator, url, "networkidle")
 
     if not content:
         hint = get_plugin_hint(url)
@@ -61,14 +68,21 @@ async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: 
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
         wait_until=wait_until,
-        remove_overlay_elements=True,
         excluded_selector=COOKIE_CONSENT_SELECTOR,
         markdown_generator=markdown_generator,
     )
     try:
-        async with AsyncWebCrawler(crawler_strategy=crawler_strategy, config=browser_config) as crawler:
+        kwargs = {"config": browser_config}
+        if crawler_strategy:
+            kwargs["crawler_strategy"] = crawler_strategy
+        async with AsyncWebCrawler(**kwargs) as crawler:
             result = await crawler.arun(url=url, config=run_config)
-        return result.markdown.fit_markdown if result.markdown else ""
+        if not result.markdown:
+            return ""
+        content = result.markdown.fit_markdown
+        if len(content) < MIN_CONTENT_THRESHOLD and result.markdown.raw_markdown:
+            content = result.markdown.raw_markdown
+        return content
     except Exception:
         return ""
 

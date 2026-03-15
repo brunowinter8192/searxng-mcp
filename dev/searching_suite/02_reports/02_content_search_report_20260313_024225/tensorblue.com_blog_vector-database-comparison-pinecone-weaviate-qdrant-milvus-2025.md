@@ -8,6 +8,8 @@
 ---
 
 [Skip to main content](https://tensorblue.com/blog/vector-database-comparison-pinecone-weaviate-qdrant-milvus-2025#main-content)
+Technology
+14 min read
 # Vector Databases Comparison 2025: Pinecone vs Weaviate vs Qdrant vs Milvus
 ## Introduction to Vector Databases
 Vector databases are specialized databases optimized for storing and searching high-dimensional vectors (embeddings). Essential for RAG systems, recommendation engines, semantic search, and similarity-based applications. The vector database market is projected to reach $4.3B by 2028.

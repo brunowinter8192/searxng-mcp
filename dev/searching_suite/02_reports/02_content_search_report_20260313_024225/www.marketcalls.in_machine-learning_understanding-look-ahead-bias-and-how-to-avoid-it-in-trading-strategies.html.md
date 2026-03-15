@@ -7,6 +7,8 @@
 
 ---
 
+Share 
+Reply 
 [ Rajandran R Follow](https://www.marketcalls.in/author/powerpuff) Creator of OpenAlgo - OpenSource Algo Trading framework for Indian Traders. Building GenAI Applications. Telecom Engineer turned Full-time Derivative Trader. Mostly Trading Nifty, Banknifty, High Liquid Stock Derivatives. Trading the Markets Since 2006 onwards. Using Market Profile and Orderflow for more than a decade. Designed and published 100+ open source trading systems on various trading tools. Strongly believe that market understanding and robust trading frameworks are the key to the trading success. Building Algo Platforms, Writing about Markets, Trading System Design, Market Sentiment, Trading Softwares & Trading Nuances since 2007 onwards. Author of Marketcalls.in
 # Understanding Look-Ahead Bias and How to Avoid It in Trading Strategies
 February 27, 2025  7 min read

@@ -8,13 +8,29 @@
 ---
 
 [Skip to content](https://github.com/searxng/searxng/discussions/1738#start-of-content)
+You signed in with another tab or window. [Reload](https://github.com/searxng/searxng/discussions/1738) to refresh your session. You signed out in another tab or window. [Reload](https://github.com/searxng/searxng/discussions/1738) to refresh your session. You switched accounts on another tab or window. [Reload](https://github.com/searxng/searxng/discussions/1738) to refresh your session. Dismiss alert
 / Public
   * You must be signed in to change notification settings
-  * [ Star  26.4k ](https://github.com/login?return_to=%2Fsearxng%2Fsearxng)
+  * [ Star  26.5k ](https://github.com/login?return_to=%2Fsearxng%2Fsearxng)
 
 
+#  Tips for fast search results?  #1738
+[ ecker00  ](https://github.com/ecker00) started this conversation in [General](https://github.com/searxng/searxng/discussions/categories/general)
+[ Tips for fast search results? ](https://github.com/searxng/searxng/discussions/1738#top) #1738
+[ ecker00  ](https://github.com/ecker00)
+Sep 1, 2022 · 1 comments · 1 reply 
+[Return to top](https://github.com/searxng/searxng/discussions/1738#top)
 Discussion options
+###  Uh oh! 
+There was an error while loading. [Please reload this page](https://github.com/searxng/searxng/discussions/1738).
+
+
 Quote reply
+edited
+###  Uh oh! 
+There was an error while loading. [Please reload this page](https://github.com/searxng/searxng/discussions/1738).
+
+
 ## 
 [ ecker00 ](https://github.com/ecker00) [ Sep 1, 2022 ](https://github.com/searxng/searxng/discussions/1738#discussion-4354394)
 I'm wondering what are some of the best practices when it comes to improving performance and response time for SearXNG? I've not seen much discussion on it, and there are a lot of parameters to tweak. How are the best servers achieving sub-second response times? Just to get a sense of how fast different sites where, I did some very rough testing estimates in my browser. DOMContentLoaded timing in Firefox:
@@ -29,8 +45,12 @@ My own SearXNG server usually takes more than 6 seconds to process a basic reque
 Beta Was this translation helpful? [Give feedback.](https://github.com/searxng/searxng/discussions/1738)
 You must be logged in to vote
 All reactions
-##  1 comment  · 1 reply 
+##  Replies:  1 comment  · 1 reply 
 Comment options
+###  Uh oh! 
+There was an error while loading. [Please reload this page](https://github.com/searxng/searxng/discussions/1738).
+
+
 Quote reply
 ### 
 [ tiekoetter ](https://github.com/tiekoetter) [ Sep 1, 2022 ](https://github.com/searxng/searxng/discussions/1738#discussioncomment-3530531)
@@ -42,17 +62,8 @@ You must be logged in to vote
 All reactions
 1 reply 
 Comment options
-Quote reply
-#### 
-[ecker00](https://github.com/ecker00) [ Sep 2, 2022 ](https://github.com/searxng/searxng/discussions/1738#discussioncomment-3535047)
-Author 
-Thank you for some pointers. 👍 If other people have suggestion, be nice to post them here as a future reference.  
----  
-Beta Was this translation helpful? [Give feedback.](https://github.com/searxng/searxng/discussions/1738)
-All reactions
-[Sign up for free](https://github.com/join?source=comment-repo) **to join this conversation on GitHub**. Already have an account? [Sign in to comment](https://github.com/login?return_to=https%3A%2F%2Fgithub.com%2Fsearxng%2Fsearxng%2Fdiscussions%2F1738)
-Category 
-[ General ](https://github.com/searxng/searxng/discussions/categories/general)
-Labels 
-None yet 
-2 participants 
+###  Uh oh! 
+There was an error while loading. [Please reload this page](https://github.com/searxng/searxng/discussions/1738).
+
+
+[Content truncated...]

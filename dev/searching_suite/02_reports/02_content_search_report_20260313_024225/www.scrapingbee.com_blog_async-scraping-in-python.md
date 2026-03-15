@@ -7,7 +7,21 @@
 
 ---
 
+We use essential cookies to make our site work. With your consent, we may also use non-essential cookies to improve user experience and analyze website traffic. By clicking “Accept,” you agree to our website's cookie use as described in our Cookie Policy. You can change your cookie settings at any time by clicking “Preferences.”
+PreferencesAccept
+**Just launched - Fast Search API:** organic SERP data in under 1 second [Try it now](https://dashboard.scrapingbee.com/request-builder-fast-search)
+# How to use asyncio to scrape websites with Python
+[Try ScrapingBee for Free](https://dashboard.scrapingbee.com/account/register)
 **Alexander M | 13 January 2026 (updated) | 10 min read**
+Table of contents
+  1. [What is asyncio?](https://www.scrapingbee.com/blog/async-scraping-in-python/#what-is-asyncio)
+    1. [Asynchronous Python basics](https://www.scrapingbee.com/blog/async-scraping-in-python/#asynchronous-python-basics)
+    2. [How does async/await work?](https://www.scrapingbee.com/blog/async-scraping-in-python/#how-does-asyncawait-work)
+    3. [Asyncio feature/function overview](https://www.scrapingbee.com/blog/async-scraping-in-python/#asyncio-featurefunction-overview)
+  2. [Scrape Wikipedia asynchronously with Python and asyncio](https://www.scrapingbee.com/blog/async-scraping-in-python/#scrape-wikipedia-asynchronously-with-python-and-asyncio)
+    1. [Installing dependencies](https://www.scrapingbee.com/blog/async-scraping-in-python/#installing-dependencies)
+
+
 In this article, we'll take a look at how you can use Python and its coroutines, with their `async`/`await` syntax, to efficiently scrape websites, without having to go all-in on threads 🧵 and semaphores 🚦. For this purpose, we'll check out [asyncio](https://docs.python.org/3/library/asyncio.html), along with the asynchronous HTTP library [aiohttp](https://docs.aiohttp.org).
 ## What is asyncio?
 [asyncio](https://docs.python.org/3/library/asyncio.html) is part of Python's standard library (yay, no additional dependency to manage 🥳) which enables the implementation of concurrency using the same asynchronous patterns you may already know from JavaScript and other languages: `async` and `await`
@@ -25,26 +39,6 @@ asyncio uses the following three key concepts to provide asynchronicity:
 **Futures** are the return value of a coroutine and represent the _future_ value computed by the coroutine.
 You can find a full list of technical details at <https://docs.python.org/3/library/asyncio-task.html#awaitables>.
 ### How does `async`/`await` work?
-If you happen to be already familiar with `async`/`await` in JavaScript, you'll feel right at home as the underlying concept is the same. While asynchronous programming per se is not something new, this was usually achieved with callbacks and the eventual [pyramid of doom](https://en.wikipedia.org/wiki/Pyramid_of_doom_%28programming%29) with all the nested and chained callbacks. This was pretty unmanageable in both, JavaScript and Python. `async`/`await` came to the rescue here.
-When you have a task which takes longer to compute (typical example when to use multi-threading), you can mark the function with `async` and turn it into a coroutine. Let's take the following code as quick example.
-```
-import asyncio
-
-async def wait_and_print():
-  await asyncio.sleep(1)
-  print(str)
-
-async def main():
-  tasks = []
-
-  for i in range(1, 10):
-    tasks.append(asyncio.create_task(wait_and_print(i)))
-
-  for task in tasks:
-    await task
-
-asyncio.run(main())
-
-```
+If you happen to be already familiar with `async`/`await` in JavaScript, you'll feel right at home as the underlying concept is the same. While asynchronous programming per se is not something new, this was usually achieved with callbacks and the eventua
 
 [Content truncated...]
