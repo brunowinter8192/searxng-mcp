@@ -118,7 +118,8 @@ def is_garbage_content(content: str) -> bool:
     # Cookie consent walls — high density of cookie-related terms
     sample = lower[:5000]
     cookie_signals = sample.count("cookie") + sample.count("consent") + sample.count("duration")
-    if cookie_signals > 15 and ("consent preferences" in sample or "cookieyes" in sample):
+    cookie_wall_signals = ("consent preferences" in sample or "cookieyes" in sample or "cookie preferences" in sample)
+    if cookie_signals > 15 and cookie_wall_signals:
         return True
 
     return False
