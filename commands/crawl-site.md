@@ -6,7 +6,6 @@ description: Crawl a website and save pages as Markdown files
 
 ```
 OUTPUT_DIR=~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/searxng
-DECISIONS_DIR=decisions/
 ```
 
 ## Plugin Domains (SKIP — handled by dedicated MCP plugins)
@@ -24,19 +23,21 @@ If a decision file references these domains, note them as "Plugin-Domain (SKIP)"
 ## Pipeline Flow
 
 ```
-Phase 1: Preparation
- | Step 1: Extract all URLs from decision files
- | Step 2: Show output directory + existing documents inventory
- | Step 3: Explore domains (explore_site.py per crawlable domain)
-Phase 2: Assessment
- | Evaluate which URLs/patterns are relevant per domain
- | User confirms selection
-Phase 3: Crawl
+Phase 1: URL Input
+ | Ask user which URLs/domains to crawl
+ | Check against Plugin-Domain skip list
+Phase 2: Explore
+ | Run explore_site.py per domain (parallel)
+ | Show URL counts + samples per domain
+Phase 3: Assessment
+ | Evaluate which URL patterns are relevant vs noise
+ | Filter URL lists, user confirms
+Phase 4: Crawl
  | crawl_site.py per domain with filtered URL lists
- | Save as Markdown to $OUTPUT_DIR
-Phase 4: Cleanup
+ | Garbage detection + removal
+Phase 5: Cleanup
  | Clean up crawled Markdown files (web-md-cleanup agent)
-Phase 5: Indexing
+Phase 6: Indexing
  | Ask user if ready to index into RAG
  | /rag:web-md-index (chunk + embed)
 ```
@@ -80,13 +81,49 @@ List the confirmed URLs to process.
 
 ---
 
-## Phase 2: Assessment
+## Phase 2: Explore
+
+### Step 1: Run Exploration Per Domain
+
+For each confirmed URL, run explore_site.py (parallel for multiple domains):
+
+```bash
+${CLAUDE_PLUGIN_ROOT}/venv/bin/python ${CLAUDE_PLUGIN_ROOT}/explore_site.py \
+  --url "$DOMAIN_URL" \
+  --strategy auto \
+  --output "/tmp/explore_${DOMAIN_NAME}_urls.txt" \
+  > /tmp/explore_${DOMAIN_NAME}_output.txt 2>&1
+```
+
+Note: If the plugin venv python does not exist, use `./venv/bin/python` (project venv) instead.
+
+### Step 2: Show Results
+
+Show summary per domain: strategy used, URLs discovered, URL samples.
+
+### Phase 2 Report
+
+```
+PHASE 2: Explore
+=================
+[domain]: [strategy] — [N] URLs discovered
+[domain]: [strategy] — [N] URLs discovered
+TOTAL:    [N] URLs across [M] domains
+```
+
+---
+
+**STOP** - User reviews exploration results before assessment.
+
+---
+
+## Phase 3: Assessment
 
 ### Step 1: Relevance Evaluation
 
 For each explored domain, evaluate discovered URLs:
-- Which URL patterns are relevant for our pipeline decisions?
-- Which patterns are noise (language variants, non-content, duplicates)?
+- Which URL patterns are relevant?
+- Which patterns are noise (language variants, non-content, duplicates, login pages)?
 
 Present per domain:
 ```
@@ -106,10 +143,10 @@ grep -v -E "NOISE_PATTERN" "/tmp/explore_${DOMAIN}_urls.txt" > "/tmp/filtered_${
 wc -l "/tmp/filtered_${DOMAIN}_urls.txt"
 ```
 
-### Phase 2 Report
+### Phase 3 Report
 
 ```
-PHASE 2: Assessment
+PHASE 3: Assessment
 ====================
 [domain]: [N] relevant / [M] total
 [domain]: [N] relevant / [M] total
@@ -122,11 +159,11 @@ TOTAL:    [N] URLs to crawl
 
 ---
 
-## Phase 3: Crawl
+## Phase 4: Crawl
 
 ### Step 1: Run Crawler Per Domain
 
-For each confirmed domain:
+For each confirmed domain (parallel):
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/venv/bin/python ${CLAUDE_PLUGIN_ROOT}/crawl_site.py \
@@ -136,21 +173,41 @@ ${CLAUDE_PLUGIN_ROOT}/venv/bin/python ${CLAUDE_PLUGIN_ROOT}/crawl_site.py \
   > /tmp/crawl_${DOMAIN}_output.txt 2>&1
 ```
 
-### Step 2: Verify Output
+### Step 2: Verify Output + Garbage Detection
 
 ```bash
 grep -E "^(Reading|Loaded|Crawled|Unique|Done)" /tmp/crawl_${DOMAIN}_output.txt
 ls "$OUTPUT_DIR" | wc -l
 ```
 
-### Phase 3 Report
+**Garbage Detection:** After crawl, find and remove garbage files:
+
+```bash
+find "$OUTPUT_DIR" -name "*.md" -size -2k -type f | while read f; do
+  if grep -qiE "(page not found|not available|unfortunately we couldn)" "$f" 2>/dev/null; then
+    rm "$f"
+    echo "REMOVED: $(basename $f)"
+  fi
+done
+```
+
+Common garbage patterns: "Page not found", "This page is not available for Python", "Unfortunately we couldn't find the content".
+
+### Step 3: Verify File Counts
+
+```bash
+ls "$OUTPUT_DIR" | sed 's/__.*//' | sort | uniq -c | sort -rn
+```
+
+### Phase 4 Report
 
 ```
-PHASE 3: Crawl
+PHASE 4: Crawl
 ==============
 [domain]: [N] files crawled — [Success/Failed]
 [domain]: [N] files crawled — [Success/Failed]
-TOTAL:    [N] new markdown files
+GARBAGE:  [N] files removed
+TOTAL:    [N] clean markdown files
 OUTPUT:   $OUTPUT_DIR
 ```
 
@@ -160,7 +217,7 @@ OUTPUT:   $OUTPUT_DIR
 
 ---
 
-## Phase 4: Cleanup
+## Phase 5: Cleanup
 
 ### Step 1: Run Cleanup
 
@@ -176,10 +233,10 @@ Agent(subagent_type="web-md-cleanup", prompt="Clean these markdown files in $OUT
 
 Spot-check a few cleaned files to ensure quality.
 
-### Phase 4 Report
+### Phase 5 Report
 
 ```
-PHASE 4: Cleanup
+PHASE 5: Cleanup
 =================
 FILES CLEANED: [N]
 QUALITY:       [spot-check summary]
@@ -191,7 +248,7 @@ QUALITY:       [spot-check summary]
 
 ---
 
-## Phase 5: Indexing
+## Phase 6: Indexing
 
 ### Step 1: Ask User
 
@@ -213,10 +270,10 @@ If user confirms:
 Skill(skill="rag:web-md-index", args="$OUTPUT_DIR")
 ```
 
-### Phase 5 Report
+### Phase 6 Report
 
 ```
-PHASE 5: Indexing
+PHASE 6: Indexing
 ==================
 PLUGIN:    [detected / not found]
 DIRECTORY: $OUTPUT_DIR

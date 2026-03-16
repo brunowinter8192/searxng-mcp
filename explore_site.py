@@ -4,9 +4,11 @@ import asyncio
 import time
 from urllib.parse import urlparse
 
+import requests
 from crawl_site import discover_urls, discover_urls_sitemap
 
 UNLIMITED_PAGES = 100000
+SITEMAP_MIN_THRESHOLD = 5
 
 
 # ORCHESTRATOR
@@ -18,12 +20,21 @@ async def explore_site_workflow(url: str, strategy: str, max_pages: int, output:
     if output is None:
         output = f"/tmp/explore_{domain}_urls.txt"
 
+    # Resolve redirects to get final URL and domain
+    resolved_url, resolved_domain = resolve_redirect(url)
+    if resolved_domain != domain:
+        print(f"Redirect detected: {url} → {resolved_url} (domain: {domain} → {resolved_domain})")
+        url = resolved_url
+        domain = resolved_domain
+
     print(f"Exploring {url} (strategy: {strategy})")
 
     start = time.time()
+    seed_path = urlparse(url).path
 
     if strategy == "sitemap":
         urls = await discover_urls_sitemap(domain, include_patterns)
+        urls = filter_sitemap_by_seed_path(urls, seed_path)
         strategy_used = "sitemap"
         duration = time.time() - start
         print(f"Sitemap: {len(urls)} URLs found in {duration:.1f}s")
@@ -33,17 +44,28 @@ async def explore_site_workflow(url: str, strategy: str, max_pages: int, output:
         duration = time.time() - start
         print(f"Prefetch: {len(urls)} URLs found in {duration:.1f}s")
     else:
-        urls = await discover_urls_sitemap(domain, include_patterns)
-        if urls:
+        sitemap_urls = await discover_urls_sitemap(domain, include_patterns)
+        sitemap_urls = filter_sitemap_by_seed_path(sitemap_urls, seed_path)
+
+        if len(sitemap_urls) >= SITEMAP_MIN_THRESHOLD:
+            urls = sitemap_urls
             strategy_used = "sitemap"
             duration = time.time() - start
             print(f"Sitemap: {len(urls)} URLs found in {duration:.1f}s")
         else:
-            print("No sitemap found. Trying prefetch BFS...")
-            urls = await discover_urls(url, domain, depth, effective_max, exclude_patterns, include_patterns)
-            strategy_used = "prefetch"
+            if sitemap_urls:
+                print(f"Sitemap too shallow ({len(sitemap_urls)} URLs). Trying prefetch BFS...")
+            else:
+                print("No sitemap found. Trying prefetch BFS...")
+            prefetch_urls = await discover_urls(url, domain, depth, effective_max, exclude_patterns, include_patterns)
+            if len(prefetch_urls) > len(sitemap_urls):
+                urls = prefetch_urls
+                strategy_used = "prefetch"
+            else:
+                urls = sitemap_urls
+                strategy_used = "sitemap (shallow, prefetch found fewer)"
             duration = time.time() - start
-            print(f"Prefetch: {len(urls)} URLs found in {duration:.1f}s")
+            print(f"{strategy_used}: {len(urls)} URLs found in {duration:.1f}s")
 
     print_url_samples(urls)
     save_url_list(urls, output)
@@ -51,6 +73,24 @@ async def explore_site_workflow(url: str, strategy: str, max_pages: int, output:
 
 
 # FUNCTIONS
+
+# Resolve HTTP redirects to get final URL and domain
+def resolve_redirect(url: str) -> tuple[str, str]:
+    try:
+        resp = requests.head(url, allow_redirects=True, timeout=10)
+        final_url = resp.url
+        final_domain = urlparse(final_url).netloc
+        return final_url, final_domain
+    except Exception:
+        return url, urlparse(url).netloc
+
+
+# Filter sitemap URLs to match seed URL path prefix
+def filter_sitemap_by_seed_path(urls: list[str], seed_path: str) -> list[str]:
+    if not seed_path or seed_path == "/":
+        return urls
+    return [u for u in urls if seed_path in urlparse(u).path]
+
 
 # Print URL samples for noise pattern identification
 def print_url_samples(urls: list[str], max_samples: int = 15) -> None:

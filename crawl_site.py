@@ -97,6 +97,17 @@ def read_url_file(path: str) -> list[str]:
 # Phase 1: Fast URL discovery via prefetch BFS
 async def discover_urls(url: str, domain: str, depth: int, max_pages: int,
                         exclude_patterns: str = None, include_patterns: str = None) -> list[str]:
+    # Resolve redirects to use final domain for DomainFilter
+    try:
+        import requests as _req
+        resp = _req.head(url, allow_redirects=True, timeout=10)
+        final_domain = urlparse(resp.url).netloc
+        if final_domain != domain:
+            domain = final_domain
+            url = resp.url
+    except Exception:
+        pass
+
     filters = [
         DomainFilter(allowed_domains=[domain]),
         ContentTypeFilter(allowed_types=["text/html"]),
@@ -231,16 +242,35 @@ def save_markdown(results: list, seed_url: str, output_dir: Path) -> int:
     return saved
 
 
-# Convert URL to safe filename
+# Domain to filename prefix mapping
+DOMAIN_PREFIX = {
+    "docs.searxng.org": "searxng",
+    "docs.crawl4ai.com": "crawl4ai",
+    "playwright.dev": "playwright",
+    "support.torproject.org": "tor",
+    "www.cookieyes.com": "cookieyes",
+    "developer.onetrust.com": "onetrust",
+    "www.sitemaps.org": "sitemaps",
+    "trafilatura.readthedocs.io": "trafilatura",
+    "platform.claude.com": "anthropic",
+    "www.cookiebot.com": "cookiebot",
+}
+
+
+# Convert URL to safe filename with domain prefix
 def url_to_filename(url: str, seed_url: str) -> str:
-    path = url.replace(seed_url.rstrip('/'), '').strip('/')
+    parsed = urlparse(url)
+    domain = parsed.netloc
+    prefix = DOMAIN_PREFIX.get(domain, domain.replace(".", "_"))
+
+    path = parsed.path.strip("/")
     if not path:
-        return "index.md"
-    if path.startswith('http'):
-        path = urlparse(url).path.strip('/')
-    if not path:
-        return "index.md"
-    return path.replace('/', '_').replace('.html', '') + '.md'
+        path = "index"
+
+    path = path.replace(".html", "").replace(".htm", "")
+    path = path.replace("/", "__")
+
+    return f"{prefix}__{path}.md"
 
 
 if __name__ == "__main__":
