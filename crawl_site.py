@@ -11,6 +11,8 @@ from crawl4ai.deep_crawling.filters import FilterChain, DomainFilter, URLPattern
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.async_dispatcher import SemaphoreDispatcher
 
+from src.scraper.scrape_url import is_garbage_content
+
 PERMALINK_PATTERN = re.compile(r'\[¶\]\([^)]+\)')
 TRAILING_SLASH = re.compile(r'/$')
 DEFAULT_CONCURRENCY = 10
@@ -225,6 +227,12 @@ def save_markdown(results: list, seed_url: str, output_dir: Path) -> int:
         url = TRAILING_SLASH.sub('', r.url) if hasattr(r, 'url') else None
         raw_md = r.markdown.raw_markdown if r.markdown else ""
         if not url or not raw_md:
+            continue
+        if r.status_code and r.status_code >= 400:
+            print(f"  [skip] {url} (HTTP {r.status_code})")
+            continue
+        if is_garbage_content(raw_md):
+            print(f"  [skip] {url} (garbage content)")
             continue
 
         clean_md = PERMALINK_PATTERN.sub('', raw_md)
