@@ -223,10 +223,12 @@ async def try_scrape_raw(browser_config, crawler_strategy, markdown_generator, u
         if not result.markdown:
             return ""
         content = result.markdown.raw_markdown
-        if not content or len(content) < MIN_CONTENT_THRESHOLD:
+        if not content:
             return ""
         if is_cloudflare_content(content):
             return CLOUDFLARE_SENTINEL
+        if len(content) < MIN_CONTENT_THRESHOLD:
+            return ""
         if is_garbage_content(content):
             return ""
         return content
