@@ -5,10 +5,10 @@ general:
   engines: null
 
 science:
-  category: science
+  category: general
   language: en
   time_range: year
-  engines: "google scholar"
+  engines: "google scholar,semantic scholar,crossref"
 
 it:
   category: general
@@ -20,7 +20,7 @@ research:
   category: general
   language: en
   time_range: null
-  engines: "google,brave,startpage,duckduckgo,google scholar"
+  engines: null
 
 recent:
   category: general

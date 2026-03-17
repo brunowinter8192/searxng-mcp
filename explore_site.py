@@ -7,15 +7,16 @@ from urllib.parse import urlparse
 import requests
 from crawl_site import discover_urls, discover_urls_sitemap
 
-UNLIMITED_PAGES = 100000
+DEFAULT_MAX_PAGES = 200
 SITEMAP_MIN_THRESHOLD = 5
 
 
 # ORCHESTRATOR
 async def explore_site_workflow(url: str, strategy: str, max_pages: int, output: str,
-                                depth: int, include_patterns: str, exclude_patterns: str):
+                                depth: int, include_patterns: str, exclude_patterns: str,
+                                append: bool = False):
     domain = urlparse(url).netloc
-    effective_max = UNLIMITED_PAGES if max_pages == 0 else max_pages
+    effective_max = max_pages
 
     if output is None:
         output = f"/tmp/explore_{domain}_urls.txt"
@@ -67,9 +68,19 @@ async def explore_site_workflow(url: str, strategy: str, max_pages: int, output:
             duration = time.time() - start
             print(f"{strategy_used}: {len(urls)} URLs found in {duration:.1f}s")
 
+    # Deduplicate against existing URLs if appending
+    if append:
+        existing = load_existing_urls(output)
+        new_urls = [u for u in urls if u not in existing]
+        print(f"New URLs: {len(new_urls)} (filtered {len(urls) - len(new_urls)} duplicates)")
+        urls = new_urls
+
     print_url_samples(urls)
-    save_url_list(urls, output)
+    save_url_list(urls, output, append=append)
     print(f"Saved {len(urls)} URLs to {output}")
+
+    if len(urls) >= effective_max:
+        print(f"\n⚠ Hit max_pages limit ({effective_max}). Run again with --max-pages {effective_max * 2} --append to discover more.")
 
 
 # FUNCTIONS
@@ -113,9 +124,19 @@ def print_url_samples(urls: list[str], max_samples: int = 15) -> None:
     print()
 
 
+# Load existing URLs from file (for dedup on append)
+def load_existing_urls(path: str) -> set[str]:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return {line.strip() for line in f if line.strip()}
+    except FileNotFoundError:
+        return set()
+
+
 # Save URL list to text file (one URL per line)
-def save_url_list(urls: list[str], output_path: str) -> None:
-    with open(output_path, "w", encoding="utf-8") as f:
+def save_url_list(urls: list[str], output_path: str, append: bool = False) -> None:
+    mode = "a" if append else "w"
+    with open(output_path, mode, encoding="utf-8") as f:
         for url in urls:
             f.write(url + "\n")
 
@@ -125,8 +146,10 @@ if __name__ == "__main__":
     parser.add_argument("--url", required=True, help="Seed URL to explore")
     parser.add_argument("--strategy", choices=["auto", "sitemap", "prefetch"], default="auto",
                         help="Discovery strategy: auto (sitemap→prefetch), sitemap, prefetch")
-    parser.add_argument("--max-pages", type=int, default=0,
-                        help="Max pages to discover (0 = unlimited)")
+    parser.add_argument("--max-pages", type=int, default=DEFAULT_MAX_PAGES,
+                        help=f"Max pages to discover (default: {DEFAULT_MAX_PAGES})")
+    parser.add_argument("--append", action="store_true",
+                        help="Append to output file instead of overwrite (for continuation runs)")
     parser.add_argument("--output", type=str, default=None,
                         help="Output file path (default: /tmp/explore_<domain>_urls.txt)")
     parser.add_argument("--depth", type=int, default=10,
@@ -138,4 +161,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     asyncio.run(explore_site_workflow(args.url, args.strategy, args.max_pages, args.output,
-                                     args.depth, args.include_patterns, args.exclude_patterns))
+                                     args.depth, args.include_patterns, args.exclude_patterns,
+                                     args.append))

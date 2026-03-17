@@ -3,7 +3,7 @@ import requests
 from mcp.types import TextContent
 
 SEARXNG_URL = "http://localhost:8080/search"
-MAX_RESULTS = 50
+MAX_RESULTS = 80
 SNIPPET_LENGTH = 5000
 
 

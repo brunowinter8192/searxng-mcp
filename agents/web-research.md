@@ -31,10 +31,10 @@ Maximize data intake. You are cheap and fast — use that advantage. Search broa
 
 Fire 5+ search queries with variations:
 - Rephrase the topic 3+ ways
-- Default: category="general" for all queries
-- ALSO fire category="science" in parallel when query contains: "benchmark", "evaluation", "NDCG", "recall", "paper", "comparison", "study", "performance"
+- Use category="general" for all queries (includes both web and science engines)
+- For academic queries (containing "benchmark", "evaluation", "paper", "study", "performance"): also fire with engines="google scholar,semantic scholar,arxiv,crossref" to boost academic results
 - For EACH query: fire pageno=1, pageno=2, pageno=3 simultaneously as 3 parallel calls — do NOT wait for page 1 before firing pages 2 and 3
-- Combine engines when useful: engines="google,brave,google scholar"
+- Combine engines when useful: engines="google,brave,bing" for web-focused, engines="google scholar,semantic scholar" for academic-focused
 
 **Query tips:**
 - Keep queries short and keyword-focused (2-5 words)

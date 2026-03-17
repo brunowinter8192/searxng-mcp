@@ -32,10 +32,14 @@ UI configuration uses simple theme with static hash for caching. Enables query i
 
 Outgoing request configuration sets default timeout to 5 seconds with maximum of 15 seconds. A Tor SOCKS5 proxy (socks5h://tor:9150) is configured globally for IP rotation. The `using_tor_proxy: true` flag enables Tor verification checks. `extra_proxy_timeout: 10` adds seconds to account for Tor latency. The Tor proxy runs as a separate Docker container (peterdavehello/tor-socks-proxy).
 
-Engine routing uses a split architecture: Brave and Startpage route through Tor (global proxy), while Google and DuckDuckGo connect directly (per-engine `proxies: {}` override). This split exists because Google and DDG actively block Tor exit nodes (HTTP 400/403), but work fine with direct connections. Startpage and Brave tolerate Tor and benefit from IP rotation.
+Two custom categories replace SearXNG defaults: `general` (scrapeable web + science engines) and `plugin` (discovery-only for ArXiv, GitHub, Reddit — content via MCP plugins).
+
+General engines (9): Google (w2), Bing (w1), Brave (w2), Startpage (w1), DDG (w1), Mojeek (w1), Google Scholar (w2), Semantic Scholar (w2), CrossRef (w1). Plugin engines (3): ArXiv (w2), GitHub (w1), Reddit (w1).
+
+Engine routing uses a split architecture: Brave and Startpage route through Tor (global proxy), while Google, DuckDuckGo, Bing, and Mojeek connect directly (per-engine `proxies: {}` override). This split exists because these engines actively block Tor exit nodes (HTTP 400/403), but work fine with direct connections. Startpage and Brave tolerate Tor and benefit from IP rotation.
 
 Per-engine proxy override requires BOTH `using_tor_proxy: false` AND `proxies: {}`. Setting only `using_tor_proxy: false` disables the Tor verification check but still routes traffic through the global SOCKS5 proxy. The `proxies` config is inherited from outgoing defaults independently of the tor flag. This is a SearXNG network layer behavior (network.py initialize function).
 
-Engine weights override default weight=1. Google, Brave, and Startpage set to weight=2 for higher result ranking. DuckDuckGo stays at weight=1 as supplementary source. Google Scholar is enabled (disabled by default) with weight=2 for academic/science searches. Qwant is explicitly disabled (Access Denied on both API and web-lite endpoints).
+Weight strategy: weight=2 for high-quality proven engines (Google, Brave, Google Scholar, Semantic Scholar, ArXiv), weight=1 for new/redundant/niche engines (Bing, DDG, Startpage, Mojeek, CrossRef, GitHub, Reddit). Startpage reduced from weight=2 to weight=1 because it proxies Google results — having both at weight=2 caused multiplicative over-representation of Google URLs in the scoring algorithm. Qwant is explicitly disabled (Access Denied without account).
 
 Hostnames plugin configuration prioritizes high-quality domains (GitHub, StackOverflow, StackExchange, Wikipedia, Python docs, MDN, arXiv) and deprioritizes low-quality sources (Pinterest, Quora, W3Schools). Pinterest results are removed entirely.

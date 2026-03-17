@@ -39,20 +39,24 @@ outgoing:
   extra_proxy_timeout: 10
 
 engines:
+  # ===== general: scrapeable engines (Web + Science) =====
   - name: google
     engine: google
+    categories: general
     disabled: false
     using_tor_proxy: false
     proxies: {}
     weight: 2
-  - name: duckduckgo
-    engine: duckduckgo
+  - name: bing
+    engine: bing
+    categories: general
     disabled: false
     using_tor_proxy: false
     proxies: {}
     weight: 1
   - name: mojeek
     engine: mojeek
+    categories: general
     disabled: false
     using_tor_proxy: false
     proxies: {}
@@ -60,33 +64,79 @@ engines:
     timeout: 10
   - name: brave
     engine: brave
+    categories: general
     weight: 2
   - name: startpage
     engine: startpage
-    weight: 2
-  - name: qwant
-    engine: qwant
+    categories: general
+    weight: 1
+  - name: duckduckgo
+    engine: duckduckgo
+    categories: general
     disabled: true
+    using_tor_proxy: false
+    proxies: {}
+    weight: 1
   - name: google scholar
     engine: google_scholar
+    categories: general
     disabled: false
     weight: 2
     timeout: 10
+  - name: semantic scholar
+    engine: semantic_scholar
+    categories: general
+    disabled: false
+    weight: 2
+  - name: crossref
+    engine: crossref
+    categories: general
+    disabled: false
+    weight: 1
+  # ===== plugin: discovery-only (content via MCP plugins) =====
+  - name: arxiv
+    engine: arxiv
+    categories: plugin
+    disabled: false
+    weight: 2
+  - name: github
+    engine: github
+    categories: plugin
+    disabled: false
+    weight: 1
+  - name: reddit
+    engine: reddit
+    categories: plugin
+    disabled: false
+    page_size: 25
+    weight: 1
+  # ===== disabled =====
+  - name: qwant
+    engine: qwant
+    disabled: true
 
 hostnames:
   high_priority:
+    # Code & Q&A
     - '(.*\.)?github\.com$'
     - '(.*\.)?stackoverflow\.com$'
     - '(.*\.)?stackexchange\.com$'
-    - '(.*\.)?wikipedia\.org$'
+    # Documentation
     - '(.*\.)?docs\.python\.org$'
     - '(.*\.)?developer\.mozilla\.org$'
+    - '(.*\.)?readthedocs\.io$'
+    - '(.*\.)?pytorch\.org$'
+    - '(.*\.)?docs\.rs$'
+    - '(.*\.)?pkg\.go\.dev$'
+    - '(.*\.)?learn\.microsoft\.com$'
+    # ML/AI
     - '(.*\.)?arxiv\.org$'
     - '(.*\.)?huggingface\.co$'
-    - '(.*\.)?pytorch\.org$'
-    - '(.*\.)?readthedocs\.io$'
     - '(.*\.)?anthropic\.com$'
     - '(.*\.)?openai\.com$'
+    - '(.*\.)?semanticscholar\.org$'
+    # Reference
+    - '(.*\.)?wikipedia\.org$'
   low_priority:
     - '(.*\.)?pinterest\.'
     - '(.*\.)?quora\.com$'

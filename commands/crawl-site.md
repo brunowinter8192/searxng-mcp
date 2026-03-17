@@ -101,13 +101,27 @@ Note: If the plugin venv python does not exist, use `./venv/bin/python` (project
 
 Show summary per domain: strategy used, URLs discovered, URL samples.
 
+### Step 3: Fallback Search (if exploration fails)
+
+If any domain returned **< 5 URLs** from exploration, trigger a fallback web search:
+
+```
+mcp__plugin_searxng_searxng__search_web(query="site:[domain.com]", max_results=50)
+```
+
+- Extract unique URLs from search results
+- Write to `/tmp/explore_${DOMAIN_NAME}_urls.txt` (replaces empty/sparse exploration output)
+- Mark domain as `FALLBACK` in the report
+
+**Why < 5:** explore_site.py already uses 5 as the shallow sitemap threshold. Fewer than 5 URLs means exploration effectively failed.
+
 ### Phase 2 Report
 
 ```
 PHASE 2: Explore
 =================
 [domain]: [strategy] — [N] URLs discovered
-[domain]: [strategy] — [N] URLs discovered
+[domain]: FALLBACK (search_web) — [N] URLs discovered
 TOTAL:    [N] URLs across [M] domains
 ```
 

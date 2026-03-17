@@ -245,11 +245,18 @@ ${CLAUDE_PLUGIN_ROOT}/venv/bin/python ${CLAUDE_PLUGIN_ROOT}/crawl_site.py \
 - `--include-patterns` — comma-separated URL patterns to include
 - ContentTypeFilter (text/html) is always active
 
-### SearXNG Engine Types
+### SearXNG Engine Architecture
 
-Scraper engines (brave, google, duckduckgo) parse web UI HTML — no API key but get blocked. API engines (braveapi) use official REST API — stable but require registration.
+Two custom categories:
+- **general** — Scrapeable engines (web + science). URLs can be fetched with Crawl4AI.
+- **plugin** — Discovery-only. Content accessed via dedicated MCP plugins.
 
-Current engine routing: Brave and Startpage via Tor proxy (IP rotation), Google and DuckDuckGo direct (Tor exit nodes blocked).
+**general engines (9):** Google (w2), Bing (w1), Brave (w2), Startpage (w1), DDG (w1), Mojeek (w1), Google Scholar (w2), Semantic Scholar (w2), CrossRef (w1)
+**plugin engines (3):** ArXiv (w2), GitHub (w1), Reddit (w1)
+
+Scraper engines (brave, google, bing, duckduckgo, mojeek) parse web UI HTML — no API key but get blocked. API engines (braveapi) use official REST API — stable but require registration.
+
+Current engine routing: Brave and Startpage via Tor proxy (IP rotation), Google, DuckDuckGo, Bing and Mojeek direct (Tor exit nodes blocked).
 
 **Per-engine proxy override:** To bypass global Tor proxy, BOTH settings required:
 ```yaml
@@ -269,20 +276,15 @@ Current engine routing: Brave and Startpage via Tor proxy (IP rotation), Google 
 
 ## Search Categories
 
-| Category | Best for |
-|----------|----------|
-| general | Default. Broad web search |
-| news | Current events, recent developments |
-| it | Technical topics, programming, software |
-| science | Academic, scientific topics |
+| Category | Engines | Best for |
+|----------|---------|----------|
+| general | All 9 web + science engines | Default. Covers web AND academic in one call |
+| plugin | ArXiv, GitHub, Reddit | Discovery-only. Content via MCP plugins |
 
 **Category Selection Rule:**
-- Do NOT default to `general` for every query — actively match category to content type
-- Academic papers, books, courses → `science`
-- Library docs, package guides, technical tutorials → `it`
-- Blog posts, opinions, mixed content → `general`
-- When researching a topic across multiple content types: run parallel queries with DIFFERENT categories
-- Concrete failure (2026-03-15): All 4 search queries used category=general for ML Trading research. `science` would have surfaced better academic sources.
+- Use `category="general"` for all queries — it now includes science engines (Scholar, Semantic Scholar, CrossRef)
+- For academic-focused queries: supplement with `engines="google scholar,semantic scholar,crossref"` to boost academic results
+- `category="plugin"` is rarely used directly — plugin-domain URLs are discovered via general search and routed by the web-research agent
 
 ## Known Limitations
 
@@ -290,4 +292,4 @@ Current engine routing: Brave and Startpage via Tor proxy (IP rotation), Google 
 - **Max 50 search results** per query — use `pageno` for additional pages (up to 150 results across 3 pages)
 - **Scraper optimized for content sites** — complex SPAs, heavy JavaScript apps, or login-protected pages may not render well
 - **scrape_url uses PruningContentFilter** — destroys code block formatting. Use `scrape_url_raw` when full fidelity is needed (RAG indexing, code-heavy pages)
-- **Engine availability varies** — Google/Brave/DDG may be temporarily suspended (CAPTCHA, rate limits). Startpage is the most reliable engine.
+- **Engine availability varies** — Google/Brave/DDG/Bing/Mojeek may be temporarily suspended (CAPTCHA, rate limits). Startpage via Tor is the most reliable engine.

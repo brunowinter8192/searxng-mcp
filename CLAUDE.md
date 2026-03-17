@@ -32,8 +32,9 @@ Consult via RAG search before making assumptions. Pipeline step references match
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **Engines** | Google, Brave, Startpage, DDG, Google Scholar | weights 1-2, Qwant disabled |
-| **Routing** | Tor SOCKS5 proxy (Brave, Startpage) / Direct (Google, DDG) | Split architecture |
+| **Engines (general)** | Google, Bing, Brave, Startpage, DDG, Mojeek, Scholar, Semantic Scholar, CrossRef | weights 1-2, scrapeable |
+| **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
+| **Routing** | Tor SOCKS5 proxy (Brave, Startpage) / Direct (Google, DDG, Bing, Mojeek) | Split architecture |
 | **Ranking** | Hostname priority/depriority/remove plugin | MAX_RESULTS=50, SNIPPET_LENGTH=5000 |
 
 ### Scrape Pipeline (Crawl4AI)

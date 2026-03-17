@@ -4,56 +4,106 @@
 
 **Code:** `src/searxng/settings.yml`
 **Method:** SearXNG aggregiert Ergebnisse aus mehreren Suchmaschinen pro Query
-**Config:**
 
-| Engine | Aktiv | Weight | Tor | Timeout |
-|--------|-------|--------|-----|---------|
-| Google | ja | 2 | nein (proxies: {}) | default 5s |
-| DuckDuckGo | ja | 1 | nein (proxies: {}) | default 5s |
-| Brave | ja | 2 | ja (global proxy) | default 5s |
-| Startpage | ja | 2 | ja (global proxy) | default 5s |
-| Google Scholar | ja | 2 | nein (kein Override) | 10s |
-| Qwant | nein | — | — | — |
+### Kategorie-System
 
-Alle aktiven Engines werden bei jedem Query parallel abgefragt. SearXNG merged die Ergebnisse und berechnet einen Score aus Engine-Votes und Hostname-Priorität (→ search03_ranking.md).
+Zwei Custom-Kategorien statt SearXNG-Defaults:
+
+- **general** — Scrapeable Engines (Web + Science). URLs können mit Crawl4AI geholt werden.
+- **plugin** — Discovery-Only. Content wird über dedizierte MCP Plugins geholt (ArXiv, GitHub, Reddit).
+
+### general Engines
+
+| Engine | Weight | Tor | Index-Typ | Timeout |
+|--------|--------|-----|-----------|---------|
+| Google | 2 | nein (proxies: {}) | Eigener Index | default 5s |
+| Bing | 1 | nein (proxies: {}) | Eigener Index | default 5s |
+| Brave | 2 | ja (global proxy) | Eigener Index | default 5s |
+| Startpage | 1 | ja (global proxy) | Google-Proxy | default 5s |
+| DuckDuckGo | 1 | nein (proxies: {}) | Bing-basiert | default 5s |
+| Mojeek | 1 | nein (proxies: {}) | Eigener Crawler | default 5s |
+| Google Scholar | 2 | nein (kein Override) | Akademisch | 10s |
+| Semantic Scholar | 2 | nein | Akademisch (AI) | default 5s |
+| CrossRef | 1 | nein | DOI/Citations | default 5s |
+
+### plugin Engines
+
+| Engine | Weight | MCP Plugin | Zweck |
+|--------|--------|------------|-------|
+| ArXiv | 2 | arxiv | Paper-Discovery → Plugin holt Volltext |
+| GitHub | 1 | github-research | Repo/Code-Discovery → Plugin für Details |
+| Reddit | 1 | reddit | Thread-Discovery → Plugin für Comments |
+
+### disabled Engines
+
+| Engine | Grund |
+|--------|-------|
+| Qwant | HTTP 403 / Access Denied ohne Account |
+
+## Scoring-Algorithmus (Referenz)
+
+Aus `searxng/searxng` GitHub Source (`searx/results.py`):
+
+```
+weight = Π(engine_weights) × len(positions)
+score = Σ(weight / position_i)  # pro Engine-Position
+```
+
+- **Weights sind MULTIPLIKATIV** — alle Engine-Weights werden miteinander multipliziert
+- **Position inversely proportional** — Rank 1 = voller Score, Rank 10 = 1/10
+- **priority='high'** ignoriert Position (voller Weight), **'low'** skippt komplett
+- Ergebnisse von mehr Engines = höherer Score (positions-Liste wächst)
 
 ## Evidenz
+
+### Kategorie-Trennung general/plugin
+Plugin-Domains (arxiv.org, github.com, reddit.com) können nicht effektiv gescrapt werden (API-Walls, Rate-Limits, dynamischer Content). Dedizierte MCP Plugins liefern strukturierte Daten. SearXNG-Engines für diese Domains dienen nur der URL-Discovery — der web-research Agent routet sie an die Plugins (→ agent02_routing.md).
+
+### Bing — Neuer eigener Index
+Bing hat den zweitgrößten unabhängigen Web-Index weltweit. DDG basiert auf Bing, hat aber eigenes Ranking. Bing direkt aktivieren diversifiziert die Ergebnisse. Weight 1 zum Start (Qualität unbekannt, Tor-Kompatibilität unklar → proxies: {} als Bypass).
+
+### Mojeek — Unabhängiger Crawler
+Einziger komplett unabhängiger Crawler-Index neben Google, Bing und Brave. Kleinerer Index, aber diversifiziert Ergebnisse die sonst von den 3 großen dominiert werden. Weight 1 zum Start.
+
+### Semantic Scholar — AI-powered Academic
+Allen Institute for AI. Nutzt ML für Zitationsanalyse und Paper-Empfehlungen. Ergänzt Google Scholar mit anderem Ranking-Ansatz. Weight 2 weil akademische Qualität hoch.
+
+### CrossRef — DOI/Citation Nische
+Findet Papers über DOI und Zitationsnetzwerke. Nischenquelle, Weight 1.
+
+### Startpage — Weight 2 → 1
+Startpage ist ein Google-Proxy. Mit Weight 2 (wie Google) wurden Google-Ergebnisse massiv überrepräsentiert: eine URL die Google UND Startpage finden bekommt `weight = 2 × 2 × 2 = 8` statt `2 × 1 = 2`. Weight 1 reduziert den Google-Bias bei gleichzeitigem Erhalt als Tor-Fallback für Google-Ergebnisse.
+
+### Index-Diversität
+Vorher: 3 unabhängige Indizes (Google, Bing via DDG, Brave). Jetzt: 4 (+ Mojeek). Plus 2 akademische (Scholar, Semantic Scholar) und 1 Citation-Netzwerk (CrossRef).
 
 ### Qwant — Access Denied
 Qwant liefert bei Direktanfragen ohne Account regelmäßig HTTP 403 / "Access Denied". Kein zuverlässiger Betrieb möglich → `disabled: true`.
 
 ### Google Scholar — Erhöhter Timeout
-Google Scholar hat nachweislich höhere Latenz als Consumer-Suchmaschinen (akademische Indizes, komplexere Backend-Queries). `timeout: 10` verhindert vorzeitigen Abbruch bei wissenschaftlichen Suchen. Bei `time_range`-Filterung ist Scholar dennoch unzuverlässig.
+Google Scholar hat nachweislich höhere Latenz als Consumer-Suchmaschinen. `timeout: 10` verhindert vorzeitigen Abbruch.
 
-### DuckDuckGo — Weight 1 statt 2
-DDG hat in der Praxis eine niedrigere Trefferqualität für technische Queries als Google oder Brave. Weight 1 reduziert den Einfluss auf den finalen Score ohne DDG komplett zu deaktivieren (Redundanz-Fallback).
-
-### Google + DDG — Kein Tor
-Google und DDG blockieren Tor-Exit-Nodes aggressiv (CAPTCHA, IP-Ban). Direktverbindung ist die einzige funktionierende Option für diese beiden Engines. Siehe auch search02_routing.md.
+### Google, DDG, Bing, Mojeek — Kein Tor
+Diese Engines blockieren Tor-Exit-Nodes aggressiv (CAPTCHA, IP-Ban). Direktverbindung via `proxies: {}` als Bypass. Siehe auch search02_routing.md.
 
 ## Entscheidung
 
-Engine-Set und Weights wurden empirisch gewählt — kein formaler Benchmark. Kriterien:
-- **Abdeckung:** 4 aktive Engines aus unterschiedlichen Index-Quellen (Google, DDG, Brave/Startpage als europäische Alternativen, Scholar für Wissenschaft)
-- **Zuverlässigkeit:** Engines mit häufigen Fehlern (Qwant) werden deaktiviert
-- **Tor-Kompatibilität:** Engines, die Tor-Exit-Nodes blockieren, erhalten direkten Bypass (→ search02_routing.md)
-- **Weight-Logik:** Weight bestimmt wie stark ein Engine-Vote den finalen Score beeinflusst. Google und Brave/Startpage erhalten Weight 2 als zuverlässigste Quellen.
+Engine-Set und Weights basieren auf Index-Diversifizierung und Kategorie-Trennung:
+
+- **general:** Maximale Index-Diversität (4 unabhängige Web-Indizes + 3 akademische Quellen). Weights: 2 für bewährte Quellen (Google, Brave, Scholar, Semantic Scholar), 1 für neue/redundante (Bing, DDG, Startpage, Mojeek, CrossRef).
+- **plugin:** Discovery-Only. Weights nach Relevanz für Tech/ML Use Case (ArXiv=2, GitHub/Reddit=1).
+- **Tor-Routing:** Engines die Tor blockieren bekommen `using_tor_proxy: false` + `proxies: {}`. Details → search02_routing.md.
 
 ## Offene Fragen
 
-- Ist Startpage via Tor zuverlässig genug? Startpage ist ein Google-Proxy — unklar ob Tor-IP-Sperren von Google durchschlagen
-- Google Scholar bei `time_range`: Scholar ignoriert time_range-Filter teilweise. Eigener Query-Parameter nötig?
-- Bing fehlt komplett: SearXNG hat Bing-Engine, aber Bing blockiert Scraping stark. Wäre ein Test wert.
-- Weight-Werte sind nicht kalibriert — eine systematische Qualitätsmessung (Precision@10 pro Engine) fehlt
+- Weight-Kalibrierung: Precision@10 pro Engine fehlt. Aktuelle Weights sind Startpunkte, nicht kalibriert.
+- Google Scholar bei `time_range`: Scholar ignoriert time_range-Filter teilweise.
+- Bing/Mojeek Zuverlässigkeit: Noch nicht empirisch getestet. Können nach einigen Wochen Betrieb evaluiert werden.
 
 ## Quellen
 
 - `src/searxng/settings.yml` — Engine-Konfiguration
-- SearXNG Docs (RAG Collection: SearXNG_Docs) — Engine-Parameter, Weight-Semantik
-- Erfahrungswerte aus Betrieb (Qwant-Deaktivierung, DDG-Weight)
-
-### Zum Indexieren (für systematische Verbesserung)
-
-- SearXNG GitHub Issues — Engine-spezifische Bugs, neue Engines, Tor-Kompatibilität: https://github.com/searxng/searxng/issues
-- SearXNG Engine Docs — Engine-Implementierungen, supported_languages, timeouts: https://docs.searxng.org/dev/engines/
-- Brave Search API Docs — falls Umstieg von Scraper-Engine auf API-Engine: https://api.search.brave.com/app/documentation
+- `searxng/searxng` GitHub Repo (`searx/results.py`) — Scoring-Algorithmus
+- `searxng/searxng` GitHub Repo (`searx/settings.yml`) — Default Engine-Konfigurationen
+- SearXNG Docs (RAG Collection: searxng) — Engine-Parameter, Weight-Semantik
+- Erfahrungswerte aus Betrieb (Qwant-Deaktivierung, DDG-Weight, Startpage-Redundanz)
