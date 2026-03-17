@@ -6,7 +6,7 @@ from urllib.parse import urlparse
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
-OUTPUT_DIR = Path(__file__).parent / "06_js_rendering"
+OUTPUT_DIR = Path(__file__).parent / "03_reports"
 PARALLEL_URLS = 5
 
 CONFIGS = {

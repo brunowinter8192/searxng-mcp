@@ -1,53 +1,63 @@
-# Scraping Suite
+# Scrape Pipeline
 
 Quality monitoring and configuration testing for the URL scraper module.
 
-## 01_run_baseline.py
+## 01_baseline.py
 
 **Purpose:** Scrapes all test domains using the production `scrape_url_workflow` and saves results as numbered iterations with metadata (char count, word count, timestamp).
 **Output:** `01_baselines/<domain>/iteration_<N>.md` + `metadata_<N>.json`
 
 ```bash
-python dev/scraping_suite/01_run_baseline.py
+python dev/scrape_pipeline/01_baseline.py
 ```
 
-## 02_compare_iterations.py
+## 02_regression.py
 
 **Purpose:** Compares the last two iterations per domain to detect regressions. Generates unified diffs and classifies changes by magnitude (IDENTICAL, MINOR_CHANGE, MODERATE_CHANGE, MAJOR_CHANGE).
 **Input:** `01_baselines/`
-**Output:** `02_iteration_reports/diff_report_<timestamp>.txt`
+**Output:** `02_reports/diff_report_<timestamp>.txt`
 
 ```bash
-python dev/scraping_suite/02_compare_iterations.py
+python dev/scrape_pipeline/02_regression.py
 ```
 
-## 03_compare_filters.py
+## 03_browser.py
+
+**Purpose:** Tests multiple Crawl4AI browser configurations for JS-heavy sites that fail with default settings. Compares content yield (char count, word count) across configs with different wait strategies: domcontentloaded baseline, networkidle, extended delay, CSS selector wait, and full page scan.
+**Output:** `03_reports/<domain>_<slug>_<config>.md`
+
+```bash
+python dev/scrape_pipeline/03_browser.py
+python dev/scrape_pipeline/03_browser.py https://docs.trychroma.com/docs/overview/telemetry
+```
+
+## 04_filtering.py
 
 **Purpose:** Tests multiple Crawl4AI content filter configurations (PruningFilter at various thresholds, BM25ContentFilter, raw) against test URLs. Saves raw and fit markdown for each config. Includes code block integrity check.
-**Output:** `03_filter_comparison/<domain>_<config>_raw.md` / `_fit.md`
+**Output:** `04_reports/<domain>_<config>_raw.md` / `_fit.md`
 
 URLs are processed in parallel (PARALLEL_URLS=5, Semaphore). The 5 configs per URL run serially (fast, no benefit from parallelism).
 
 ```bash
-python dev/scraping_suite/03_compare_filters.py
-python dev/scraping_suite/03_compare_filters.py https://example.com
+python dev/scrape_pipeline/04_filtering.py
+python dev/scrape_pipeline/04_filtering.py https://example.com
 ```
 
-## 04_filter_debug.py
+## 05_filter_debug.py
 
 **Purpose:** Instruments the scraping pipeline step-by-step to show what each filter removes at each stage. Reports include node counts, character counts, percentage deltas, and markdown previews of removed content. Used during active profile development.
-**Output:** `04_filter_reports/<profile>/<domain>_<timestamp>.txt`
+**Output:** `05_reports/<profile>/<domain>_<timestamp>.txt`
 
 ```bash
-python dev/scraping_suite/04_filter_debug.py https://de.wikipedia.org/wiki/Biber
-python dev/scraping_suite/04_filter_debug.py --profile wiki
-python dev/scraping_suite/04_filter_debug.py --all
+python dev/scrape_pipeline/05_filter_debug.py https://de.wikipedia.org/wiki/Biber
+python dev/scrape_pipeline/05_filter_debug.py --profile wiki
+python dev/scrape_pipeline/05_filter_debug.py --all
 ```
 
-## 05_compare_content_source.py
+## 06_content_source.py
 
 **Purpose:** Tests Crawl4AI's `content_source` parameter across many URLs per domain. Scrapes each URL with 6 configurations in parallel (5 URLs concurrent, 6 configs per URL concurrent) and saves the raw markdown output as individual .md files for manual inspection. Max 20 URLs per domain.
-**Input:** Crawling suite reports from `../crawling_suite/01_reports/*.json`
+**Input:** Explore pipeline reports from `../explore_pipeline/01_reports/*.json`
 **Output:** `05_content_source/<domain>/<config>/<NN>_<slug>.md`
 
 Configs tested:
@@ -62,19 +72,9 @@ Configs tested:
 | fit_html_pruning | fit_html | PruningFilter 0.48 | fit_markdown |
 
 ```bash
-python dev/scraping_suite/05_compare_content_source.py --all
-python dev/scraping_suite/05_compare_content_source.py --domain searxng_docs
-python dev/scraping_suite/05_compare_content_source.py --url https://example.com
-```
-
-## 06_js_rendering.py
-
-**Purpose:** Tests multiple Crawl4AI browser configurations for JS-heavy sites that fail with default settings. Compares content yield (char count, word count) across configs with different wait strategies: domcontentloaded baseline, networkidle, extended delay, CSS selector wait, and full page scan.
-**Output:** `06_js_rendering/<domain>_<slug>_<config>.md`
-
-```bash
-python dev/scraping_suite/06_js_rendering.py
-python dev/scraping_suite/06_js_rendering.py https://docs.trychroma.com/docs/overview/telemetry
+python dev/scrape_pipeline/06_content_source.py --all
+python dev/scrape_pipeline/06_content_source.py --domain searxng_docs
+python dev/scrape_pipeline/06_content_source.py --url https://example.com
 ```
 
 ## Workflows
@@ -83,14 +83,18 @@ python dev/scraping_suite/06_js_rendering.py https://docs.trychroma.com/docs/ove
 
 Standard workflow when changing the production scraper. Run baseline, then compare with previous iteration.
 
-### Filter Exploration (03 -> 04)
+### Browser Debug (03)
 
-Explore filter configurations. 03 gives broad comparison, 04 gives step-by-step pipeline transparency.
+For JS-heavy sites that fail with default settings. Compare wait strategies to find what works.
 
-### Content Source (05)
+### Filter Exploration (04 -> 05)
 
-Large-scale comparison of which HTML source + filter combination produces the best markdown for downstream cleanup agents. Output is raw .md files for manual review.
+Explore filter configurations. 04 gives broad comparison, 05 gives step-by-step pipeline transparency.
+
+### Content Source (06)
+
+Large-scale comparison of which HTML source + filter combination produces the best markdown for downstream cleanup agents. Requires explore_pipeline/01_reports as input. Output is raw .md files for manual review.
 
 ## domains.txt
 
-Test URLs for scripts 01-04. One URL per line, comments with `#`.
+Test URLs for scripts 01-05. One URL per line, comments with `#`.

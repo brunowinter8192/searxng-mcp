@@ -15,7 +15,7 @@ from src.scraper.scrape_url import scrape_url_workflow
 TOP_N_PER_QUERY = 5
 EXCERPT_LENGTH = 50000
 MIN_USEFUL_CONTENT = 200
-REPORTS_DIR = Path(__file__).parent / "02_reports"
+REPORTS_DIR = Path(__file__).parent / "04_reports"
 SEARCH_REPORTS_DIR = Path(__file__).parent / "01_reports"
 DELAY_BETWEEN_REQUESTS = 2
 
@@ -228,7 +228,7 @@ def build_report(scraped_data: list[dict], source_report: str, content_dir_name:
     return "\n".join(lines)
 
 
-# Save report to 02_reports directory
+# Save report to 04_reports directory
 def save_report(report: str) -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

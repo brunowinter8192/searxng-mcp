@@ -8,7 +8,7 @@ from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_filter_strategy import PruningContentFilter
 
-CRAWL_REPORTS_DIR = Path(__file__).parent.parent / "crawling_suite" / "01_reports"
+CRAWL_REPORTS_DIR = Path(__file__).parent.parent / "explore_pipeline" / "01_reports"
 OUTPUT_DIR = Path(__file__).parent / "05_content_source"
 MAX_URLS_PER_DOMAIN = 20
 PARALLEL_URLS = 5
@@ -179,7 +179,7 @@ if __name__ == "__main__":
         crawl_reports = find_all_crawl_reports()
         if not crawl_reports:
             print(f"No crawl reports found in {CRAWL_REPORTS_DIR}")
-            print("Run crawling suite first: python dev/crawling_suite/01_run_crawl.py --all")
+            print("Run explore pipeline first: python dev/explore_pipeline/01_discovery.py --all")
             exit(1)
         for label, path in crawl_reports:
             urls = load_urls_from_crawl_report(path)

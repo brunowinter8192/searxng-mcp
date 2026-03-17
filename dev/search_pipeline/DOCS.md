@@ -1,4 +1,4 @@
-# Searching Suite
+# Search Pipeline
 
 Test suite for evaluating and tuning SearXNG search result quality with profile-based parameter testing.
 
@@ -39,7 +39,7 @@ query two
 query three
 ```
 
-## 01_run_search.py
+## 01_engines.py
 
 **Purpose:** Run all test queries against SearXNG API with profile-based parameters and generate markdown report.
 **Input:** queries.txt + profiles.yml.
@@ -49,10 +49,10 @@ query three
 
 ```bash
 # Standard run (each query uses its assigned profile)
-./venv/bin/python dev/searching_suite/01_run_search.py
+./venv/bin/python dev/search_pipeline/01_engines.py
 
 # A/B compare mode (non-general queries run twice: profile + general)
-./venv/bin/python dev/searching_suite/01_run_search.py --compare
+./venv/bin/python dev/search_pipeline/01_engines.py --compare
 ```
 
 ### Key Functions
@@ -63,17 +63,17 @@ query three
 - `build_report()` — Summary + per-query tables showing profile, score, engines, domain, URL, snippet. In compare mode: comparison tables per query with result count, avg score, domain overlap.
 - `compute_settings_hash()` — MD5 hash of settings.yml for config identification
 
-## 02_evaluate_content.py
+## 04_content_eval.py
 
 **Purpose:** Scrape top URLs from a search report and evaluate content quality. Uses the same scraping pipeline as the MCP scrape_url tool.
 **Input:** Latest search report from 01_reports/ (or path via CLI argument).
-**Output:** Summary report in 02_reports/ plus individual .md files per URL in 02_content_<report_stem>/.
+**Output:** Summary report in 04_reports/ plus individual .md files per URL in 04_content_<report_stem>/.
 
 Imports `scrape_url_workflow` from `src/scraper/scrape_url` to ensure identical scraping behavior as the MCP tool. Scrapes top 5 URLs per query (TOP_N_PER_QUERY) with 2s delay. Content truncated to 50000 chars at paragraph boundary (EXCERPT_LENGTH) — effectively no truncation.
 
 Fallback chain: scrape_url_workflow → SearXNG snippet → error marker. Each result tagged with source (scraped, snippet, failed). Garbage detection for cookie banners, cloudflare, login walls.
 
-## 03_compare_configs.py
+## 03_ranking.py
 
 **Purpose:** Compare two search reports to identify which configuration produced better results.
 **Input:** Two report files from 01_reports/ (CLI args or auto-selects latest two).
@@ -83,10 +83,10 @@ Fallback chain: scrape_url_workflow → SearXNG snippet → error marker. Each r
 
 ```bash
 # Compare latest two reports
-./venv/bin/python dev/searching_suite/03_compare_configs.py
+./venv/bin/python dev/search_pipeline/03_ranking.py
 
 # Compare specific reports
-./venv/bin/python dev/searching_suite/03_compare_configs.py 01_reports/report_A.md 01_reports/report_B.md
+./venv/bin/python dev/search_pipeline/03_ranking.py 01_reports/report_A.md 01_reports/report_B.md
 ```
 
 ### Metrics
@@ -101,10 +101,10 @@ Fallback chain: scrape_url_workflow → SearXNG snippet → error marker. Each r
 
 1. Edit queries.txt with test queries and `@profile:` assignments
 2. Optionally edit profiles.yml to add/modify parameter sets
-3. Run: `./venv/bin/python dev/searching_suite/01_run_search.py`
+3. Run: `./venv/bin/python dev/search_pipeline/01_engines.py`
 4. Read report in 01_reports/
-5. Optionally compare: `./venv/bin/python dev/searching_suite/01_run_search.py --compare`
-6. For content quality: `./venv/bin/python dev/searching_suite/02_evaluate_content.py`
-7. Read content report in 02_reports/ and individual files in 02_content_*/
+5. Optionally compare: `./venv/bin/python dev/search_pipeline/01_engines.py --compare`
+6. For content quality: `./venv/bin/python dev/search_pipeline/04_content_eval.py`
+7. Read content report in 04_reports/ and individual files in 04_content_*/
 8. To tune SearXNG config: edit src/searxng/settings.yml, restart Docker, run again
-9. Compare reports: `./venv/bin/python dev/searching_suite/03_compare_configs.py`
+9. Compare reports: `./venv/bin/python dev/search_pipeline/03_ranking.py`
