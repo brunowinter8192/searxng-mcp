@@ -94,7 +94,9 @@ searxng/
 │   ├── scraper/                    → [DOCS.md](src/scraper/DOCS.md)
 │   └── searxng/                    → [DOCS.md](src/searxng/DOCS.md)
 ├── dev/
-│   ├── crawling_suite/             → [DOCS.md](dev/crawling_suite/DOCS.md)
-│   ├── searching_suite/            → [DOCS.md](dev/searching_suite/DOCS.md)
-│   └── scraping_suite/             → [DOCS.md](dev/scraping_suite/DOCS.md)
+│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md)
+│   ├── scrape_pipeline/            → [DOCS.md](dev/scrape_pipeline/DOCS.md)
+│   ├── explore_pipeline/           → [DOCS.md](dev/explore_pipeline/DOCS.md)
+│   ├── agent_pipeline/             → [DOCS.md](dev/agent_pipeline/DOCS.md)
+│   └── cleanup/                    → Web-MD cleanup scripts
 ```
