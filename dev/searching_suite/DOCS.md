@@ -16,10 +16,10 @@ profile_name:
 ```
 
 **Built-in profiles:**
-- `general` — Default web search (all engines, no time filter)
-- `science` — Academic papers (Google Scholar only, last year)
+- `general` — Default web search (all general-category engines, no time filter)
+- `science` — Academic papers (Google Scholar + Semantic Scholar + CrossRef, last year)
 - `it` — Technical content (general category, last year)
-- `research` — Combined: all regular engines + Google Scholar (best for discovery + implementation)
+- `research` — All general-category engines, no time filter (best for broad discovery)
 - `recent` — Recent content (general, last month)
 
 ## queries.txt
