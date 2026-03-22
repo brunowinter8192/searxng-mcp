@@ -39,6 +39,12 @@ See [sources/sources.md](sources/sources.md).
 | **Routing** | Plugin routing (arxiv→RAG, github→GH, reddit→Reddit) | youtube→skip |
 | **Coverage** | Per-topic URL tracking, 10+ URLs/topic target | Aggressive scraping |
 
+### Delivery
+
+| Component | Implementation | Config |
+|-----------|---------------|--------|
+| **MCP Server** | `server.py` via FastMCP | 4 tools (search_web, scrape_url, scrape_url_raw, explore_site) |
+
 ### Key Files
 
 | File | Component |
