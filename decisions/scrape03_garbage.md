@@ -2,23 +2,38 @@
 
 ## Status Quo
 
-**Code:** `src/scraper/scrape_url.py` — `is_garbage_content`, `PLUGIN_HINTS`
+**Code:** `src/scraper/scrape_url.py` — `is_garbage_content`, `_GARBAGE_MESSAGES`, `get_plugin_hint`
 
-**Method:** Rule-based Garbage-Detektion in 3 Kategorien + Plugin-Hints als Fallback
+**Method:** Rule-based Garbage-Detektion in 6 typisierten Kategorien + differenzierte Fehlermeldungen + Logging
+
+**Return type:** `is_garbage_content()` returns `str | None` (None = not garbage, str = garbage type identifier)
 
 **Config:**
-- Kategorie 1 — Crawl4AI-Fehlermeldungen als Content:
+- `crawl4ai_error` — Crawl4AI-Fehlermeldungen als Content:
   - Trigger: `"crawl4ai error:"`, `"document is empty"`, `"page is not fully supported"`
   - Bedingung: Pattern in `content.lower()`
-- Kategorie 2 — HTTP-Fehlerseiten:
+- `http_error` — HTTP-Fehlerseiten:
   - Trigger: `len(content) < 1000` UND eines von `"not_found"`, `"404"`, `"403"`, `"forbidden"`, `"access denied"`, `"page not found"`
   - Bedingung: kurzer Content + Error-Keyword
-- Kategorie 3 — Cookie-Consent-Walls:
+- `nav_dump` — Navigation-Dumps:
+  - Trigger: `len(lines) >= 20` UND `link_lines / len(lines) > 0.6`
+  - Bedingung: Mehr als 60% der Zeilen sind reine Markdown-Links
+- `cookie_wall` — Cookie-Consent-Walls:
   - Trigger: `count("cookie") + count("consent") + count("duration") > 15` in ersten 5000 chars
-  - UND `"consent preferences"` oder `"cookieyes"` im Sample
-- `PLUGIN_HINTS`: bei `is_garbage_content()` → `""` zurück → Fallback-Kette → wenn alle Phasen leer → Fehlermeldung mit Hint
-  - `reddit.com` → Reddit MCP Plugin
-  - `arxiv.org` → RAG MCP Plugin
+  - UND `"consent preferences"` oder `"cookieyes"` oder `"cookie preferences"` im Sample
+- `login_wall` — Login/Paywall-Seiten:
+  - Trigger: `len(content) < 2000` UND eines von `"sign in"`, `"log in"`, `"login"`, `"subscribe to continue"`, `"create account"`, `"create an account"`, `"premium content"`, `"paywall"`, `"members only"`, `"subscriber only"`
+- `cloudflare` — Cloudflare-Protection:
+  - Trigger: `len(content) < 500` UND `"checking your browser"` oder `"enable javascript and cookies"`
+  - ODER: `"just a moment"` UND `"cloudflare"` (ohne Längenlimit)
+
+**Error Messages:** `_GARBAGE_MESSAGES` dict maps jede Kategorie auf eine menschenlesbare Fehlermeldung. `scrape_url_workflow()` trackt `last_garbage` über alle 3 Scrape-Versuche und gibt differenzierte Meldung zurück.
+
+**Logging:** `logger.warning("Garbage detected [%s]: %s", garbage_type, url)` bei jeder Garbage-Erkennung in `try_scrape()`.
+
+**PDF-URLs:** Neues MCP Tool `download_pdf(url, output_dir="/tmp")` als Lösung — PDFs werden heruntergeladen statt gescrapt. Agent-Instructions verweisen auf `download_pdf` statt "nicht scrapebar".
+
+- `PLUGIN_HINTS`: generischer Hint via `get_plugin_hint()`, wird an Fehlermeldung angehängt wenn alle Phasen fehlschlagen
 
 ## Evidenz
 
@@ -29,10 +44,9 @@
 - `"duration"` als Cookie-Signal: CookieYes-Walls enthalten typischerweise Cookie-Laufzeiten ("Duration: 1 year") — erhöht den Signal-Score
 
 ### Schwäche des aktuellen Ansatzes
-- Kategorie 2 (HTTP-Fehler): 1000-char-Limit ist willkürlich — eine kurze, valide One-Pager-Seite könnte fälschlicherweise als Garbage eingestuft werden, wenn sie zufällig "403" im Text hat (z.B. ein Artikel über HTTP-Statuscodes)
-- Kategorie 3 (Cookie-Wall): Threshold 15 wurde nicht systematisch kalibriert — ein legitimer Cookie-Policy-Artikel könnte fälschlicherweise getriggert werden
-- Keine Logging/Reporting-Funktion: wenn Garbage erkannt wird, ist es intern — kein Signal nach außen, welche Kategorie ausgelöst hat
-- Login-Walls (Paywalls) werden nicht erkannt — nur Cookie-Consent-Walls
+- `http_error`: 1000-char-Limit ist willkürlich — eine kurze, valide One-Pager-Seite könnte fälschlicherweise als Garbage eingestuft werden, wenn sie zufällig "403" im Text hat (z.B. ein Artikel über HTTP-Statuscodes)
+- `cookie_wall`: Threshold 15 wurde nicht systematisch kalibriert — ein legitimer Cookie-Policy-Artikel könnte fälschlicherweise getriggert werden
+- `login_wall`: 2000-char-Limit + generische Patterns ("log in", "sign in") könnten auf kurzen Login-Tutorial-Seiten false-positive triggern
 
 ### PLUGIN_HINTS Logik
 - Hints werden nur ausgespielt, wenn ALLE Phasen Garbage/leer zurückgeben
@@ -40,21 +54,29 @@
 
 ## Entscheidung
 
-3-Kategorien-Ansatz als pragmatische Lösung für die häufigsten Failure-Cases im MCP-Kontext:
-1. Crawl4AI-Fehler: direkte String-Matches zuverlässig, da Crawl4AI feste Error-Templates hat
-2. HTTP-Fehler: Kombination aus Länge und Keyword ist robuster als nur Keyword — kurze Error-Pages haben charakteristisches Profil
-3. Cookie-Walls: Density-Check statt DOM-Matching (DOM ist schon durch `excluded_selector` behandelt) — fängt Walls, die der Selector verpasst
+6-Kategorien-Ansatz mit typisierten Returns für die häufigsten Failure-Cases im MCP-Kontext:
+1. `crawl4ai_error`: direkte String-Matches zuverlässig, da Crawl4AI feste Error-Templates hat
+2. `http_error`: Kombination aus Länge und Keyword ist robuster als nur Keyword — kurze Error-Pages haben charakteristisches Profil
+3. `nav_dump`: Link-Density-Check fängt Seiten die nur Navigation ohne Content liefern
+4. `cookie_wall`: Density-Check statt DOM-Matching (DOM ist schon durch `excluded_selector` behandelt) — fängt Walls, die der Selector verpasst
+5. `login_wall`: Kurzer Content + Login-Pattern-Matching für Paywalls und Login-geschützte Seiten
+6. `cloudflare`: Bot-Protection-Detection (Cloudflare "Just a moment" und Browser-Check-Seiten)
+
+Typisierte Returns ermöglichen differenzierte Fehlermeldungen für den Caller und Logging für Debugging.
 
 `PLUGIN_HINTS` als letzter Ausweg: liefert dem Nutzer einen konkreten Handlungshinweis statt blankem Fehler.
 
+PDF-URLs: Eigenes MCP Tool `download_pdf` statt Scraping-Versuch. Agent-Instructions aktualisiert.
+
 ## Offene Fragen
 
-- Login/Paywall-Erkennung fehlt komplett (z.B. Medium, WSJ) — typisches Muster: kurzer Content + Login-Formulare oder "Subscribe" CTA
-- Kategorie 2: False-Positive-Risiko bei kurzen legitimen Pages mit Zahlen wie "404" im Fließtext
-- Threshold-Kalibrierung: 15 cookie-signals und 1000-char-Limit wurden nicht durch Testdaten validiert
-- Garbage-Typ als Return-Value: aktuell nur `""` — ein Enum (CRAWL4AI_ERROR, HTTP_ERROR, COOKIE_WALL) würde bessere Diagnose und differenziertes Fallback ermöglichen
+- ~~Login/Paywall-Erkennung fehlt komplett~~ → DONE: `login_wall` Kategorie implementiert
+- ~~Garbage-Typ als Return-Value~~ → DONE: `str | None` Return-Type mit 6 Kategorien
+- ~~Kein Logging wenn Garbage erkannt~~ → DONE: `logger.warning()` in `try_scrape()`
+- `http_error`: False-Positive-Risiko bei kurzen legitimen Pages mit Zahlen wie "404" im Fließtext
+- `cookie_wall`: Threshold-Kalibrierung (15 cookie-signals) nicht durch Testdaten validiert
+- `login_wall`: False-Positive-Risiko bei kurzen Login-Tutorial-Seiten — 2000-char-Limit + generische Patterns
 - `PLUGIN_HINTS` ist hardcoded — eine konfigurierbare Map in `config.py` oder `server.py` wäre flexibler
-- Kein Logging wenn Garbage erkannt — schwer zu debuggen, welche Kategorie für Failures verantwortlich ist
 
 ## Quellen
 

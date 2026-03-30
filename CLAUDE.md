@@ -23,7 +23,7 @@ See [sources/sources.md](sources/sources.md).
 |-----------|---------------|--------|
 | **Browser** | Normal → Stealth fallback chain | networkidle → domcontentloaded → stealth |
 | **Filtering** | PruningContentFilter (scrape_url) / Raw (scrape_url_raw) | threshold=0.48, MIN_CONTENT=200 |
-| **Garbage Detection** | is_garbage_content() | Crawl4AI errors, 404/403, cookie walls |
+| **Garbage Detection** | is_garbage_content() → str\|None | 6 types: crawl4ai_error, http_error, nav_dump, cookie_wall, login_wall, cloudflare |
 
 ### Explore Pipeline (Crawl4AI BFS)
 
@@ -43,7 +43,7 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **MCP Server** | `server.py` via FastMCP | 4 tools (search_web, scrape_url, scrape_url_raw, explore_site) |
+| **MCP Server** | `server.py` via FastMCP | 5 tools (search_web, scrape_url, scrape_url_raw, explore_site, download_pdf) |
 
 ### Key Files
 
@@ -53,6 +53,7 @@ See [sources/sources.md](sources/sources.md).
 | `src/searxng/settings.yml` | SearXNG instance config (engines, proxy, hostnames) |
 | `src/scraper/scrape_url.py` | URL scraping (filtered) |
 | `src/scraper/scrape_url_raw.py` | Raw URL scraping (for RAG indexing) |
+| `src/scraper/download_pdf.py` | PDF file download |
 | `src/scraper/explore_site.py` | Site discovery (sitemap + BFS) |
 | `src/routing.py` | Plugin domain routing |
 | `src/crawler/crawl_site.py` | Full website crawl with markdown export |

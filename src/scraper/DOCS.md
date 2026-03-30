@@ -25,12 +25,15 @@ Attempts a single scrape with given browser config, optional crawler strategy, a
 
 ### is_garbage_content()
 
-Detects five categories of garbage content returned as markdown:
-1. **Crawl4AI errors:** "Crawl4AI Error:", "Document is empty", "page is not fully supported"
-2. **HTTP error pages:** Short content (<1000 chars) with 404/403/NOT_FOUND/Access Denied keywords
-3. **Cookie consent walls:** High density of cookie-related terms (>15 occurrences of "cookie"/"consent"/"duration" in first 5000 chars + "consent preferences" or "cookieyes" or "cookie preferences" present). Note: Amazon uses "cookie preferences" instead of "consent preferences".
-4. **Navigation dump pages:** ≥20 non-empty lines AND >60% are standalone markdown link lines (`[text](url)` on their own line). Catches large pages that are pure navigation with no content (e.g. 162KB AWS announcement pages).
-5. **Cloudflare/JS challenges:** Short content (<500 chars) containing "checking your browser" or "enable javascript and cookies", OR "just a moment" + "cloudflare" anywhere.
+Returns `str | None` — garbage type identifier or None if content is valid. Detects six categories:
+1. **`crawl4ai_error`:** "Crawl4AI Error:", "Document is empty", "page is not fully supported"
+2. **`http_error`:** Short content (<1000 chars) with 404/403/NOT_FOUND/Access Denied keywords
+3. **`nav_dump`:** ≥20 non-empty lines AND >60% are standalone markdown link lines (`[text](url)` on their own line). Catches large pages that are pure navigation with no content (e.g. 162KB AWS announcement pages).
+4. **`cookie_wall`:** High density of cookie-related terms (>15 occurrences of "cookie"/"consent"/"duration" in first 5000 chars + "consent preferences" or "cookieyes" or "cookie preferences" present). Note: Amazon uses "cookie preferences" instead of "consent preferences".
+5. **`login_wall`:** Short content (<2000 chars) with login/paywall patterns ("sign in", "log in", "login", "subscribe to continue", "create account", "premium content", "paywall", "members only", "subscriber only").
+6. **`cloudflare`:** Short content (<500 chars) containing "checking your browser" or "enable javascript and cookies", OR "just a moment" + "cloudflare" anywhere.
+
+`_GARBAGE_MESSAGES` dict maps each type to a human-readable error message for the caller. `try_scrape()` logs garbage type on every detection.
 
 Called by both `try_scrape()` and `try_scrape_raw()` after content extraction.
 
@@ -53,6 +56,12 @@ Returns generic plugin routing hint for failed scrapes on domains that may have 
 **Purpose:** Raw markdown scraping orchestrator for RAG indexing. Same two-phase browser strategy as `scrape_url.py` (normal → stealth fallback) but uses `DefaultMarkdownGenerator()` without PruningContentFilter and saves `raw_markdown` output to a .md file with `<!-- source: URL -->` header. Generates safe filename from URL (domain + path, max 120 chars).
 **Input:** URL string and output directory path.
 **Output:** TextContent with file path and char count on success, or error message on failure (Cloudflare-specific message when CF-protected).
+
+## download_pdf.py
+
+**Purpose:** PDF file download. Uses `requests.get()` with streaming to download PDFs from URLs and save them to disk. Validates Content-Type, extracts filename from Content-Disposition header or URL path.
+**Input:** URL string and optional output directory (default "/tmp").
+**Output:** TextContent with file path and human-readable file size on success, or error message on failure.
 
 ## explore_site.py
 

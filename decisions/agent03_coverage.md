@@ -53,8 +53,16 @@ Recommendation: Restructure Step 3 for multi-topic tasks to use a per-topic chec
 
 For single-topic tasks, global count remains appropriate.
 
+### Implementiert (Session 2026-03-31)
+
+- **Multi-topic:** Per-topic checklist (≥5 URLs + 2 HIGH sources pro Topic, fire 2-3 additional queries wenn nicht erfüllt)
+- **Single-topic:** 10+ target explizit, additional queries wenn unter 10
+- **PDF-URLs:** `download_pdf(url)` statt scrape-Versuch, Report als `[PDF downloaded: /tmp/filename.pdf]`
+- Global "10-15-20" bleibt als sekundäres Target nach per-topic minimums
+
 ## Offene Fragen
 
+- ~~Per-topic coverage enforcement~~ → DONE: Checklist-Pattern implementiert
 - Is 5 per topic the right minimum, or should it scale with topic specificity? (Niche topic may only have 3 high-quality sources.)
 - Should quality tiers affect the minimum? (3 HIGH > 8 LOW in practice.)
 - What is the actual max useful URLs per topic? At some point, additional scraping yields redundant content — eval didn't measure marginal value.

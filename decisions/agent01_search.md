@@ -50,11 +50,17 @@ Current approach (weak enforcement, hope for compliance) is insufficient for sys
 
 Recommendation: Restructure Step 1 as a numbered checklist with explicit "MANDATORY" markers. Consider adding a self-check: "Before proceeding to Step 2: how many pages did you fire per query? If <3: fire missing pages now."
 
+### Implementiert (Session 2026-03-31)
+
+- **Pagination self-check:** MANDATORY block am Ende von Step 1 — prüft pages=3 und ≥5 Queries
+- **Science category:** MANDATORY Keyword-Trigger-Liste (benchmark, evaluation, NDCG, recall, precision, F1, accuracy, dataset, methodology, experiment, ablation, SOTA) → erzwingt zusätzliche `engines="google scholar,semantic scholar,crossref"` Queries
+- **Language handling:** Instruction für `language="de"` bei deutschen Topics/Dispatcher-Kontext
+
 ## Offene Fragen
 
-- Is Haiku capable of reliable parallel pageno=1/2/3 dispatch, or does this require Sonnet?
-- Does adding a self-check at end of Step 1 actually change behavior, or does it just add noise?
-- Should pagination be enforced differently: require pageno=3 explicitly in a separate pass, not parallel?
+- ~~Pagination enforcement~~ → DONE: Self-Check Block implementiert
+- ~~Science category enforcement~~ → DONE: MANDATORY Keyword-Trigger implementiert
+- Is Haiku capable of reliable self-check compliance, or does this require Sonnet? → Needs eval
 - What is the actual recall improvement from pageno=2+3? If top-50 (page 1) already covers 90% of relevant results, pagination may not be worth the cost.
 - `category="it"` is available but never mentioned in agent examples — could improve results for technical queries.
 
