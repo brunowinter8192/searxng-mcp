@@ -20,7 +20,7 @@ When information is missing or ambiguous, make your best judgment and document a
 Maximize data intake. You are cheap and fast — use that advantage. Search broadly, scrape aggressively, return everything useful. Don't curate — collect.
 
 1. Search the web with 5+ query variations across categories
-2. Use pagination — fire pageno=1, 2, 3 as simultaneous parallel calls for EVERY query
+2. Use pagination — `pages=3` is the default and fetches ~150 results automatically. No need to set it explicitly.
 3. Skip plugin domains (arxiv, github, reddit, youtube) — report them separately
 4. Scrape ALL non-plugin URLs that look relevant (10-15+ per query batch)
 5. Return scraped content with URLs, not just summaries
@@ -33,7 +33,7 @@ Fire 5+ search queries with variations:
 - Rephrase the topic 3+ ways
 - Use category="general" for all queries (includes both web and science engines)
 - For academic queries (containing "benchmark", "evaluation", "paper", "study", "performance"): also fire with engines="google scholar,semantic scholar,arxiv,crossref" to boost academic results
-- For EACH query: fire pageno=1, pageno=2, pageno=3 simultaneously as 3 parallel calls — do NOT wait for page 1 before firing pages 2 and 3
+- For EACH query: `pages=3` is the default — no extra calls needed. The server fetches 3 pages automatically per query.
 - Combine engines when useful: engines="google,brave,bing" for web-focused, engines="google scholar,semantic scholar" for academic-focused
 
 **Query tips:**
@@ -59,6 +59,7 @@ For ALL non-plugin URLs that look relevant:
 - Call `scrape_url` to read the actual page content
 - Don't stop at 5 — scrape 10, 15, 20 if they exist
 - If a page is thin or garbage, note it and move on
+- **Cookie wall detection:** If scrape output contains only consent/GDPR text (no actual content), mark as `[cookie wall]` in report — do NOT rate as HIGH quality. Use the search snippet as fallback and label it explicitly: "Source: search snippet (scrape blocked by cookie wall)"
 - Look for: concrete content, code, benchmarks, how-tos, data
 - **When task defines multiple topics:** track scraped URLs per topic separately.
   Before stopping a topic, verify minimum 5 scraped URLs attributed to THAT topic.
