@@ -10,6 +10,7 @@ from src.searxng.search_web import search_web_workflow
 from src.scraper.scrape_url import scrape_url_workflow
 from src.scraper.scrape_url_raw import scrape_url_raw_workflow
 from src.scraper.explore_site import explore_site_workflow
+from src.scraper.download_pdf import download_pdf_workflow
 
 nest_asyncio.apply()
 
@@ -55,6 +56,12 @@ def explore_site(
 ) -> list[TextContent]:
     """Explore website structure."""
     return asyncio.run(explore_site_workflow(url, max_pages, url_pattern))
+
+
+@mcp.tool
+def download_pdf(url: str, output_dir: str = "/tmp") -> list[TextContent]:
+    """Download PDF file from URL."""
+    return download_pdf_workflow(url, output_dir)
 
 
 if __name__ == "__main__":
