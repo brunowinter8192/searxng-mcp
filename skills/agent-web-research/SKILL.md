@@ -12,6 +12,7 @@ description: SearXNG MCP tool reference for web research agents
 | search_web | Search the web via SearXNG. Returns up to 50 results with title, URL, full snippet |
 | scrape_url | Fetch page content as filtered markdown (PruningContentFilter). For in-conversation reading |
 | scrape_url_raw | Fetch page content as raw markdown and save as .md file. For RAG indexing |
+| download_pdf | Download PDF file from URL. Saves to /tmp/ by default or custom directory |
 
 ## Search Strategy
 
@@ -78,6 +79,15 @@ Four fundamentally different workflows:
 
 **Output:** Confirmation with file path and char count. File saved with `<!-- source: URL -->` header.
 
+### download_pdf
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| url | str | required | URL of the PDF file to download |
+| output_dir | str | "/tmp" | Directory to save the downloaded PDF |
+
+**Output:** Confirmation with file path and file size.
+
 ## Plugin Routing (CRITICAL)
 
 **Do NOT scrape these domains — report them for plugin-based access:**
@@ -116,4 +126,4 @@ Four fundamentally different workflows:
 - **Scraper optimized for content sites** — articles, docs, wikis work best
 - **scrape_url uses PruningContentFilter** — may damage code blocks. Use scrape_url_raw for full fidelity
 - **Login-protected pages** will return login forms, not content
-- **PDF URLs (.pdf) cannot be scraped** — scrape_url returns only the header `# Content from: <url>` with no content. Do NOT attempt to scrape PDF URLs. Log them as `[PDF — nicht scrapebar]` in the report and note the URL for manual access.
+- **PDF URLs (.pdf)** — use `download_pdf(url)` to save the file locally. Do NOT use scrape_url on PDFs.
