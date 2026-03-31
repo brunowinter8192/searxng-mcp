@@ -39,6 +39,10 @@ The routing table is correct: arxiv/github/reddit all have dedicated plugins tha
 
 One gap: no routing for `huggingface.co` (model cards, papers with code — frequently appears in ML research). Currently scraped like any other domain; scraper may hit rate limits or return incomplete model card content.
 
+### Implementiert (Session 2026-03-31)
+
+- **PDF URLs:** Agent instructions updated — PDF URLs (`.pdf`) are routed to `download_pdf(url)` instead of scrape attempt. Reported as `[PDF downloaded: /tmp/filename.pdf]` in agent output. `download_pdf` tool added to agent frontmatter and SKILL.md.
+
 ## Offene Fragen
 
 - Should `huggingface.co` be added to the routing table? HF has no dedicated plugin currently, so it would need to either: (a) be scraped as normal, (b) be skipped, or (c) be noted for future plugin development.
