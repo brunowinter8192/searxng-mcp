@@ -4,6 +4,13 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="$SCRIPT_DIR/.venv"
 
+# Load env (optional, for SEARXNG_PROJECT_ROOT etc.)
+if [ -f "$SCRIPT_DIR/.env" ]; then
+    set -a
+    source "$SCRIPT_DIR/.env"
+    set +a
+fi
+
 # Start SearXNG container if not running
 if ! docker ps --format '{{.Names}}' | grep -q '^searxng$'; then
     docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d

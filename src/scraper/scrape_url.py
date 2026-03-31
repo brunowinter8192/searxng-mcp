@@ -1,6 +1,7 @@
 # INFRASTRUCTURE
 import json
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -125,13 +126,11 @@ async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: 
 
 # Append one JSONL failure record to dev/scrape_pipeline/failures.jsonl
 def log_scrape_failure(url: str, garbage_type: str | None, status_code: int | None) -> None:
+    project_root = os.environ.get("SEARXNG_PROJECT_ROOT")
+    if not project_root:
+        return
     try:
-        root = Path(__file__).parent
-        while root != root.parent:
-            if (root / "server.py").exists() or (root / "dev").is_dir():
-                break
-            root = root.parent
-        log_path = root / "dev" / "scrape_pipeline" / "failures.jsonl"
+        log_path = Path(project_root) / "dev" / "scrape_pipeline" / "failures.jsonl"
         record = {
             "ts": datetime.now(timezone.utc).isoformat(),
             "url": url,
