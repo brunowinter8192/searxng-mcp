@@ -95,6 +95,39 @@ Explore filter configurations. 04 gives broad comparison, 05 gives step-by-step 
 
 Large-scale comparison of which HTML source + filter combination produces the best markdown for downstream cleanup agents. Requires explore_pipeline/01_reports as input. Output is raw .md files for manual review.
 
+## 07_result_inspect.py
+
+**Purpose:** Inspects the full Crawl4AI `CrawlResult` object to discover available metadata fields. Scrapes 3 URLs (normal, 404, consent-heavy) and enumerates all result attributes with types and values. Key finding: `result.status_code` is available and reliable (404 for error pages, 200 for good pages). `result.success` is always True and unreliable.
+**Output:** `07_reports/result_inspect_<timestamp>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/07_result_inspect.py
+```
+
+## 08_garbage_edge_cases.py
+
+**Purpose:** Tests `is_garbage_content()` against known edge case URLs (consent-prefix sites, padded 404 pages) and baseline URLs. Scrapes raw and filtered content, runs garbage detection on both, and tests header-zone (first 500 chars) detection for padded 404s.
+**Output:** `08_reports/garbage_edge_cases_<timestamp>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/08_garbage_edge_cases.py
+```
+
+## 09_garbage_fix_prototype.py
+
+**Purpose:** Prototypes and validates garbage detection improvements. Tests two fixes: (1) status_code based 404 detection, (2) consent prefix stripping. Validates against edge case and baseline URLs to confirm no false positives.
+**Output:** `09_reports/garbage_fix_prototype_<timestamp>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/09_garbage_fix_prototype.py
+```
+
+## Workflows
+
+### Garbage Investigation (07 -> 08 -> 09)
+
+Investigate edge cases in garbage detection. 07 discovers available metadata. 08 reproduces failures. 09 prototypes and validates fixes before production code changes.
+
 ## domains.txt
 
 Test URLs for scripts 01-05. One URL per line, comments with `#`.

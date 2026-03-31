@@ -12,9 +12,9 @@
 - `crawl4ai_error` — Crawl4AI-Fehlermeldungen als Content:
   - Trigger: `"crawl4ai error:"`, `"document is empty"`, `"page is not fully supported"`
   - Bedingung: Pattern in `content.lower()`
-- `http_error` — HTTP-Fehlerseiten:
-  - Trigger: `len(content) < 1000` UND eines von `"not_found"`, `"404"`, `"403"`, `"forbidden"`, `"access denied"`, `"page not found"`
-  - Bedingung: kurzer Content + Error-Keyword
+- `http_error` — HTTP-Fehlerseiten (zwei Checks):
+  - **Primary (status_code):** `result.status_code >= 400` in `try_scrape()` — direkt nach `crawler.arun()`, VOR Content-Analyse. Fängt gepolsterte 404-Seiten unabhängig von Content-Länge.
+  - **Secondary (content heuristic):** `len(content) < 1000` UND eines von `"not_found"`, `"404"`, `"403"`, `"forbidden"`, `"access denied"`, `"page not found"` — Fallback wenn status_code nicht verfügbar
 - `nav_dump` — Navigation-Dumps:
   - Trigger: `len(lines) >= 20` UND `link_lines / len(lines) > 0.6`
   - Bedingung: Mehr als 60% der Zeilen sind reine Markdown-Links

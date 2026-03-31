@@ -21,7 +21,7 @@ On empty result, returns error message with plugin hint if URL matches a known d
 
 ### try_scrape()
 
-Attempts a single scrape with given browser config, optional crawler strategy, and wait strategy. Content selection: `fit_markdown` if >= 200 chars (MIN_CONTENT_THRESHOLD), otherwise falls back to `raw_markdown`. This prevents PruningContentFilter from destroying table-heavy content (e.g. Wikipedia). Checks content via `is_garbage_content()` — if content is an error page, cookie wall, or Crawl4AI error message, returns empty string to trigger fallback chain.
+Attempts a single scrape with given browser config, optional crawler strategy, and wait strategy. Checks `result.status_code` first — if >= 400, returns `("", "http_error")` immediately without content analysis (catches padded 404 pages). Content selection: `fit_markdown` if >= 200 chars (MIN_CONTENT_THRESHOLD), otherwise falls back to `raw_markdown`. This prevents PruningContentFilter from destroying table-heavy content (e.g. Wikipedia). Checks content via `is_garbage_content()` — if content is an error page, cookie wall, or Crawl4AI error message, returns empty string to trigger fallback chain.
 
 ### is_garbage_content()
 
