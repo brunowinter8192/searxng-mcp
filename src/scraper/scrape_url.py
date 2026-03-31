@@ -1,6 +1,9 @@
 # INFRASTRUCTURE
+import json
 import logging
 import re
+from datetime import datetime, timezone
+from pathlib import Path
 
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode, UndetectedAdapter
 from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
@@ -46,12 +49,14 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
     )
 
     normal_config = BrowserConfig(headless=True, verbose=False)
-    content, last_garbage = await try_scrape(normal_config, None, markdown_generator, url, "networkidle")
+    content, last_garbage, last_status_code = await try_scrape(normal_config, None, markdown_generator, url, "networkidle")
 
     if not content:
-        c2, g2 = await try_scrape(normal_config, None, markdown_generator, url, "domcontentloaded")
+        c2, g2, s2 = await try_scrape(normal_config, None, markdown_generator, url, "domcontentloaded")
         if g2:
             last_garbage = g2
+        if s2:
+            last_status_code = s2
         content = c2
 
     if not content:
@@ -61,12 +66,15 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
             browser_config=stealth_config,
             browser_adapter=adapter
         )
-        c3, g3 = await try_scrape(stealth_config, stealth_strategy, markdown_generator, url, "networkidle")
+        c3, g3, s3 = await try_scrape(stealth_config, stealth_strategy, markdown_generator, url, "networkidle")
         if g3:
             last_garbage = g3
+        if s3:
+            last_status_code = s3
         content = c3
 
     if not content:
+        log_scrape_failure(url, last_garbage, last_status_code)
         hint = get_plugin_hint(url)
         reason = _GARBAGE_MESSAGES[last_garbage] if last_garbage else "No content extracted"
         msg = f"Error scraping {url}: {reason}"
@@ -81,8 +89,8 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
 
 # FUNCTIONS
 
-# Attempt scrape with given wait strategy, return (content, garbage_type) tuple
-async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: str, wait_until: str) -> tuple[str, str | None]:
+# Attempt scrape with given wait strategy, return (content, garbage_type, status_code) tuple
+async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: str, wait_until: str) -> tuple[str, str | None, int | None]:
     logger.debug("Trying %s wait strategy", wait_until)
     run_config = CrawlerRunConfig(
         cache_mode=CacheMode.BYPASS,
@@ -96,22 +104,44 @@ async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: 
             kwargs["crawler_strategy"] = crawler_strategy
         async with AsyncWebCrawler(**kwargs) as crawler:
             result = await crawler.arun(url=url, config=run_config)
-        if hasattr(result, 'status_code') and result.status_code and result.status_code >= 400:
-            logger.warning("HTTP %d detected: %s", result.status_code, url)
-            return "", "http_error"
+        status_code = result.status_code if hasattr(result, 'status_code') else None
+        if status_code and status_code >= 400:
+            logger.warning("HTTP %d detected: %s", status_code, url)
+            return "", "http_error", status_code
         if not result.markdown:
-            return "", None
+            return "", None, status_code
         content = result.markdown.fit_markdown
         if len(content) < MIN_CONTENT_THRESHOLD and result.markdown.raw_markdown:
             content = result.markdown.raw_markdown
         garbage_type = is_garbage_content(content)
         if garbage_type:
             logger.warning("Garbage detected [%s]: %s", garbage_type, url)
-            return "", garbage_type
-        return content, None
+            return "", garbage_type, status_code
+        return content, None, status_code
     except Exception as e:
         logger.warning("Failed to scrape %s: %s", url, e)
-        return "", None
+        return "", None, None
+
+
+# Append one JSONL failure record to dev/scrape_pipeline/failures.jsonl
+def log_scrape_failure(url: str, garbage_type: str | None, status_code: int | None) -> None:
+    try:
+        root = Path(__file__).parent
+        while root != root.parent:
+            if (root / "server.py").exists() or (root / "dev").is_dir():
+                break
+            root = root.parent
+        log_path = root / "dev" / "scrape_pipeline" / "failures.jsonl"
+        record = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "url": url,
+            "garbage_type": garbage_type,
+            "status_code": status_code,
+        }
+        with log_path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
+    except Exception as e:
+        logger.warning("Failed to log scrape failure: %s", e)
 
 
 # Detect garbage content: error pages, cookie walls, login walls, navigation dumps

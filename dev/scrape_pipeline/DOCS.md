@@ -131,3 +131,36 @@ Investigate edge cases in garbage detection. 07 discovers available metadata. 08
 ## domains.txt
 
 Test URLs for scripts 01-05. One URL per line, comments with `#`.
+
+## failures.jsonl
+
+**Purpose:** Persistent failure log from production `scrape_url` runs. Every URL where all 3 scrape attempts are exhausted (normal networkidle, normal domcontentloaded, stealth networkidle) gets appended as one JSONL line.
+
+**Written by:** `log_scrape_failure()` in `src/scraper/scrape_url.py` — called automatically at the final failure exit in `scrape_url_workflow()`.
+
+**Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ts` | ISO 8601 UTC string | Timestamp of the failure |
+| `url` | string | URL that failed to scrape |
+| `garbage_type` | string \| null | Last detected garbage type (`http_error`, `cookie_wall`, `login_wall`, `cloudflare`, `nav_dump`, `crawl4ai_error`) or null if no content was returned |
+| `status_code` | int \| null | HTTP status code from the last attempt that returned one, or null if not available |
+
+**Usage:**
+
+```bash
+# Show all failures
+cat dev/scrape_pipeline/failures.jsonl | jq .
+
+# Count by garbage_type
+cat dev/scrape_pipeline/failures.jsonl | jq -r '.garbage_type // "none"' | sort | uniq -c | sort -rn
+
+# Find all 404s
+cat dev/scrape_pipeline/failures.jsonl | jq 'select(.status_code == 404)'
+
+# Recent failures
+tail -20 dev/scrape_pipeline/failures.jsonl | jq .
+```
+
+The file is gitignored — it accumulates across production MCP tool calls and is for local analysis only.

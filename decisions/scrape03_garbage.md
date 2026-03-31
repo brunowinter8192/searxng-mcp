@@ -78,6 +78,20 @@ PDF-URLs: Eigenes MCP Tool `download_pdf` statt Scraping-Versuch. Agent-Instruct
 - `login_wall`: False-Positive-Risiko bei kurzen Login-Tutorial-Seiten — 2000-char-Limit + generische Patterns
 - `PLUGIN_HINTS` ist hardcoded — eine konfigurierbare Map in `config.py` oder `server.py` wäre flexibler
 
+## Persistent Failure Logging
+
+**Added (2026-03):** Every final scrape failure — all 3 attempts exhausted — is appended as a JSONL record to `dev/scrape_pipeline/failures.jsonl`.
+
+**Implementation:** `log_scrape_failure(url, garbage_type, status_code)` in `src/scraper/scrape_url.py`, called from `scrape_url_workflow()` at the final `if not content:` exit.
+
+**Fields per record:** `ts` (ISO 8601 UTC), `url`, `garbage_type` (str | null), `status_code` (int | null)
+
+**`try_scrape()` return type** extended from `tuple[str, str | None]` to `tuple[str, str | None, int | None]` to propagate `result.status_code` to the caller. `scrape_url_workflow()` tracks `last_status_code` alongside `last_garbage` across all 3 attempts.
+
+**Silent fail:** `log_scrape_failure()` wraps all I/O in try/except — a logging failure never crashes the MCP tool.
+
+**File path:** `dev/scrape_pipeline/failures.jsonl` (gitignored, local analysis only). See `dev/scrape_pipeline/DOCS.md` for jq usage examples.
+
 ## Quellen
 
 - `src/scraper/scrape_url.py` (Code-Inspektion)

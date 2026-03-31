@@ -23,3 +23,6 @@ __pycache__/
 # Dolt database files (added by bd init)
 .dolt/
 *.db
+
+# Persistent failure log from production scrape_url runs
+dev/scrape_pipeline/failures.jsonl
