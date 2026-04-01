@@ -197,6 +197,15 @@ def truncate_content(text: str, max_length: int) -> str:
     return truncated + "\n\n[Content truncated...]"
 
 
-# Return generic plugin routing hint for failed scrapes
+# Return plugin hint for domains with dedicated MCP plugins, empty string otherwise
 def get_plugin_hint(url: str) -> str:
-    return "This domain may have a dedicated MCP plugin."
+    from urllib.parse import urlparse
+    from src.routing import PLUGIN_ROUTED_DOMAINS
+    try:
+        host = (urlparse(url).hostname or "").removeprefix("www.")
+    except Exception:
+        return ""
+    for domain in PLUGIN_ROUTED_DOMAINS:
+        if host == domain or host.endswith("." + domain):
+            return f"This domain has a dedicated MCP plugin. Use the appropriate plugin tool instead of scrape_url."
+    return ""
