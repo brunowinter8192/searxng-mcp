@@ -128,6 +128,26 @@ Large-scale comparison of which HTML source + filter combination produces the be
 
 Investigate edge cases in garbage detection. 07 discovers available metadata. 08 reproduces failures. 09 prototypes and validates fixes before production code changes.
 
+## garbage_eval/10_live_garbage_test.py
+
+**Purpose:** Tests the full search→scrape→garbage-logging pipeline without the MCP server. Imports directly from `src/` so code changes are visible immediately.
+**Input:** CLI: `--search QUERY` (live SearXNG search) or `--edge-cases` (known problem URLs from EDGE_CASES dict).
+**Output:** Markdown report in `garbage_eval/10_reports/`.
+
+Tests per URL: networkidle scrape → domcontentloaded fallback → garbage detection → `log_scrape_failure` on final failure.
+
+Also checks `failures.jsonl` entry count before/after to verify failure logging works.
+
+**Note:** `strip_consent_prefix` is not yet in `src/scraper/scrape_url.py` — prototype only in `09_garbage_fix_prototype.py`. Report notes this explicitly.
+
+```bash
+# Test with live search results
+./venv/bin/python dev/scrape_pipeline/garbage_eval/10_live_garbage_test.py --search "cookie policy GDPR compliance"
+
+# Test with known edge cases
+./venv/bin/python dev/scrape_pipeline/garbage_eval/10_live_garbage_test.py --edge-cases
+```
+
 ## domains.txt
 
 Test URLs for scripts 01-05. One URL per line, comments with `#`.
