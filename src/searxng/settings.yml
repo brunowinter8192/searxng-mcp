@@ -12,15 +12,15 @@ search:
   formats:
     - html
     - json
-  ban_time_on_fail: 5
-  max_ban_time_on_fail: 120
+  ban_time_on_fail: 0
+  max_ban_time_on_fail: 0
   suspended_times:
-    SearxEngineAccessDenied: 600
-    SearxEngineCaptcha: 600
-    SearxEngineTooManyRequests: 300
-    cf_SearxEngineCaptcha: 1800
-    cf_SearxEngineAccessDenied: 600
-    recaptcha_SearxEngineCaptcha: 3600
+    SearxEngineAccessDenied: 0
+    SearxEngineCaptcha: 0
+    SearxEngineTooManyRequests: 0
+    cf_SearxEngineCaptcha: 0
+    cf_SearxEngineAccessDenied: 0
+    recaptcha_SearxEngineCaptcha: 0
 
 ui:
   static_use_hash: true
