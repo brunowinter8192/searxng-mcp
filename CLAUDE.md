@@ -12,9 +12,10 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **Engines (general)** | Google, Bing, Brave, Startpage, Mojeek, Scholar, Semantic Scholar, CrossRef | weights 1-2, DDG disabled |
+| **Engines (general)** | Google, Bing, Brave, Startpage, Mojeek, Scholar, Semantic Scholar, CrossRef | weights 1-2, DDG disabled, suspended_times=0 (disabled) |
 | **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
-| **Routing** | Tor SOCKS5 proxy (Brave, Startpage) / Direct (Google, DDG, Bing, Mojeek) | Split architecture |
+| **Routing** | Tor SOCKS5 proxy (Brave, Startpage) / Direct (Google, DDG, Bing, Mojeek, Scholar, Semantic Scholar) | Split architecture |
+| **Patches** | Mojeek (arc=none fix), Semantic Scholar (session cookie management) | Docker volume-mounted at /usr/local/searxng/searx/engines/ |
 | **Ranking** | Hostname priority/depriority/remove plugin | MAX_RESULTS=80, SNIPPET_LENGTH=5000 |
 
 ### Scrape Pipeline (Crawl4AI)

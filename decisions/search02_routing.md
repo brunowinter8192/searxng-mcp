@@ -105,3 +105,67 @@ Split-Routing-Architektur: **Default Tor, Ausnahmen direkt.** Rationale:
 - `searxng/searxng` GitHub Repo (`searx/network.py`) — Proxy-Inheritance-Logik
 - SearXNG Docs (RAG Collection: searxng) — outgoing, proxy, suspended_times Parameter
 - search01_engines.md — Engine-Auswahl und Kategorie-Zuordnung
+
+## Implementiert (Session 2026-04-03)
+
+### Engine Suspension Disabled
+
+Alle `suspended_times`-Werte und `ban_time_on_fail` auf `0` gesetzt.
+
+**Rationale:** SearXNG's internes Suspension-System war kontraproduktiv. Wenn eine Engine rate-limited wird, sperrt SearXNG sie zusätzlich für 300–3600 Sekunden — doppelte Bestrafung:
+1. Engine ist ohnehin temporär blockiert (Google-seitige 403, Tor-Blocking, etc.)
+2. SearXNG-Suspension verhindert Recovery ohne Docker-Restart
+
+Engines sollen ihre eigene Rate-Limiting-Logik handhaben. SearXNG greift nicht ein.
+
+**Konfiguration in `settings.yml`:**
+```yaml
+search:
+  suspended_times:
+    SearxEngineAccessDenied: 0
+    SearxEngineCaptcha: 0
+    SearxEngineTooManyRequests: 0
+    cf_SearxEngineCaptcha: 0
+    cf_SearxEngineAccessDenied: 0
+    recaptcha_SearxEngineCaptcha: 0
+  ban_time_on_fail: 0
+```
+
+### SearXNG 2026.4.3 — GSA iPhone UA Fix
+
+Update von 2026.3.10 → 2026.4.3 behebt Blocking für Google, Brave, Google Scholar durch neuen GSA iPhone User-Agent. Diese 3 Engines liefern seitdem wieder stabile Ergebnisse.
+
+### TLS Fingerprint Investigation
+
+Skripte `20_tls_fingerprint.py` + `21_cipher_shuffle_verify.py` entwickelt (→ `dev/search_pipeline/engines_eval/`).
+
+**Ergebnisse:**
+- JA3 Hash: `cdb8399d0ce47cc19f2ef0756148891e` (gemessen via tls.browserleaks.com)
+- Cipher Shuffling wirksam: 12/12 Requests produzieren unterschiedliche JA3-Hashes ✓
+- Gap identifiziert: `Accept: */*` Header fehlt in SearXNG-Requests (kein unmittelbarer Blocking-Grund)
+
+### Mojeek Patch — .pyc Cache Lektion
+
+Mojeek-Patch (`src/searxng/patches/mojeek.py`) hatte Stale `.pyc` Cache im Docker-Container — aktualisierter Patch wurde ignoriert.
+
+**Lösung:** `docker compose build --no-cache` löscht `.pyc` Files und erzwingt Re-Kompilierung.
+
+**Lesson:** Docker volume-mounted Patches können durch stale `.pyc` ignoriert werden. Bei Patch-Updates immer Container neu bauen.
+
+**Fix:** `arc=none` hardcoded (statt `arc=us` aus Default-Engine) — behebt Bot-Detection.
+
+### Semantic Scholar — Direktrouting + Session Cookies
+
+Semantic Scholar von Tor auf DIREKT umgestellt (`proxies: {}` + `using_tor_proxy: false`). Session-Cookie-Tracking inkompatibel mit Tor-IP-Rotation.
+
+**Patch:** `src/searxng/patches/semantic_scholar.py` — Cookies (`s2Exp`, `tid`) werden 300s gecacht und bei nachfolgenden Requests mitgesendet.
+
+**Einschränkung:** Soft-Limit ~6 Requests/Session. Nach ~6 Queries liefert Semantic Scholar 0 Ergebnisse. Kein Hard-Block — Recovery durch SearXNG-Restart oder Session-Rotation.
+
+## Resolved Offene Fragen (2026-04-03)
+
+- ✅ **Google Scholar via Tor:** Scholar via SearXNG 2026.4.3 wieder funktional; läuft direkt (kein Tor)
+- ✅ **Mojeek Tor:** Mojeek stabil über Direktverbindung mit arc=none Patch
+- ✅ **Startpage via Tor:** Funktioniert stabil über Tor nach SearXNG 2026.4.3 Update
+- ⏳ **Reddit via Tor:** Noch offen — nicht getestet
+- ⏳ **Tor-Container Failover:** Noch offen — kein Fallback implementiert

@@ -67,6 +67,68 @@ query three
 - `build_report()` — Summary + per-query tables showing profile, score, engines, domain, URL, snippet. In compare mode: comparison tables per query with result count, avg score, domain overlap.
 - `compute_settings_hash()` — MD5 hash of settings.yml for config identification
 
+## engines_eval/ → decisions/search02_routing (fingerprint investigation)
+
+### 20_tls_fingerprint.py
+
+**Purpose:** Probe external JA3 fingerprint services to measure the TLS fingerprint of SearXNG-style httpx requests.
+**Input:** No CLI args. Queries tls.browserleaks.com and ja3er.com.
+**Output:** Markdown report in `20_reports/` with JA3 hash, TLS version, cipher count, User-Agent.
+
+```bash
+./venv/bin/python dev/search_pipeline/engines_eval/20_tls_fingerprint.py
+```
+
+### 21_cipher_shuffle_verify.py
+
+**Purpose:** Verify that SearXNG's cipher shuffling (`shuffle_ciphers()`) produces distinct JA3 hashes across requests — confirms fingerprint diversification is active.
+**Input:** No CLI args. Sends 12 requests to tls.browserleaks.com with fresh SSL context per request.
+**Output:** Markdown report in `20_reports/` with per-request JA3 hash table and verdict (unique count / total).
+
+```bash
+./venv/bin/python dev/search_pipeline/engines_eval/21_cipher_shuffle_verify.py
+```
+
+### 22_header_inspection.py
+
+**Purpose:** Inspect which HTTP headers SearXNG-style requests send, as seen by the server.
+**Input:** No CLI args. Sends 3 requests to httpbin.org/headers.
+**Output:** Markdown report in `20_reports/` with per-request header tables and consistency analysis.
+
+```bash
+./venv/bin/python dev/search_pipeline/engines_eval/22_header_inspection.py
+```
+
+### 23_suspension_threshold.py
+
+**Purpose:** Measure at which query rate each engine gets suspended by SearXNG's internal suspension mechanism. Tests 8 engines across 4 phases (10s / 5s / 2s / 1s intervals, 6 queries each).
+**Input:** No CLI args. Queries local SearXNG at `http://localhost:8080`.
+**Output:** Markdown report in `20_reports/` with suspension threshold per engine and per-phase detail tables.
+
+```bash
+./venv/bin/python dev/search_pipeline/engines_eval/23_suspension_threshold.py
+```
+
+### 23_google_retest.py
+
+**Purpose:** One-shot retest of Google after `suspension_times=0` and `ban_time_on_fail=0` were set. Verifies SearXNG no longer pre-emptively blocks Google.
+**Input:** No CLI args. Runs same 4-phase protocol as `23_suspension_threshold.py`, Google only.
+**Output:** Markdown report in `20_reports/` with verdict (suspension flag present/absent) and per-request results.
+
+```bash
+./venv/bin/python dev/search_pipeline/engines_eval/23_google_retest.py
+```
+
+### 24_engine_health_check.py
+
+**Purpose:** Phase-1-only health check for 6 previously-suspended engines after SearXNG 2026.4.3 update. Confirms engines are returning results at conservative query rate (10s × 6 queries).
+**Input:** No CLI args. Tests: Brave, Mojeek, Startpage, Google Scholar, Semantic Scholar, CrossRef.
+**Output:** Markdown report in `20_reports/` with summary table (clean/flagged/status per engine) and per-engine detail.
+
+```bash
+./venv/bin/python dev/search_pipeline/engines_eval/24_engine_health_check.py
+```
+
 ## ranking_eval/ → decisions/search03_ranking
 
 ### 03_ranking.py

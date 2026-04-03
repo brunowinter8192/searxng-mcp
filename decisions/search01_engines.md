@@ -107,3 +107,30 @@ Engine-Set und Weights basieren auf Index-Diversifizierung und Kategorie-Trennun
 - `searxng/searxng` GitHub Repo (`searx/settings.yml`) — Default Engine-Konfigurationen
 - SearXNG Docs (RAG Collection: searxng) — Engine-Parameter, Weight-Semantik
 - Erfahrungswerte aus Betrieb (Qwant-Deaktivierung, DDG-Weight, Startpage-Redundanz)
+
+## Engine Status Update (2026-04-03)
+
+### SearXNG 2026.4.3 — Engine Fixes
+
+Update von 2026.3.10 → 2026.4.3 behebt Blocking für 3 Engines über neuen GSA iPhone User-Agent:
+- **Google** — wieder stabil ✓
+- **Brave** — wieder stabil ✓
+- **Google Scholar** — wieder stabil ✓
+
+### DDG Recovery Confirmed
+
+DuckDuckGo ist wieder funktional (vorher CAPTCHA-Blocking, upstream issue #4824). Aktuell noch `disabled: true` in `settings.yml` — Re-Enablement pending. DDG wird nicht re-enabled solange Bing direkt verfügbar ist (DDG basiert auf Bing, bietet keinen Mehrwert bei identischem Index).
+
+### Aktueller Engine-Status (alle 8 + DDG)
+
+| Engine | Status | Routing | Tor | Patch | Weight |
+|--------|--------|---------|-----|-------|--------|
+| Google | ✅ aktiv | direkt | nein | nein | 2 |
+| Bing | ✅ aktiv | direkt | nein | nein | 1 |
+| Brave | ✅ aktiv | Tor | ja | nein | 2 |
+| Startpage | ✅ aktiv | Tor | ja | nein | 1 |
+| Mojeek | ✅ aktiv | direkt | nein | arc=none | 1 |
+| Google Scholar | ✅ aktiv | direkt | nein | nein | 2 |
+| Semantic Scholar | ✅ aktiv | direkt | nein | session cookies | 2 |
+| CrossRef | ✅ aktiv | Tor | ja | nein | 1 |
+| DuckDuckGo | ⏸ disabled | direkt | nein | nein | 1 |

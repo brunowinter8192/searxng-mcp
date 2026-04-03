@@ -20,4 +20,8 @@
 | huggingface.co | Web Domain | agent02 | Not indexed |
 | info.arxiv.org | Web Domain | agent02 | Not indexed |
 
+| GitHub Issue #5286 | github.com | Issue | search02_routing | Referenced |
+| GitHub Issue #5922 | github.com | Issue | search02_routing | Referenced |
+| GitHub PR #5644 | github.com | PR | search01_engines | Referenced |
+
 Consult via RAG search before making assumptions. Pipeline step references match `decisions/` files.

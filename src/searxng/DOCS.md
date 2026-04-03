@@ -49,3 +49,11 @@ Hostnames plugin configuration prioritizes high-quality domains (GitHub, StackOv
 **Purpose:** Patched Mojeek engine for SearXNG. Fixes bot detection triggered by the `arc=us` locale combination in the default engine. Drop-in replacement for SearXNG's built-in Mojeek engine, mounted via Docker volume at `/usr/local/searxng/searx/engines/mojeek.py`.
 **Input:** SearXNG engine request (query parameters from search_web).
 **Output:** Parsed search results (title, URL, content snippet) returned to SearXNG result aggregator.
+
+## patches/semantic_scholar.py
+
+**Purpose:** Patched Semantic Scholar engine for SearXNG. Adds session cookie management — fetches and caches `s2Exp` and `tid` cookies (TTL 300s) from an initial page request and injects them into subsequent search requests. Fixes Soft-Limit (~6 req/session) caused by missing session cookies in the default engine. Mounted via Docker volume at `/usr/local/searxng/searx/engines/semantic_scholar.py`.
+**Input:** SearXNG engine request (query parameters from search_web).
+**Output:** Parsed academic paper results (title, URL, content snippet) returned to SearXNG result aggregator.
+
+Note: Soft-Limit (~6 req/session) persists despite cookie management — Semantic Scholar imposes a per-session query limit regardless. Recovery via SearXNG restart.
