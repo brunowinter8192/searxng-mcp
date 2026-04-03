@@ -76,6 +76,7 @@ searxng/
 │   ├── search01_engines.md
 │   ├── search02_routing.md
 │   ├── search03_ranking.md
+│   ├── search04_weights.md
 │   ├── scrape01_browser.md
 │   ├── scrape02_filtering.md
 │   ├── scrape03_garbage.md
@@ -92,7 +93,14 @@ searxng/
 │   └── spawn/                      → Worker spawn utilities (in src/DOCS.md)
 ├── dev/                            → [DOCS.md](dev/DOCS.md)
 │   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md)
+│   │   ├── engines_eval/           → search01_engines
+│   │   ├── ranking_eval/           → search03_ranking
+│   │   ├── content_eval/           → search01_engines (content quality)
+│   │   └── weights_eval/           → search04_weights
 │   ├── scrape_pipeline/            → [DOCS.md](dev/scrape_pipeline/DOCS.md)
+│   │   ├── browser_eval/           → scrape01_browser
+│   │   ├── filter_eval/            → scrape02_filtering
+│   │   └── garbage_eval/           → scrape03_garbage
 │   ├── explore_pipeline/           → [DOCS.md](dev/explore_pipeline/DOCS.md)
 │   ├── agent_pipeline/             → [DOCS.md](dev/agent_pipeline/DOCS.md)
 │   └── cleanup/                    → [DOCS.md](dev/cleanup/DOCS.md)

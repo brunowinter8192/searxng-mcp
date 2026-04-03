@@ -166,7 +166,7 @@ def build_report(title: str, results: list[dict], failures_before: int, failures
         f"- New entries:           {new_failures}",
         "",
         "## Notes",
-        "- `strip_consent_prefix` not yet in `src/scraper/scrape_url.py` — prototype only in `09_garbage_fix_prototype.py`",
+        "- `strip_consent_prefix` in production: `try_scrape()` attempts consent stripping on `cookie_wall` before discarding",
         "- Two scrape attempts per URL: networkidle → domcontentloaded fallback (no stealth)",
         "- `log_scrape_failure` called on all final failures; requires `SEARXNG_PROJECT_ROOT` env var",
     ]
