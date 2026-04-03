@@ -59,7 +59,7 @@ def request(query, params):
     # lb=en&arc=us triggers Mojeek 403 bot detection; fall back to arc=none
     region = traits.get_region(params["searxng_locale"], traits.custom["region_all"])
     if region == "us":
-        region = traits.custom["region_all"]
+        region = "none"
 
     args = {
         "q": query,
