@@ -9,14 +9,14 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from src.scraper.scrape_url import scrape_url_workflow
 
 TOP_N_PER_QUERY = 5
 EXCERPT_LENGTH = 50000
 MIN_USEFUL_CONTENT = 200
 REPORTS_DIR = Path(__file__).parent / "04_reports"
-SEARCH_REPORTS_DIR = Path(__file__).parent / "01_reports"
+SEARCH_REPORTS_DIR = Path(__file__).parent.parent / "engines_eval" / "01_reports"
 DELAY_BETWEEN_REQUESTS = 2
 
 

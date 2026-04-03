@@ -14,8 +14,8 @@ from urllib.parse import urlparse
 SEARXNG_URL = "http://localhost:8080/search"
 TOP_K = 30
 MAX_PAGES = 3
-SETTINGS_PATH = Path(__file__).parent.parent.parent / "src" / "searxng" / "settings.yml"
-PROFILES_PATH = Path(__file__).parent / "profiles.yml"
+SETTINGS_PATH = Path(__file__).parent.parent.parent.parent / "src" / "searxng" / "settings.yml"
+PROFILES_PATH = Path(__file__).parent.parent / "profiles.yml"
 REPORTS_DIR = Path(__file__).parent / "01_reports"
 DELAY_BETWEEN_REQUESTS = 2
 
@@ -52,7 +52,7 @@ def run_search_suite(compare: bool = False):
 
 # Load queries with @profile directives
 def load_queries() -> list[dict]:
-    queries_file = Path(__file__).parent / "queries.txt"
+    queries_file = Path(__file__).parent.parent / "queries.txt"
     queries = []
     current_profile = "general"
     with open(queries_file, 'r') as f:

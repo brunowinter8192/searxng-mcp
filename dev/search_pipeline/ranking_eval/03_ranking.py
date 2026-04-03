@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-REPORTS_DIR = Path(__file__).parent / "01_reports"
+REPORTS_DIR = Path(__file__).parent.parent / "engines_eval" / "01_reports"
 COMPARE_DIR = Path(__file__).parent / "03_reports"
 
 

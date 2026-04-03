@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.scraper.routing import resolve_profile, load_config, match_url_to_profile
 from src.scraper.html_parser import parse_html
@@ -29,7 +29,7 @@ from src.scraper.markdown_converter import (
 from src.scraper.scrape_url import init_browser, fetch_url_content, cleanup_browser
 
 REPORT_DIR = Path(__file__).parent / "04_filter_reports"
-DOMAINS_FILE = Path(__file__).parent / "domains.txt"
+DOMAINS_FILE = Path(__file__).parent.parent / "domains.txt"
 MAX_PREVIEW_CHARS = 500
 
 

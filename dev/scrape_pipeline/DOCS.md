@@ -2,137 +2,13 @@
 
 Quality monitoring and configuration testing for the URL scraper module.
 
-## 01_baseline.py
+## Shared Config (pipeline root)
 
-**Purpose:** Scrapes all test domains using the production `scrape_url_workflow` and saves results as numbered iterations with metadata (char count, word count, timestamp).
-**Output:** `01_baselines/<domain>/iteration_<N>.md` + `metadata_<N>.json`
+### domains.txt
 
-```bash
-python dev/scrape_pipeline/01_baseline.py
-```
+Test URLs for scripts in browser_eval/ and filter_eval/. One URL per line, comments with `#`.
 
-## 02_regression.py
-
-**Purpose:** Compares the last two iterations per domain to detect regressions. Generates unified diffs and classifies changes by magnitude (IDENTICAL, MINOR_CHANGE, MODERATE_CHANGE, MAJOR_CHANGE).
-**Input:** `01_baselines/`
-**Output:** `02_reports/diff_report_<timestamp>.txt`
-
-```bash
-python dev/scrape_pipeline/02_regression.py
-```
-
-## 03_browser.py
-
-**Purpose:** Tests multiple Crawl4AI browser configurations for JS-heavy sites that fail with default settings. Compares content yield (char count, word count) across configs with different wait strategies: domcontentloaded baseline, networkidle, extended delay, CSS selector wait, and full page scan.
-**Output:** `03_reports/<domain>_<slug>_<config>.md`
-
-```bash
-python dev/scrape_pipeline/03_browser.py
-python dev/scrape_pipeline/03_browser.py https://docs.trychroma.com/docs/overview/telemetry
-```
-
-## 04_filtering.py
-
-**Purpose:** Tests multiple Crawl4AI content filter configurations (PruningFilter at various thresholds, BM25ContentFilter, raw) against test URLs. Saves raw and fit markdown for each config. Includes code block integrity check.
-**Output:** `04_reports/<domain>_<config>_raw.md` / `_fit.md`
-
-URLs are processed in parallel (PARALLEL_URLS=5, Semaphore). The 5 configs per URL run serially (fast, no benefit from parallelism).
-
-```bash
-python dev/scrape_pipeline/04_filtering.py
-python dev/scrape_pipeline/04_filtering.py https://example.com
-```
-
-## 05_filter_debug.py
-
-**Purpose:** Instruments the scraping pipeline step-by-step to show what each filter removes at each stage. Reports include node counts, character counts, percentage deltas, and markdown previews of removed content. Used during active profile development.
-**Output:** `05_reports/<profile>/<domain>_<timestamp>.txt`
-
-```bash
-python dev/scrape_pipeline/05_filter_debug.py https://de.wikipedia.org/wiki/Biber
-python dev/scrape_pipeline/05_filter_debug.py --profile wiki
-python dev/scrape_pipeline/05_filter_debug.py --all
-```
-
-## 06_content_source.py
-
-**Purpose:** Tests Crawl4AI's `content_source` parameter across many URLs per domain. Scrapes each URL with 6 configurations in parallel (5 URLs concurrent, 6 configs per URL concurrent) and saves the raw markdown output as individual .md files for manual inspection. Max 20 URLs per domain.
-**Input:** Explore pipeline reports from `../explore_pipeline/01_reports/*.json`
-**Output:** `05_content_source/<domain>/<config>/<NN>_<slug>.md`
-
-Configs tested:
-
-| Config | content_source | Filter | Markdown Field |
-|--------|---------------|--------|----------------|
-| cleaned_html | cleaned_html | none | raw_markdown |
-| cleaned_html_pruning | cleaned_html | PruningFilter 0.48 | fit_markdown |
-| raw_html | raw_html | none | raw_markdown |
-| raw_html_pruning | raw_html | PruningFilter 0.48 | fit_markdown |
-| fit_html | fit_html | none | raw_markdown |
-| fit_html_pruning | fit_html | PruningFilter 0.48 | fit_markdown |
-
-```bash
-python dev/scrape_pipeline/06_content_source.py --all
-python dev/scrape_pipeline/06_content_source.py --domain searxng_docs
-python dev/scrape_pipeline/06_content_source.py --url https://example.com
-```
-
-## Workflows
-
-### Regression (01 -> 02)
-
-Standard workflow when changing the production scraper. Run baseline, then compare with previous iteration.
-
-### Browser Debug (03)
-
-For JS-heavy sites that fail with default settings. Compare wait strategies to find what works.
-
-### Filter Exploration (04 -> 05)
-
-Explore filter configurations. 04 gives broad comparison, 05 gives step-by-step pipeline transparency.
-
-### Content Source (06)
-
-Large-scale comparison of which HTML source + filter combination produces the best markdown for downstream cleanup agents. Requires explore_pipeline/01_reports as input. Output is raw .md files for manual review.
-
-## 07_result_inspect.py
-
-**Purpose:** Inspects the full Crawl4AI `CrawlResult` object to discover available metadata fields. Scrapes 3 URLs (normal, 404, consent-heavy) and enumerates all result attributes with types and values. Key finding: `result.status_code` is available and reliable (404 for error pages, 200 for good pages). `result.success` is always True and unreliable.
-**Output:** `07_reports/result_inspect_<timestamp>.md`
-
-```bash
-./venv/bin/python dev/scrape_pipeline/07_result_inspect.py
-```
-
-## 08_garbage_edge_cases.py
-
-**Purpose:** Tests `is_garbage_content()` against known edge case URLs (consent-prefix sites, padded 404 pages) and baseline URLs. Scrapes raw and filtered content, runs garbage detection on both, and tests header-zone (first 500 chars) detection for padded 404s.
-**Output:** `08_reports/garbage_edge_cases_<timestamp>.md`
-
-```bash
-./venv/bin/python dev/scrape_pipeline/08_garbage_edge_cases.py
-```
-
-## 09_garbage_fix_prototype.py
-
-**Purpose:** Prototypes and validates garbage detection improvements. Tests two fixes: (1) status_code based 404 detection, (2) consent prefix stripping. Validates against edge case and baseline URLs to confirm no false positives.
-**Output:** `09_reports/garbage_fix_prototype_<timestamp>.md`
-
-```bash
-./venv/bin/python dev/scrape_pipeline/09_garbage_fix_prototype.py
-```
-
-## Workflows
-
-### Garbage Investigation (07 -> 08 -> 09)
-
-Investigate edge cases in garbage detection. 07 discovers available metadata. 08 reproduces failures. 09 prototypes and validates fixes before production code changes.
-
-## domains.txt
-
-Test URLs for scripts 01-05. One URL per line, comments with `#`.
-
-## failures.jsonl
+### failures.jsonl
 
 **Purpose:** Persistent failure log from production `scrape_url` runs. Every URL where all 3 scrape attempts are exhausted (normal networkidle, normal domcontentloaded, stealth networkidle) gets appended as one JSONL line.
 
@@ -164,3 +40,136 @@ tail -20 dev/scrape_pipeline/failures.jsonl | jq .
 ```
 
 The file is gitignored — it accumulates across production MCP tool calls and is for local analysis only.
+
+## browser_eval/ → decisions/scrape01_browser
+
+### 01_baseline.py
+
+**Purpose:** Scrapes all test domains using the production `scrape_url_workflow` and saves results as numbered iterations with metadata (char count, word count, timestamp).
+**Input:** `domains.txt` (pipeline root)
+**Output:** `01_baselines/<domain>/iteration_<N>.md` + `metadata_<N>.json`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/browser_eval/01_baseline.py
+```
+
+### 02_regression.py
+
+**Purpose:** Compares the last two iterations per domain to detect regressions. Generates unified diffs and classifies changes by magnitude (IDENTICAL, MINOR_CHANGE, MODERATE_CHANGE, MAJOR_CHANGE).
+**Input:** `01_baselines/`
+**Output:** `02_reports/diff_report_<timestamp>.txt`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/browser_eval/02_regression.py
+```
+
+### 03_browser.py
+
+**Purpose:** Tests multiple Crawl4AI browser configurations for JS-heavy sites that fail with default settings. Compares content yield (char count, word count) across configs with different wait strategies: domcontentloaded baseline, networkidle, extended delay, CSS selector wait, and full page scan.
+**Output:** `03_reports/<domain>_<slug>_<config>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/browser_eval/03_browser.py
+./venv/bin/python dev/scrape_pipeline/browser_eval/03_browser.py https://docs.trychroma.com/docs/overview/telemetry
+```
+
+## filter_eval/ → decisions/scrape02_filtering
+
+### 04_filtering.py
+
+**Purpose:** Tests multiple Crawl4AI content filter configurations (PruningFilter at various thresholds, BM25ContentFilter, raw) against test URLs. Saves raw and fit markdown for each config. Includes code block integrity check.
+**Input:** `domains.txt` (pipeline root)
+**Output:** `04_reports/<domain>_<config>_raw.md` / `_fit.md`
+
+URLs are processed in parallel (PARALLEL_URLS=5, Semaphore). The 5 configs per URL run serially (fast, no benefit from parallelism).
+
+```bash
+./venv/bin/python dev/scrape_pipeline/filter_eval/04_filtering.py
+./venv/bin/python dev/scrape_pipeline/filter_eval/04_filtering.py https://example.com
+```
+
+### 05_filter_debug.py
+
+**Purpose:** Instruments the scraping pipeline step-by-step to show what each filter removes at each stage. Reports include node counts, character counts, percentage deltas, and markdown previews of removed content. Used during active profile development.
+**Input:** `domains.txt` (pipeline root)
+**Output:** `05_reports/<profile>/<domain>_<timestamp>.txt`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/filter_eval/05_filter_debug.py https://de.wikipedia.org/wiki/Biber
+./venv/bin/python dev/scrape_pipeline/filter_eval/05_filter_debug.py --profile wiki
+./venv/bin/python dev/scrape_pipeline/filter_eval/05_filter_debug.py --all
+```
+
+### 06_content_source.py
+
+**Purpose:** Tests Crawl4AI's `content_source` parameter across many URLs per domain. Scrapes each URL with 6 configurations in parallel (5 URLs concurrent, 6 configs per URL concurrent) and saves the raw markdown output as individual .md files for manual inspection. Max 20 URLs per domain.
+**Input:** Explore pipeline reports from `../../explore_pipeline/01_reports/*.json`
+**Output:** `05_content_source/<domain>/<config>/<NN>_<slug>.md`
+
+Configs tested:
+
+| Config | content_source | Filter | Markdown Field |
+|--------|---------------|--------|----------------|
+| cleaned_html | cleaned_html | none | raw_markdown |
+| cleaned_html_pruning | cleaned_html | PruningFilter 0.48 | fit_markdown |
+| raw_html | raw_html | none | raw_markdown |
+| raw_html_pruning | raw_html | PruningFilter 0.48 | fit_markdown |
+| fit_html | fit_html | none | raw_markdown |
+| fit_html_pruning | fit_html | PruningFilter 0.48 | fit_markdown |
+
+```bash
+./venv/bin/python dev/scrape_pipeline/filter_eval/06_content_source.py --all
+./venv/bin/python dev/scrape_pipeline/filter_eval/06_content_source.py --domain searxng_docs
+./venv/bin/python dev/scrape_pipeline/filter_eval/06_content_source.py --url https://example.com
+```
+
+## garbage_eval/ → decisions/scrape03_garbage
+
+### 07_result_inspect.py
+
+**Purpose:** Inspects the full Crawl4AI `CrawlResult` object to discover available metadata fields. Scrapes 3 URLs (normal, 404, consent-heavy) and enumerates all result attributes with types and values. Key finding: `result.status_code` is available and reliable (404 for error pages, 200 for good pages). `result.success` is always True and unreliable.
+**Output:** `07_reports/result_inspect_<timestamp>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/garbage_eval/07_result_inspect.py
+```
+
+### 08_garbage_edge_cases.py
+
+**Purpose:** Tests `is_garbage_content()` against known edge case URLs (consent-prefix sites, padded 404 pages) and baseline URLs. Scrapes raw and filtered content, runs garbage detection on both, and tests header-zone (first 500 chars) detection for padded 404s.
+**Output:** `08_reports/garbage_edge_cases_<timestamp>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/garbage_eval/08_garbage_edge_cases.py
+```
+
+### 09_garbage_fix_prototype.py
+
+**Purpose:** Prototypes and validates garbage detection improvements. Tests two fixes: (1) status_code based 404 detection, (2) consent prefix stripping. Validates against edge case and baseline URLs to confirm no false positives.
+**Output:** `09_reports/garbage_fix_prototype_<timestamp>.md`
+
+```bash
+./venv/bin/python dev/scrape_pipeline/garbage_eval/09_garbage_fix_prototype.py
+```
+
+## Workflows
+
+### Regression (browser_eval 01 → 02)
+
+Standard workflow when changing the production scraper. Run baseline, then compare with previous iteration.
+
+### Browser Debug (browser_eval 03)
+
+For JS-heavy sites that fail with default settings. Compare wait strategies to find what works.
+
+### Filter Exploration (filter_eval 04 → 05)
+
+Explore filter configurations. 04 gives broad comparison, 05 gives step-by-step pipeline transparency.
+
+### Content Source (filter_eval 06)
+
+Large-scale comparison of which HTML source + filter combination produces the best markdown for downstream cleanup agents. Requires explore_pipeline/01_reports as input. Output is raw .md files for manual review.
+
+### Garbage Investigation (garbage_eval 07 → 08 → 09)
+
+Investigate edge cases in garbage detection. 07 discovers available metadata. 08 reproduces failures. 09 prototypes and validates fixes before production code changes.

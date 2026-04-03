@@ -53,7 +53,7 @@ CONFIGS = {
     ),
 }
 
-DOMAINS_FILE = Path(__file__).parent / "domains.txt"
+DOMAINS_FILE = Path(__file__).parent.parent / "domains.txt"
 
 
 # Load URLs from domains.txt or use CLI argument

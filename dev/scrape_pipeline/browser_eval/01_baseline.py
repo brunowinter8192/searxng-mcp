@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
 from src.scraper.scrape_url import scrape_url_workflow
 
@@ -30,7 +30,7 @@ async def run_baseline_suite():
 
 # Load test domains from domains.txt
 def load_domains() -> list[str]:
-    domains_file = Path(__file__).parent / "domains.txt"
+    domains_file = Path(__file__).parent.parent / "domains.txt"
     domains = []
 
     with open(domains_file, 'r') as f:
