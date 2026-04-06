@@ -1,25 +1,43 @@
-# Test Domains for Scraping Suite
-# Used by debug/crawl4ai_test.py
+# Engine Evaluation Queries (30)
+# Used by browser_eval/ and filter_eval/ scripts
+# Categories: Tech/Code EN, Science EN, German, Niche, Broad
 
-# --- wiki ---
-https://de.wikipedia.org/wiki/Biber
+# --- Tech/Code (EN) ---
+python asyncio best practices
+rust ownership borrow checker explained
+fastapi websocket reconnect handler
+docker compose health check restart policy
+git rebase vs merge workflow
+PostgreSQL query optimization composite index
+react server components vs client components
+nginx reverse proxy websocket configuration
 
-# --- docs ---
-https://docs.searxng.org/admin/settings/settings_engines.html#example-multilingual-search
-https://scikit-learn.org/stable/modules/generated/sklearn.ensemble.RandomForestClassifier.html
+# --- Science (EN) ---
+transformer attention mechanism explained
+RLHF reinforcement learning human feedback
+vector database approximate nearest neighbor
+RAG retrieval augmented generation benchmark
+climate change carbon capture technology 2025
+epidemiology cohort study design methodology
 
-# --- article ---
-https://medium.com/@karpathy/yes-you-should-understand-backprop-e2f06eab496b
+# --- German ---
+Bewerbung Lebenslauf Format Deutschland
+Mietvertrag Kündigungsfrist gesetzliche Regelung
+GmbH Gründung Kosten Schritte
+Krankenversicherung Vergleich gesetzlich privat
+Python Programmierung Anfänger Tutorial deutsch
+Datenschutz DSGVO Website Impressum
 
-# --- api docs ---
-https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
+# --- Niche/Specific ---
+crawl4ai stealth browser detection bypass
+SearXNG engine weight configuration
+tmux session management scripting
+trafilatura vs readability content extraction
+SPLADE sparse retrieval model implementation
 
-# --- error pages ---
-https://blog.lancedb.com/advanced-rag-precise-zero-shot-dense-retrieval-with-hyde-0946c54-fdcb/
-
-# --- cookie walls ---
-https://towardsdatascience.com/langchains-parent-document-retriever-revisited-1fca8791f5a0/
-
-# --- cloudflare block ---
-https://blog.voyageai.com/2025/01/07/voyage-3-large
-https://blog.voyageai.com/2024/05/29/voyage-rerank-1-cutting-edge-general-purpose-and-multilingual-reranker
+# --- Broad/General ---
+best programming language 2025
+how does DNS work
+quantum computing error correction
+kubernetes vs docker swarm comparison
+open source alternative to notion
