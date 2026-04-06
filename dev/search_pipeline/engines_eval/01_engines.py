@@ -4,14 +4,14 @@
 import argparse
 import hashlib
 import time
-import requests
 import yaml
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
-SEARXNG_URL = "http://localhost:8080/search"
+from src.search.search_web import fetch_search_results
+
 TOP_K = 30
 MAX_PAGES = 3
 SETTINGS_PATH = Path(__file__).parent.parent.parent.parent / "src" / "searxng" / "settings.yml"
@@ -80,28 +80,20 @@ def compute_settings_hash() -> str:
     return hashlib.md5(content.encode()).hexdigest()[:8]
 
 
-# Execute single query against SearXNG API with profile parameters and pagination
+# Execute single query against search API with profile parameters and pagination
 def run_query(query: str, profile: dict) -> list[dict]:
     all_results = []
     seen_urls = set()
 
     for page in range(1, MAX_PAGES + 1):
-        params = {
-            "q": query,
-            "format": "json",
-            "categories": profile.get("category", "general"),
-            "language": profile.get("language", "en"),
-            "pageno": page,
-        }
-        if profile.get("time_range"):
-            params["time_range"] = profile["time_range"]
-        if profile.get("engines"):
-            params["engines"] = profile["engines"]
-
-        response = requests.get(SEARXNG_URL, params=params)
-        response.raise_for_status()
-        data = response.json()
-        results = data.get("results", [])
+        results = fetch_search_results(
+            query,
+            profile.get("category", "general"),
+            profile.get("language", "en"),
+            profile.get("time_range"),
+            profile.get("engines"),
+            page,
+        )
 
         if not results:
             break

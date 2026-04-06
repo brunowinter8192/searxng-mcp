@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
 # INFRASTRUCTURE
+import logging
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-import requests
+from src.search.search_web import fetch_search_results
+
+logger = logging.getLogger(__name__)
 
 REPORTS_DIR = Path(__file__).parent / "25_reports"
-SEARXNG_URL = "http://localhost:8080/search"
 DELAY_BETWEEN_QUERIES = 3
 
 TEST_QUERIES = [
@@ -38,7 +40,7 @@ TEST_QUERIES = [
     "Datenschutz DSGVO Website Impressum",
     # Niche/Specific
     "crawl4ai stealth browser detection bypass",
-    "SearXNG engine weight configuration",
+    "pydoll chromium CDP automation",
     "tmux session management scripting",
     "trafilatura vs readability content extraction",
     "SPLADE sparse retrieval model implementation",
@@ -68,76 +70,42 @@ def collect_rows(engine: str) -> list[dict]:
         print(f"  [{qi}/{len(TEST_QUERIES)}] {query[:60]}", file=sys.stderr)
         row = single_query(engine, query, qi)
         flag = row.get("flag") or "ok"
-        print(f"    HTTP={row['status_code']} results={row['result_count']} time={row['response_time']}s {flag}", file=sys.stderr)
+        print(f"    results={row['result_count']} time={row['response_time']}s {flag}", file=sys.stderr)
         rows.append(row)
         if qi < len(TEST_QUERIES):
             time.sleep(DELAY_BETWEEN_QUERIES)
     return rows
 
 
-# Execute one SearXNG request for a single engine, return raw metrics
+# Execute one fetch_search_results call for a single engine, return metrics
 def single_query(engine: str, query: str, qi: int) -> dict:
     start = time.time()
     try:
-        params = {
-            "q": query,
-            "format": "json",
-            "language": "en",
-            "pageno": 1,
-            "engines": engine,
-        }
-        response = requests.get(SEARXNG_URL, params=params, timeout=20)
+        results = fetch_search_results(query, "", "en", None, engine, 1)
         elapsed = round(time.time() - start, 2)
-        status_code = response.status_code
-
-        if status_code != 200:
-            return {
-                "qi": qi, "query": query, "status_code": status_code,
-                "result_count": 0, "response_time": elapsed,
-                "unresponsive": [], "flag": f"HTTP_{status_code}",
-                "raw_preview": response.text[:100],
-            }
-
-        raw_text = response.text
-        data = response.json()
-        results = data.get("results", [])
-        unresponsive = data.get("unresponsive_engines", [])
-
-        engine_in_unresponsive = any(
-            (isinstance(e, list) and e[0] == engine) or
-            (isinstance(e, dict) and e.get("name") == engine) or
-            (isinstance(e, str) and e == engine)
-            for e in unresponsive
-        )
-
-        flag = ""
-        if engine_in_unresponsive:
-            flag = "ENGINE_SUSPENDED"
-        elif len(results) == 0:
-            flag = "ZERO_RESULTS"
-
-        raw_preview = raw_text[:100] if len(results) == 0 else ""
-
+        flag = "ZERO_RESULTS" if not results else ""
         return {
-            "qi": qi, "query": query, "status_code": status_code,
-            "result_count": len(results), "response_time": elapsed,
-            "unresponsive": [str(e) for e in unresponsive],
-            "flag": flag, "raw_preview": raw_preview,
+            "qi": qi,
+            "query": query,
+            "result_count": len(results),
+            "response_time": elapsed,
+            "flag": flag,
         }
     except Exception as e:
         elapsed = round(time.time() - start, 2)
+        logger.error("Engine %s query %d failed: %s", engine, qi, e)
         return {
-            "qi": qi, "query": query, "status_code": 0,
-            "result_count": 0, "response_time": elapsed,
-            "unresponsive": [], "flag": f"EXCEPTION: {str(e)[:80]}",
-            "raw_preview": "",
+            "qi": qi,
+            "query": query,
+            "result_count": 0,
+            "response_time": elapsed,
+            "flag": f"EXCEPTION: {str(e)[:80]}",
         }
 
 
-# Analyse rows to find first failure, suspension, and recovery points
+# Analyse rows to find first failure and recovery points
 def find_breakpoints(rows: list) -> dict:
     first_zero = next((r["qi"] for r in rows if r["result_count"] == 0), None)
-    first_suspended = next((r["qi"] for r in rows if r["flag"] == "ENGINE_SUSPENDED"), None)
 
     recovery_after_zero = None
     if first_zero:
@@ -151,7 +119,6 @@ def find_breakpoints(rows: list) -> dict:
 
     return {
         "first_zero": first_zero,
-        "first_suspended": first_suspended,
         "recovery_after_zero": recovery_after_zero,
         "total_zero": total_zero,
         "total_ok": total_ok,
@@ -179,11 +146,6 @@ def build_report(engine: str, rows: list) -> str:
     else:
         lines.append("- **First zero result:** None — all queries returned results")
 
-    if bp["first_suspended"]:
-        lines.append(f"- **First ENGINE_SUSPENDED:** Query #{bp['first_suspended']} — \"{rows[bp['first_suspended'] - 1]['query']}\"")
-    else:
-        lines.append("- **First ENGINE_SUSPENDED:** Not detected")
-
     if bp["recovery_after_zero"]:
         lines.append(f"- **Recovery after first zero:** Query #{bp['recovery_after_zero']} — \"{rows[bp['recovery_after_zero'] - 1]['query']}\"")
     elif bp["first_zero"]:
@@ -193,19 +155,14 @@ def build_report(engine: str, rows: list) -> str:
         "",
         "## Detail",
         "",
-        "| # | Query | HTTP | Results | Time(s) | Error/Flag |",
-        "|---|-------|------|---------|---------|------------|",
+        "| # | Query | Results | Time(s) | Error/Flag |",
+        "|---|-------|---------|---------|------------|",
     ]
 
     for r in rows:
         query_short = r["query"][:55].replace("|", "\\|")
         flag_cell = r["flag"] or "—"
-        if r["unresponsive"]:
-            unresponsive_str = str(r["unresponsive"])[:80]
-            flag_cell += f" unresponsive={unresponsive_str}"
-        if r["raw_preview"]:
-            flag_cell += f" raw={r['raw_preview'][:60]!r}"
-        lines.append(f"| {r['qi']} | {query_short} | {r['status_code']} | {r['result_count']} | {r['response_time']} | {flag_cell} |")
+        lines.append(f"| {r['qi']} | {query_short} | {r['result_count']} | {r['response_time']} | {flag_cell} |")
 
     return "\n".join(lines)
 
