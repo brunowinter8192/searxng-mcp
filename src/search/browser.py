@@ -129,6 +129,14 @@ async def get_tab():
     return _tab
 
 
+# Create a new isolated tab in the shared browser with fingerprint patches applied
+async def new_tab():
+    await get_tab()
+    tab = await _browser.new_tab()
+    await apply_fingerprint_patches(tab)
+    return tab
+
+
 # Cleanup browser on shutdown
 async def close_browser():
     global _browser, _tab

@@ -4,7 +4,7 @@ import json
 import logging
 from urllib.parse import quote_plus
 
-from src.search.browser import get_tab
+from src.search.browser import new_tab
 from src.search.engines.base import BaseEngine
 from src.search.rate_limiter import get_limiter
 from src.search.result import SearchResult
@@ -51,7 +51,7 @@ class StartpageEngine(BaseEngine):
 # Navigate to Startpage search URL and extract result items via JS evaluation
 async def _fetch_results(query: str, language: str) -> list[dict] | None:
     url = SEARCH_URL.format(query=quote_plus(query), language=language)
-    tab = await get_tab()
+    tab = await new_tab()
     try:
         await tab.go_to(url, timeout=30)
         await asyncio.sleep(WAIT_SECONDS)
@@ -64,6 +64,8 @@ async def _fetch_results(query: str, language: str) -> list[dict] | None:
     except Exception as e:
         logger.warning("Startpage fetch failed: %s", e)
         return None
+    finally:
+        await tab.close()
 
 
 # Extract the JS return value from pydoll execute_script response (handles nested structure)

@@ -4,7 +4,7 @@ import json
 import logging
 from urllib.parse import quote_plus, urlparse, parse_qs
 
-from src.search.browser import get_tab
+from src.search.browser import new_tab
 from src.search.engines.base import BaseEngine
 from src.search.rate_limiter import RateLimiter, get_limiter, _limiters
 from src.search.result import SearchResult
@@ -65,7 +65,7 @@ class GoogleEngine(BaseEngine):
         logger.info("Google search: %s", query)
         limiter = get_limiter(self.name)
         await limiter.acquire()
-        tab = await get_tab()
+        tab = await new_tab()
         search_url = _build_url(query, language, max_results)
         try:
             await tab.go_to(search_url, timeout=20)
@@ -87,6 +87,8 @@ class GoogleEngine(BaseEngine):
             logger.error("Google search failed: %s", e)
             limiter.backoff()
             return []
+        finally:
+            await tab.close()
         limiter.reset_backoff()
         return results
 
