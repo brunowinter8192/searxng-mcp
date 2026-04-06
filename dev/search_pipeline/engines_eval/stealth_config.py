@@ -26,6 +26,11 @@ class StealthConfig:
     no_first_run: bool = True
     no_default_browser_check: bool = True
     disable_reading_from_canvas: bool = False  # canvas fingerprint mitigation
+    proxy_server: str | None = None            # --proxy-server=...
+    disable_gpu: bool = False                  # --disable-gpu (headless stability)
+    no_sandbox: bool = False                   # --no-sandbox (Linux only)
+    page_load_state: str = "complete"          # complete, domcontentloaded, interactive
+    user_data_dir: str | None = None           # --user-data-dir=... (persistent session)
 
     # --- Browser Preferences ---
     browser_preferences: dict = field(default_factory=lambda: {
@@ -54,6 +59,29 @@ class StealthConfig:
     navigator_hardware_concurrency: int = 10
     navigator_device_memory: int = 8
     patch_computed_style: bool = True   # fix headless CSS color detection
+    patch_webgl: bool = False           # WebGL vendor/renderer override
+    webgl_vendor: str = "Google Inc. (Apple)"
+    webgl_renderer: str = "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)"
+    patch_canvas_noise: bool = False    # subtle canvas fingerprint randomization
+    patch_permissions: bool = False     # Permissions.query override for notifications
+
+    # --- CDP Network Commands (per-tab, runtime) ---
+    set_useragent_override: bool = False        # CDP Network.setUserAgentOverride
+    extra_http_headers: dict | None = None      # Network.setExtraHTTPHeaders headers dict
+    block_urls: list[str] | None = None         # URLs to block (tracking/analytics)
+    disable_cache: bool = False                 # Network.setCacheDisabled
+
+    # --- CDP Emulation (per-tab, runtime) ---
+    emulate_network: bool = False       # whether to emulate network conditions
+    network_latency: int = 0            # ms
+    network_download: int = -1          # bytes/s (-1 = unlimited)
+    network_upload: int = -1            # bytes/s
+
+    # --- Context / Interaction ---
+    use_contexts: bool = False          # browser.new_context() for cookie isolation
+    humanize_click: bool = False        # element.click(humanize=True)
+    humanize_type: bool = False         # element.type_text(humanize=True)
+    humanize_scroll: bool = False       # scroll with easing/jitter
 
     # --- Rate Limiter (per-engine overrides) ---
     rate_limits: dict = field(default_factory=lambda: {
@@ -71,6 +99,11 @@ class StealthConfig:
     # --- Request delay between engines in test scripts ---
     delay_between_engines: float = 3.0
     delay_between_queries: float = 5.0
+
+    # --- Test Script Constants ---
+    max_wait_cycles: int = 15       # polling rounds for result wait
+    wait_interval: float = 1.0      # pause between polls (seconds)
+    sleep_wait: float = 3.0         # fixed wait for sleep-based engines (seconds)
 
 
 # Singleton default config
@@ -99,6 +132,14 @@ def build_chrome_args(config: StealthConfig) -> list[str]:
         args.append("--disable-reading-from-canvas")
     if config.headless and config.headless_new:
         args.append("--headless=new")
+    if config.proxy_server:
+        args.append(f"--proxy-server={config.proxy_server}")
+    if config.disable_gpu:
+        args.append("--disable-gpu")
+    if config.no_sandbox:
+        args.append("--no-sandbox")
+    if config.user_data_dir:
+        args.append(f"--user-data-dir={config.user_data_dir}")
     return args
 
 
@@ -141,5 +182,64 @@ def build_js_patches(config: StealthConfig) -> str:
             "    };",
         ]
 
+    if config.patch_webgl:
+        vendor = config.webgl_vendor.replace("'", "\\'")
+        renderer = config.webgl_renderer.replace("'", "\\'")
+        parts += [
+            "    var _origGetParam = WebGLRenderingContext.prototype.getParameter;",
+            "    WebGLRenderingContext.prototype.getParameter = function(parameter) {",
+            "        if (parameter === 37445) return '" + vendor + "';",
+            "        if (parameter === 37446) return '" + renderer + "';",
+            "        return _origGetParam.call(this, parameter);",
+            "    };",
+            "    var _origGetParam2 = WebGL2RenderingContext.prototype.getParameter;",
+            "    WebGL2RenderingContext.prototype.getParameter = function(parameter) {",
+            "        if (parameter === 37445) return '" + vendor + "';",
+            "        if (parameter === 37446) return '" + renderer + "';",
+            "        return _origGetParam2.call(this, parameter);",
+            "    };",
+        ]
+
+    if config.patch_canvas_noise:
+        parts += [
+            "    var _origToDataURL = HTMLCanvasElement.prototype.toDataURL;",
+            "    HTMLCanvasElement.prototype.toDataURL = function(type) {",
+            "        var context = this.getContext('2d');",
+            "        if (context) {",
+            "            var imageData = context.getImageData(0, 0, this.width, this.height);",
+            "            for (var i = 0; i < imageData.data.length; i += 100) {",
+            "                imageData.data[i] ^= Math.floor(Math.random() * 2);",
+            "            }",
+            "            context.putImageData(imageData, 0, 0);",
+            "        }",
+            "        return _origToDataURL.apply(this, arguments);",
+            "    };",
+        ]
+
+    if config.patch_permissions:
+        parts += [
+            "    var _origQuery = navigator.permissions.query.bind(navigator.permissions);",
+            "    navigator.permissions.query = function(parameters) {",
+            "        if (parameters.name === 'notifications') {",
+            "            return Promise.resolve({ state: Notification.permission });",
+            "        }",
+            "        return _origQuery(parameters);",
+            "    };",
+        ]
+
     parts.append("})();")
     return "\n".join(parts)
+
+
+def build_cdp_config(config: StealthConfig) -> dict:
+    """Return dict of CDP settings to apply per tab at runtime."""
+    return {
+        "set_useragent_override": config.set_useragent_override,
+        "extra_http_headers": config.extra_http_headers,
+        "block_urls": config.block_urls,
+        "disable_cache": config.disable_cache,
+        "emulate_network": config.emulate_network,
+        "network_latency": config.network_latency,
+        "network_download": config.network_download,
+        "network_upload": config.network_upload,
+    }
