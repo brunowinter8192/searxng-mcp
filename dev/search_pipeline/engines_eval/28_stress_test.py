@@ -213,17 +213,17 @@ async def _inject_consent_cookies(tab) -> None:
     ))
 
 
-# Open tab (or context when use_contexts=True), navigate, parse, close — return QueryResult
+# Open tab (or isolated context when use_contexts=True), navigate, parse, close — return QueryResult
 async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) -> QueryResult:
     cfg = ENGINE_SELECTORS[engine]
     start = time.monotonic()
     tab = None
-    context = None
+    context_id = None
 
     try:
         if config.use_contexts:
-            context = await browser.new_context()
-            tab = await context.new_tab()
+            context_id = await browser.create_browser_context()
+            tab = await browser.new_tab(browser_context_id=context_id)
         else:
             tab = await browser.new_tab()
 
@@ -259,9 +259,9 @@ async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) 
         return QueryResult(query, engine, 0, elapsed, str(e)[:120], "")
 
     finally:
-        if config.use_contexts and context:
+        if config.use_contexts and context_id:
             try:
-                await context.close()
+                await browser.delete_browser_context(context_id)
             except Exception:
                 pass
         elif tab:
