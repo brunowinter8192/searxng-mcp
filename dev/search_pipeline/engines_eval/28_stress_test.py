@@ -29,7 +29,7 @@ REPORTS_DIR = Path(__file__).parent / "28_reports"
 SESSION_BASE = str(Path.home() / ".searxng-mcp" / "stress-test")
 PYDOLL_ENGINES = ["google", "bing", "brave", "startpage", "mojeek", "google scholar"]
 HTTPX_ENGINE_LIST = sorted(HTTPX_ENGINES)
-DOM_SETTLE_SECONDS = 2.0
+DOM_SETTLE_SECONDS = 0.0
 CROSSREF_MAILTO = "stress-test@searxng-mcp.local"
 
 
