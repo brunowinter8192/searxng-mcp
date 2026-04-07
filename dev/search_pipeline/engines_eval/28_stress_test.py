@@ -29,8 +29,7 @@ REPORTS_DIR = Path(__file__).parent / "28_reports"
 SESSION_BASE = str(Path.home() / ".searxng-mcp" / "stress-test")
 PYDOLL_ENGINES = ["google", "bing", "brave", "startpage", "mojeek", "google scholar"]
 HTTPX_ENGINE_LIST = sorted(HTTPX_ENGINES)
-MAX_WAIT_CYCLES = 15
-WAIT_INTERVAL = 1.0
+DOM_SETTLE_SECONDS = 2.0
 CROSSREF_MAILTO = "stress-test@searxng-mcp.local"
 
 
@@ -248,7 +247,7 @@ async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) 
             elapsed = time.monotonic() - start
             return QueryResult(query, engine, 0, elapsed, "consent_redirect", "")
 
-        await _wait_for_results(tab, cfg)
+        await asyncio.sleep(DOM_SETTLE_SECONDS)
         items = await _parse_results(tab, cfg)
         elapsed = time.monotonic() - start
         first_title = items[0].get("title", "")[:60] if items else ""
@@ -335,17 +334,6 @@ async def _query_crossref(client: httpx.AsyncClient, query: str) -> QueryResult:
     except Exception as e:
         elapsed = time.monotonic() - start
         return QueryResult(query, "crossref", 0, elapsed, str(e)[:120], "")
-
-
-# Poll for results until wait_js returns non-zero count or MAX_WAIT_CYCLES exceeded
-async def _wait_for_results(tab, cfg: dict) -> bool:
-    for _ in range(MAX_WAIT_CYCLES):
-        raw = await tab.execute_script(cfg["wait_js"])
-        count = _extract_nested(raw)
-        if count and int(count) > 0:
-            return True
-        await asyncio.sleep(WAIT_INTERVAL)
-    return False
 
 
 # Execute parse_js and return list of result dicts
