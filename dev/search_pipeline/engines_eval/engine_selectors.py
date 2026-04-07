@@ -112,7 +112,8 @@ JSON.stringify((function() {
 
     "bing": {
         "url_fn": _bing_url,
-        "wait": "sleep",
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('li.b_algo').length",
         "parse_js": """
 JSON.stringify((function() {
     var items = document.querySelectorAll('li.b_algo');
@@ -135,7 +136,8 @@ JSON.stringify((function() {
 
     "brave": {
         "url_fn": _brave_url,
-        "wait": "sleep",
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('div.snippet').length",
         "parse_js": """
 JSON.stringify((function() {
     var snippets = document.querySelectorAll('div.snippet');
@@ -161,7 +163,8 @@ JSON.stringify((function() {
 
     "startpage": {
         "url_fn": _startpage_url,
-        "wait": "sleep",
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('div.result').length",
         "parse_js": """
 JSON.stringify((function() {
     var results = document.querySelectorAll('div.result');
@@ -184,7 +187,8 @@ JSON.stringify((function() {
 
     "mojeek": {
         "url_fn": _mojeek_url,
-        "wait": "sleep",
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('ul.results-standard li').length",
         "parse_js": """
 JSON.stringify((function() {
     var items = document.querySelectorAll('ul.results-standard li');

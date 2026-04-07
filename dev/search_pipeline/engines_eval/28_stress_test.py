@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import dataclasses
 import json
+import random
 import sys
 import time
 from dataclasses import dataclass
@@ -12,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import httpx
+from duckduckgo_search import DDGS
 from pydoll.browser import Chrome
 from pydoll.browser.options import ChromiumOptions
 from pydoll.commands import PageCommands
@@ -19,15 +22,16 @@ from pydoll.commands.network_commands import NetworkCommands
 from pydoll.protocol.network.types import CookieSameSite
 
 from stealth_config import DEFAULT_CONFIG, StealthConfig, build_chrome_args, build_js_patches
-from engine_selectors import ENGINE_SELECTORS
+from engine_selectors import ENGINE_SELECTORS, HTTPX_ENGINES
 
 QUERIES_FILE = Path(__file__).parent.parent / "queries.txt"
 REPORTS_DIR = Path(__file__).parent / "28_reports"
-SESSION_DIR = str(Path.home() / ".searxng-mcp" / "stress-test-session")
+SESSION_BASE = str(Path.home() / ".searxng-mcp" / "stress-test")
 PYDOLL_ENGINES = ["google", "bing", "brave", "startpage", "mojeek", "google scholar"]
+HTTPX_ENGINE_LIST = sorted(HTTPX_ENGINES)
 MAX_WAIT_CYCLES = 15
 WAIT_INTERVAL = 1.0
-SLEEP_WAIT = 3.0
+CROSSREF_MAILTO = "stress-test@searxng-mcp.local"
 
 
 @dataclass
@@ -42,65 +46,55 @@ class QueryResult:
 
 # ORCHESTRATOR
 
-# Fire all queries at all 6 pydoll engines, collect results, write summary report
-async def run_stress_test(config: StealthConfig, limit: Optional[int]) -> None:
+# Run all engines in parallel, collect results, write summary report
+async def run_stress_test(
+    config: StealthConfig,
+    limit: Optional[int],
+    engine_filter: Optional[str],
+    jitter: float,
+) -> None:
     queries = _load_queries(limit)
-    total = len(queries) * len(PYDOLL_ENGINES)
-    print(f"Loaded {len(queries)} queries | Engines: {len(PYDOLL_ENGINES)} | Total: {total}", file=sys.stderr)
+
+    pydoll_engines = [e for e in PYDOLL_ENGINES if not engine_filter or e == engine_filter]
+    httpx_engines = [e for e in HTTPX_ENGINE_LIST if not engine_filter or e == engine_filter]
+    all_engines = pydoll_engines + httpx_engines
+
+    total = len(queries) * len(all_engines)
+    print(
+        f"Loaded {len(queries)} queries | Engines: {len(all_engines)} | Total: {total}",
+        file=sys.stderr,
+    )
+
+    wall_start = time.monotonic()
+
+    outputs = await asyncio.gather(
+        *[_run_pydoll_engine(e, queries, config, jitter) for e in pydoll_engines],
+        *[_run_httpx_engine(e, queries) for e in httpx_engines],
+        return_exceptions=True,
+    )
+
+    total_wall = time.monotonic() - wall_start
 
     results: list[QueryResult] = []
-    browser = None
-    browser_restarted = False
+    timings: dict[str, float] = {}
 
-    try:
-        browser = await _start_browser(config)
+    for engine, output in zip(all_engines, outputs):
+        if isinstance(output, Exception):
+            print(f"  [{engine}] engine-level crash — {output}", file=sys.stderr)
+            timings[engine] = 0.0
+        else:
+            engine_results, engine_wall = output
+            results.extend(engine_results)
+            timings[engine] = engine_wall
 
-        for q_idx, query in enumerate(queries, 1):
-            print(f"\n[{q_idx}/{len(queries)}] {query!r}", file=sys.stderr)
-
-            for engine in PYDOLL_ENGINES:
-                try:
-                    result = await _run_one(browser, query, engine, config)
-                except Exception as e:
-                    err_str = str(e)
-                    print(f"  {engine}: browser-level error — {err_str[:80]}", file=sys.stderr)
-
-                    if not browser_restarted:
-                        print("  Attempting browser restart...", file=sys.stderr)
-                        try:
-                            await browser.stop()
-                        except Exception:
-                            pass
-                        try:
-                            browser = await _start_browser(config)
-                            browser_restarted = True
-                            result = await _run_one(browser, query, engine, config)
-                        except Exception as e2:
-                            result = QueryResult(query, engine, 0, 0.0, f"restart_failed: {str(e2)[:80]}", "")
-                    else:
-                        result = QueryResult(query, engine, 0, 0.0, f"browser_dead: {err_str[:80]}", "")
-
-                results.append(result)
-                status = f"  {engine}: {result.result_count} results ({result.response_time:.1f}s)"
-                if result.error:
-                    status += f" | {result.error[:50]}"
-                print(status, file=sys.stderr)
-
-    finally:
-        if browser:
-            try:
-                await browser.stop()
-            except Exception:
-                pass
-
-    report = _build_report(results, len(queries))
+    report = _build_report(results, len(queries), timings, total_wall)
     path = _save_report(report)
     print(f"\nReport: {path}")
 
 
 # FUNCTIONS
 
-# Parse queries.txt and return only @profile: general queries (non-empty, non-comment)
+# Parse queries.txt and return only @profile: general queries
 def _load_queries(limit: Optional[int]) -> list[str]:
     text = QUERIES_FILE.read_text(encoding="utf-8")
     queries = []
@@ -120,11 +114,79 @@ def _load_queries(limit: Optional[int]) -> list[str]:
     return queries[:limit] if limit else queries
 
 
-# Build browser with stealth config, inject consent cookies once into shared cookie store
-async def _start_browser(config: StealthConfig):
+# Run all queries for one pydoll engine with a dedicated Chrome browser
+async def _run_pydoll_engine(
+    engine: str, queries: list[str], config: StealthConfig, jitter: float
+) -> tuple[list[QueryResult], float]:
+    results: list[QueryResult] = []
+    wall_start = time.monotonic()
+    browser = None
+
+    try:
+        browser = await _start_browser(engine, config)
+
+        for q_idx, query in enumerate(queries, 1):
+            if jitter > 0 and q_idx > 1:
+                await asyncio.sleep(random.uniform(0, jitter))
+
+            print(f"  [{engine}] [{q_idx}/{len(queries)}] {query[:40]!r}", file=sys.stderr)
+            try:
+                result = await _run_one_tab(browser, query, engine, config)
+            except Exception as e:
+                err_str = str(e)
+                print(f"  [{engine}] browser-level error — {err_str[:80]}", file=sys.stderr)
+                try:
+                    await browser.stop()
+                except Exception:
+                    pass
+                try:
+                    browser = await _start_browser(engine, config)
+                    result = await _run_one_tab(browser, query, engine, config)
+                except Exception as e2:
+                    result = QueryResult(query, engine, 0, 0.0, f"restart_failed: {str(e2)[:80]}", "")
+
+            results.append(result)
+            status = f"  [{engine}] {result.result_count} results ({result.response_time:.1f}s)"
+            if result.error:
+                status += f" | {result.error[:50]}"
+            print(status, file=sys.stderr)
+
+    finally:
+        if browser:
+            try:
+                await browser.stop()
+            except Exception:
+                pass
+
+    return results, time.monotonic() - wall_start
+
+
+# Run all queries for one httpx engine (DuckDuckGo, Semantic Scholar, CrossRef)
+async def _run_httpx_engine(engine: str, queries: list[str]) -> tuple[list[QueryResult], float]:
+    results: list[QueryResult] = []
+    wall_start = time.monotonic()
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for q_idx, query in enumerate(queries, 1):
+            print(f"  [{engine}] [{q_idx}/{len(queries)}] {query[:40]!r}", file=sys.stderr)
+            result = await _run_one_httpx(client, engine, query)
+            results.append(result)
+            status = f"  [{engine}] {result.result_count} results ({result.response_time:.1f}s)"
+            if result.error:
+                status += f" | {result.error[:50]}"
+            print(status, file=sys.stderr)
+
+    return results, time.monotonic() - wall_start
+
+
+# Build browser with engine-specific session dir and inject consent cookies
+async def _start_browser(engine: str, config: StealthConfig):
+    engine_slug = engine.replace(" ", "_")
+    session_dir = f"{SESSION_BASE}/{engine_slug}"
+
     options = ChromiumOptions()
     options.headless = config.headless
-    options.add_argument(f"--user-data-dir={SESSION_DIR}")
+    options.add_argument(f"--user-data-dir={session_dir}")
     options.block_popups = True
     options.block_notifications = True
     options.webrtc_leak_protection = config.webrtc_leak_protection
@@ -139,7 +201,7 @@ async def _start_browser(config: StealthConfig):
     return browser
 
 
-# Set Google/Scholar SOCS consent cookie in browser-wide cookie store via CDP
+# Set Google/Scholar SOCS consent cookie via CDP
 async def _inject_consent_cookies(tab) -> None:
     cookie = ENGINE_SELECTORS["google"]["consent_cookie"]
     await tab._execute_command(NetworkCommands.set_cookie(
@@ -152,14 +214,19 @@ async def _inject_consent_cookies(tab) -> None:
     ))
 
 
-# Open new tab, apply JS patches, navigate, wait, parse, close tab — return QueryResult
-async def _run_one(browser, query: str, engine: str, config: StealthConfig) -> QueryResult:
+# Open tab (or context when use_contexts=True), navigate, parse, close — return QueryResult
+async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) -> QueryResult:
     cfg = ENGINE_SELECTORS[engine]
     start = time.monotonic()
     tab = None
+    context = None
 
     try:
-        tab = await browser.new_tab()
+        if config.use_contexts:
+            context = await browser.new_context()
+            tab = await context.new_tab()
+        else:
+            tab = await browser.new_tab()
 
         js = build_js_patches(config)
         await tab._execute_command(
@@ -182,30 +249,96 @@ async def _run_one(browser, query: str, engine: str, config: StealthConfig) -> Q
             return QueryResult(query, engine, 0, elapsed, "consent_redirect", "")
 
         await _wait_for_results(tab, cfg)
-        results = await _parse_results(tab, cfg)
+        items = await _parse_results(tab, cfg)
         elapsed = time.monotonic() - start
-        first_title = results[0].get("title", "")[:60] if results else ""
+        first_title = items[0].get("title", "")[:60] if items else ""
 
-        return QueryResult(query, engine, len(results), elapsed, None, first_title)
+        return QueryResult(query, engine, len(items), elapsed, None, first_title)
 
     except Exception as e:
         elapsed = time.monotonic() - start
         return QueryResult(query, engine, 0, elapsed, str(e)[:120], "")
 
     finally:
-        if tab:
+        if config.use_contexts and context:
+            try:
+                await context.close()
+            except Exception:
+                pass
+        elif tab:
             try:
                 await tab.close()
             except Exception:
                 pass
 
 
-# Wait for results using engine's strategy: JS poll or fixed sleep
-async def _wait_for_results(tab, cfg: dict) -> bool:
-    if cfg["wait"] == "sleep":
-        await asyncio.sleep(SLEEP_WAIT)
-        return True
+# Dispatch httpx query to the right engine implementation
+async def _run_one_httpx(client: httpx.AsyncClient, engine: str, query: str) -> QueryResult:
+    if engine == "duckduckgo":
+        return await _query_duckduckgo(query)
+    if engine == "semantic scholar":
+        return await _query_semantic_scholar(client, query)
+    if engine == "crossref":
+        return await _query_crossref(client, query)
+    return QueryResult(query, engine, 0, 0.0, f"unknown httpx engine: {engine}", "")
 
+
+# Query DuckDuckGo via duckduckgo_search library (sync, wrapped in executor)
+async def _query_duckduckgo(query: str) -> QueryResult:
+    start = time.monotonic()
+    try:
+        loop = asyncio.get_event_loop()
+        items = await loop.run_in_executor(
+            None, lambda: list(DDGS().text(query, max_results=10))
+        )
+        elapsed = time.monotonic() - start
+        first_title = items[0].get("title", "")[:60] if items else ""
+        return QueryResult(query, "duckduckgo", len(items), elapsed, None, first_title)
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        return QueryResult(query, "duckduckgo", 0, elapsed, str(e)[:120], "")
+
+
+# Query Semantic Scholar REST API
+async def _query_semantic_scholar(client: httpx.AsyncClient, query: str) -> QueryResult:
+    start = time.monotonic()
+    try:
+        resp = await client.get(
+            "https://api.semanticscholar.org/graph/v1/paper/search",
+            params={"query": query, "limit": 10},
+        )
+        resp.raise_for_status()
+        items = resp.json().get("data", [])
+        elapsed = time.monotonic() - start
+        first_title = items[0].get("title", "")[:60] if items else ""
+        return QueryResult(query, "semantic scholar", len(items), elapsed, None, first_title)
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        return QueryResult(query, "semantic scholar", 0, elapsed, str(e)[:120], "")
+
+
+# Query CrossRef REST API (polite pool via mailto header)
+async def _query_crossref(client: httpx.AsyncClient, query: str) -> QueryResult:
+    start = time.monotonic()
+    try:
+        resp = await client.get(
+            "https://api.crossref.org/works",
+            params={"query": query, "rows": 10},
+            headers={"mailto": CROSSREF_MAILTO},
+        )
+        resp.raise_for_status()
+        items = resp.json().get("message", {}).get("items", [])
+        elapsed = time.monotonic() - start
+        titles = items[0].get("title", []) if items else []
+        first_title = titles[0][:60] if titles else ""
+        return QueryResult(query, "crossref", len(items), elapsed, None, first_title)
+    except Exception as e:
+        elapsed = time.monotonic() - start
+        return QueryResult(query, "crossref", 0, elapsed, str(e)[:120], "")
+
+
+# Poll for results until wait_js returns non-zero count or MAX_WAIT_CYCLES exceeded
+async def _wait_for_results(tab, cfg: dict) -> bool:
     for _ in range(MAX_WAIT_CYCLES):
         raw = await tab.execute_script(cfg["wait_js"])
         count = _extract_nested(raw)
@@ -235,14 +368,20 @@ def _extract_nested(result):
         return None
 
 
-# Build full markdown stress test report with summary, failure timeline, full matrix
-def _build_report(results: list[QueryResult], total_queries: int) -> str:
+# Build full markdown report with summary, timing, failure timeline, full matrix
+def _build_report(
+    results: list[QueryResult],
+    total_queries: int,
+    timings: dict[str, float],
+    total_wall: float,
+) -> str:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-    engines = PYDOLL_ENGINES
+    engines = [e for e in (PYDOLL_ENGINES + HTTPX_ENGINE_LIST) if e in timings]
 
     by_engine: dict[str, list[QueryResult]] = {e: [] for e in engines}
     for r in results:
-        by_engine[r.engine].append(r)
+        if r.engine in by_engine:
+            by_engine[r.engine].append(r)
 
     queries_ordered: list[str] = []
     seen: set[str] = set()
@@ -264,12 +403,32 @@ def _build_report(results: list[QueryResult], total_queries: int) -> str:
 
     for engine in engines:
         ers = by_engine[engine]
+        if not ers:
+            continue
         success = sum(1 for r in ers if r.result_count > 0)
         zero = sum(1 for r in ers if r.result_count == 0 and not r.error)
         errors = sum(1 for r in ers if r.error)
-        avg_time = sum(r.response_time for r in ers) / len(ers) if ers else 0.0
+        avg_time = sum(r.response_time for r in ers) / len(ers)
         total_urls = sum(r.result_count for r in ers)
         lines.append(f"| {engine} | {success} | {zero} | {errors} | {avg_time:.1f}s | {total_urls} |")
+
+    lines += [
+        "",
+        "## Timing",
+        "",
+        "| Engine | Wall Clock | Queries | Avg/Query |",
+        "|--------|-----------|---------|-----------|",
+    ]
+
+    for engine in engines:
+        wall = timings.get(engine, 0.0)
+        n = len(by_engine[engine])
+        avg = wall / n if n else 0.0
+        lines.append(f"| {engine} | {wall:.1f}s | {n} | {avg:.1f}s |")
+
+    total_m = int(total_wall // 60)
+    total_s = total_wall % 60
+    lines.append(f"\nTotal wall clock: {total_m}m {total_s:.1f}s (parallel)")
 
     lines += [
         "",
@@ -331,10 +490,19 @@ def _save_report(report: str) -> str:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Stress test — all general queries × 6 pydoll engines")
+    parser = argparse.ArgumentParser(description="Stress test — all queries × 9 engines (parallel)")
     parser.add_argument("--headed", action="store_true", help="Run with visible browser")
     parser.add_argument("--limit", type=int, default=None, help="Only first N queries")
+    parser.add_argument("--engine", type=str, default=None, help="Only test this engine")
+    parser.add_argument("--use-contexts", action="store_true", help="browser.new_context() per query (Brave tuning)")
+    parser.add_argument("--canvas-noise", action="store_true", help="Enable canvas fingerprint noise")
+    parser.add_argument("--jitter", type=float, default=0.0, help="Random delay between queries (seconds)")
     args = parser.parse_args()
 
-    config = dataclasses.replace(DEFAULT_CONFIG, headless=not args.headed)
-    asyncio.run(run_stress_test(config, args.limit))
+    config = dataclasses.replace(
+        DEFAULT_CONFIG,
+        headless=not args.headed,
+        use_contexts=args.use_contexts,
+        patch_canvas_noise=args.canvas_noise,
+    )
+    asyncio.run(run_stress_test(config, args.limit, args.engine, args.jitter))
