@@ -13,6 +13,8 @@ from urllib.parse import quote_plus
 from pydoll.browser import Chrome
 from pydoll.browser.options import ChromiumOptions
 from pydoll.commands import PageCommands
+from pydoll.commands.network_commands import NetworkCommands
+from pydoll.protocol.network.types import CookieSameSite
 
 from stealth_config import DEFAULT_CONFIG, StealthConfig, build_chrome_args, build_js_patches
 
@@ -234,7 +236,20 @@ async def _start_browser(config: StealthConfig):
     browser = Chrome(options)
     tab = await browser.start()
     await _apply_js_patches(tab, config)
+    await _set_google_consent_cookies(tab)
     return browser, tab
+
+
+# Set Google consent cookie via CDP to skip consent dialog on navigation
+async def _set_google_consent_cookies(tab) -> None:
+    await tab._execute_command(NetworkCommands.set_cookie(
+        name="SOCS",
+        value="CAISHAgCEhJnd3NfMjAyNjA0MDctMCAgIBgEIAEaBgiA_fC8Bg",
+        domain=".google.com",
+        path="/",
+        secure=True,
+        same_site=CookieSameSite.LAX,
+    ))
 
 
 # Inject fingerprint patch script via Page.addScriptToEvaluateOnNewDocument
