@@ -29,21 +29,21 @@ HTTPX_ENGINES = {"duckduckgo", "semantic scholar", "crossref"}
 
 # --- Engine-specific JS strings (copied verbatim from src/search/engines/) ---
 
-_GOOGLE_JS_WAIT = "return document.querySelectorAll('div.g').length"
+_GOOGLE_JS_WAIT = "return document.querySelectorAll('#rso h3').length"
 
 _GOOGLE_JS_PARSE = """
 return JSON.stringify((function() {
-    var nodes = document.querySelectorAll('div.g');
+    var h3s = document.querySelectorAll('#rso h3');
     var out = [];
-    for (var i = 0; i < nodes.length; i++) {
-        var el = nodes[i];
-        var a = el.querySelector('a[href^="http"], a[href^="//"]');
-        var h3 = el.querySelector('h3');
-        if (!a || !h3) continue;
-        var snip = el.querySelector('.VwiC3b') ||
-                   el.querySelector('[data-sncf]') ||
-                   el.querySelector('.lEBKkf') ||
-                   el.querySelector('[data-content-feature]');
+    for (var i = 0; i < h3s.length; i++) {
+        var h3 = h3s[i];
+        var block = h3.closest('.MjjYud') || h3.closest('#rso > div') || h3.parentElement;
+        var a = block.querySelector('a[href^="http"], a[href^="//"]') || h3.closest('a');
+        if (!a) continue;
+        var snip = block.querySelector('.wHYlTd') ||
+                   block.querySelector('.VwiC3b') ||
+                   block.querySelector('[data-sncf]') ||
+                   block.querySelector('.lEBKkf');
         out.push({
             url: a.href,
             title: h3.textContent.trim(),
