@@ -1,0 +1,216 @@
+"""Declarative selector config for all 9 search engines used in stealth tests.
+
+Engines: google, bing, brave, startpage, mojeek, google scholar  → pydoll (browser-based)
+         duckduckgo, semantic scholar, crossref                   → httpx (no browser needed)
+
+All parse_js strings use 'return JSON.stringify(...)' so pydoll wraps them in an IIFE
+and the result is extracted via _extract_nested (raw["result"]["result"]["value"]).
+"""
+
+# INFRASTRUCTURE
+from urllib.parse import quote_plus
+
+# HTTPX engines — no browser, no selectors needed
+HTTPX_ENGINES = {"duckduckgo", "semantic scholar", "crossref"}
+
+
+# Build URL helpers
+def _google_url(q):
+    return f"https://www.google.com/search?q={quote_plus(q)}&hl=en&num=10"
+
+def _scholar_url(q):
+    return f"https://scholar.google.com/scholar?q={quote_plus(q)}&hl=en&num=10"
+
+def _bing_url(q):
+    return f"https://www.bing.com/search?q={quote_plus(q)}&setlang=en&count=10"
+
+def _brave_url(q):
+    return f"https://search.brave.com/search?q={quote_plus(q)}&source=web"
+
+def _startpage_url(q):
+    return f"https://www.startpage.com/sp/search?query={quote_plus(q)}&language=en"
+
+def _mojeek_url(q):
+    return f"https://www.mojeek.com/search?q={quote_plus(q)}&arc=none"
+
+
+ENGINE_SELECTORS = {
+
+    "google": {
+        "url_fn": _google_url,
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('#rso h3').length",
+        "parse_js": """
+return JSON.stringify((function() {
+    var h3s = document.querySelectorAll('#rso h3');
+    var out = [];
+    for (var i = 0; i < h3s.length; i++) {
+        var h3 = h3s[i];
+        var block = h3.closest('.MjjYud') || h3.closest('#rso > div') || h3.parentElement;
+        var a = block.querySelector('a[href^="http"], a[href^="//"]') || h3.closest('a');
+        if (!a) continue;
+        var snip = block.querySelector('.wHYlTd') ||
+                   block.querySelector('.VwiC3b') ||
+                   block.querySelector('[data-sncf]') ||
+                   block.querySelector('.lEBKkf');
+        out.push({
+            url: a.href,
+            title: h3.textContent.trim(),
+            snippet: snip ? snip.textContent.trim() : ''
+        });
+    }
+    return out;
+})());
+""",
+        "consent_cookie": {
+            "name": "SOCS",
+            "value": "CAISHAgCEhJnd3NfMjAyNjA0MDctMCAgIBgEIAEaBgiA_fC8Bg",
+            "domain": ".google.com",
+            "path": "/",
+            "secure": True,
+            "same_site": "Lax",
+        },
+        "captcha_path": "/sorry/",
+        "consent_domain": "consent.google.com",
+    },
+
+    "google scholar": {
+        "url_fn": _scholar_url,
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('div.gs_r.gs_or.gs_scl').length",
+        "parse_js": """
+return JSON.stringify((function() {
+    var nodes = document.querySelectorAll('div.gs_r.gs_or.gs_scl');
+    var out = [];
+    for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        var a = el.querySelector('h3.gs_rt a');
+        var snip = el.querySelector('div.gs_rs');
+        if (!a) continue;
+        out.push({
+            url: a.href,
+            title: a.textContent.trim(),
+            snippet: snip ? snip.textContent.trim() : ''
+        });
+    }
+    return out;
+})());
+""",
+        "consent_cookie": {
+            "name": "SOCS",
+            "value": "CAISHAgCEhJnd3NfMjAyNjA0MDctMCAgIBgEIAEaBgiA_fC8Bg",
+            "domain": ".google.com",
+            "path": "/",
+            "secure": True,
+            "same_site": "Lax",
+        },
+        "captcha_path": "/sorry/",
+        "consent_domain": "consent.google.com",
+    },
+
+    "bing": {
+        "url_fn": _bing_url,
+        "wait": "sleep",
+        "parse_js": """
+return JSON.stringify((function() {
+    var items = document.querySelectorAll('li.b_algo');
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+        var el = items[i];
+        var a = el.querySelector('h2 a');
+        var snip = el.querySelector('p.b_lineclamp2') || el.querySelector('.b_caption p');
+        if (!a) continue;
+        out.push({
+            url: a.href,
+            title: (a.textContent || '').trim(),
+            snippet: snip ? (snip.textContent || '').trim() : ''
+        });
+    }
+    return out;
+})());
+""",
+    },
+
+    "brave": {
+        "url_fn": _brave_url,
+        "wait": "sleep",
+        "parse_js": """
+return JSON.stringify((function() {
+    var snippets = document.querySelectorAll('div.snippet');
+    var out = [];
+    for (var i = 0; i < snippets.length; i++) {
+        var el = snippets[i];
+        var a = el.querySelector('a[href^="http"]');
+        if (!a || a.href.includes('brave.com')) continue;
+        var titleSpan = el.querySelector('[class*="title"]');
+        var snip = el.querySelector('[class*="description"]') || el.querySelector('p');
+        out.push({
+            url: a.href,
+            title: titleSpan ? (titleSpan.textContent || '').trim() : (a.textContent || '').trim().split('\n')[0],
+            snippet: snip ? (snip.textContent || '').trim() : ''
+        });
+    }
+    return out;
+})());
+""",
+    },
+
+    "startpage": {
+        "url_fn": _startpage_url,
+        "wait": "sleep",
+        "parse_js": """
+return JSON.stringify((function() {
+    var results = document.querySelectorAll('div.result');
+    var out = [];
+    for (var i = 0; i < results.length; i++) {
+        var el = results[i];
+        var links = el.querySelectorAll('a[href^="http"]');
+        var a = null;
+        for (var j = 0; j < links.length; j++) {
+            if (!links[j].href.includes('startpage.com')) {
+                a = links[j];
+                break;
+            }
+        }
+        if (!a) continue;
+        var snip = el.querySelector('p') || el.querySelector('[class*="description"]');
+        out.push({
+            url: a.href,
+            title: (a.textContent || '').trim().split('\n')[0],
+            snippet: snip ? (snip.textContent || '').trim() : ''
+        });
+    }
+    return out;
+})());
+""",
+    },
+
+    "mojeek": {
+        "url_fn": _mojeek_url,
+        "wait": "sleep",
+        "parse_js": """
+return JSON.stringify((function() {
+    var items = document.querySelectorAll('ul.results-standard li');
+    var out = [];
+    for (var i = 0; i < items.length; i++) {
+        var el = items[i];
+        var titleA = el.querySelector('h2 a');
+        var urlA = el.querySelector('a.ob') || titleA;
+        var snip = el.querySelector('p.s');
+        if (!urlA) continue;
+        out.push({
+            url: urlA.href,
+            title: titleA ? (titleA.textContent || '').trim() : (urlA.textContent || '').trim(),
+            snippet: snip ? (snip.textContent || '').trim() : ''
+        });
+    }
+    return out;
+})());
+""",
+    },
+
+    # HTTPX engines — type marker only, no browser selectors
+    "duckduckgo": {"type": "httpx"},
+    "semantic scholar": {"type": "httpx"},
+    "crossref": {"type": "httpx"},
+}
