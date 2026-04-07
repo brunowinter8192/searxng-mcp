@@ -3,8 +3,10 @@
 Engines: google, bing, brave, startpage, mojeek, google scholar  → pydoll (browser-based)
          duckduckgo, semantic scholar, crossref                   → httpx (no browser needed)
 
-All parse_js strings use 'return JSON.stringify(...)' so pydoll wraps them in an IIFE
-and the result is extracted via _extract_nested (raw["result"]["result"]["value"]).
+All parse_js strings use bare 'JSON.stringify(...)' expressions (no outer 'return').
+pydoll's has_return_outside_function() mishandles scripts with '//' inside string literals,
+so we avoid the outer 'return' entirely. The bare expression is sent via Runtime.evaluate
+and extracted via _extract_nested (raw["result"]["result"]["value"]).
 """
 
 # INFRASTRUCTURE
@@ -41,13 +43,13 @@ ENGINE_SELECTORS = {
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('#rso h3').length",
         "parse_js": """
-return JSON.stringify((function() {
+JSON.stringify((function() {
     var h3s = document.querySelectorAll('#rso h3');
     var out = [];
     for (var i = 0; i < h3s.length; i++) {
         var h3 = h3s[i];
         var block = h3.closest('.MjjYud') || h3.closest('#rso > div') || h3.parentElement;
-        var a = block.querySelector('a[href^="http"], a[href^="//"]') || h3.closest('a');
+        var a = block.querySelector('a[href^="http"]') || h3.closest('a');
         if (!a) continue;
         var snip = block.querySelector('.wHYlTd') ||
                    block.querySelector('.VwiC3b') ||
@@ -60,7 +62,7 @@ return JSON.stringify((function() {
         });
     }
     return out;
-})());
+})())
 """,
         "consent_cookie": {
             "name": "SOCS",
@@ -79,7 +81,7 @@ return JSON.stringify((function() {
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('div.gs_r.gs_or.gs_scl').length",
         "parse_js": """
-return JSON.stringify((function() {
+JSON.stringify((function() {
     var nodes = document.querySelectorAll('div.gs_r.gs_or.gs_scl');
     var out = [];
     for (var i = 0; i < nodes.length; i++) {
@@ -94,7 +96,7 @@ return JSON.stringify((function() {
         });
     }
     return out;
-})());
+})())
 """,
         "consent_cookie": {
             "name": "SOCS",
@@ -112,7 +114,7 @@ return JSON.stringify((function() {
         "url_fn": _bing_url,
         "wait": "sleep",
         "parse_js": """
-return JSON.stringify((function() {
+JSON.stringify((function() {
     var items = document.querySelectorAll('li.b_algo');
     var out = [];
     for (var i = 0; i < items.length; i++) {
@@ -127,7 +129,7 @@ return JSON.stringify((function() {
         });
     }
     return out;
-})());
+})())
 """,
     },
 
@@ -135,23 +137,25 @@ return JSON.stringify((function() {
         "url_fn": _brave_url,
         "wait": "sleep",
         "parse_js": """
-return JSON.stringify((function() {
+JSON.stringify((function() {
     var snippets = document.querySelectorAll('div.snippet');
     var out = [];
     for (var i = 0; i < snippets.length; i++) {
         var el = snippets[i];
         var a = el.querySelector('a[href^="http"]');
         if (!a || a.href.includes('brave.com')) continue;
-        var titleSpan = el.querySelector('[class*="title"]');
-        var snip = el.querySelector('[class*="description"]') || el.querySelector('p');
+        var snip = el.querySelector('p');
+        var rawText = (a.innerText || a.textContent || '').trim();
+        var lines = rawText.split('\\n').map(function(s) { return s.trim(); }).filter(Boolean);
+        var title = lines.length > 1 ? lines[lines.length - 1] : rawText;
         out.push({
             url: a.href,
-            title: titleSpan ? (titleSpan.textContent || '').trim() : (a.textContent || '').trim().split('\n')[0],
+            title: title,
             snippet: snip ? (snip.textContent || '').trim() : ''
         });
     }
     return out;
-})());
+})())
 """,
     },
 
@@ -159,29 +163,22 @@ return JSON.stringify((function() {
         "url_fn": _startpage_url,
         "wait": "sleep",
         "parse_js": """
-return JSON.stringify((function() {
+JSON.stringify((function() {
     var results = document.querySelectorAll('div.result');
     var out = [];
     for (var i = 0; i < results.length; i++) {
         var el = results[i];
-        var links = el.querySelectorAll('a[href^="http"]');
-        var a = null;
-        for (var j = 0; j < links.length; j++) {
-            if (!links[j].href.includes('startpage.com')) {
-                a = links[j];
-                break;
-            }
-        }
-        if (!a) continue;
+        var a = el.querySelector(':scope > a[href^="http"]');
+        if (!a || a.href.includes('startpage.com')) continue;
         var snip = el.querySelector('p') || el.querySelector('[class*="description"]');
         out.push({
             url: a.href,
-            title: (a.textContent || '').trim().split('\n')[0],
+            title: (a.textContent || '').trim().split('\\n')[0],
             snippet: snip ? (snip.textContent || '').trim() : ''
         });
     }
     return out;
-})());
+})())
 """,
     },
 
@@ -189,7 +186,7 @@ return JSON.stringify((function() {
         "url_fn": _mojeek_url,
         "wait": "sleep",
         "parse_js": """
-return JSON.stringify((function() {
+JSON.stringify((function() {
     var items = document.querySelectorAll('ul.results-standard li');
     var out = [];
     for (var i = 0; i < items.length; i++) {
@@ -205,7 +202,7 @@ return JSON.stringify((function() {
         });
     }
     return out;
-})());
+})())
 """,
     },
 

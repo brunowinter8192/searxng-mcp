@@ -17,7 +17,7 @@ from pydoll.protocol.network.types import CookieSameSite
 from stealth_config import DEFAULT_CONFIG, build_chrome_args, build_js_patches
 
 SESSION_DIR = str(Path.home() / ".searxng-mcp" / "stealth-dom-inspect-all")
-REPORTS_DIR = Path(__file__).parent / "27_reports"
+REPORTS_DIR = Path(__file__).parent / "27_reports" / "dom"
 QUERY = "python asyncio best practices"
 
 ENGINES = {
