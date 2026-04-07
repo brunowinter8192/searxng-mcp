@@ -5,7 +5,6 @@ import argparse
 import asyncio
 import dataclasses
 import json
-import random
 import sys
 import time
 from dataclasses import dataclass
@@ -29,7 +28,6 @@ REPORTS_DIR = Path(__file__).parent / "28_reports"
 SESSION_BASE = str(Path.home() / ".searxng-mcp" / "stress-test")
 PYDOLL_ENGINES = ["google", "bing", "brave", "startpage", "mojeek", "google scholar"]
 HTTPX_ENGINE_LIST = sorted(HTTPX_ENGINES)
-DOM_SETTLE_SECONDS = 0.0
 CROSSREF_MAILTO = "stress-test@searxng-mcp.local"
 
 
@@ -50,7 +48,6 @@ async def run_stress_test(
     config: StealthConfig,
     limit: Optional[int],
     engine_filter: Optional[str],
-    jitter: float,
 ) -> None:
     queries = _load_queries(limit)
 
@@ -67,7 +64,7 @@ async def run_stress_test(
     wall_start = time.monotonic()
 
     outputs = await asyncio.gather(
-        *[_run_pydoll_engine(e, queries, config, jitter) for e in pydoll_engines],
+        *[_run_pydoll_engine(e, queries, config) for e in pydoll_engines],
         *[_run_httpx_engine(e, queries) for e in httpx_engines],
         return_exceptions=True,
     )
@@ -115,7 +112,7 @@ def _load_queries(limit: Optional[int]) -> list[str]:
 
 # Run all queries for one pydoll engine with a dedicated Chrome browser
 async def _run_pydoll_engine(
-    engine: str, queries: list[str], config: StealthConfig, jitter: float
+    engine: str, queries: list[str], config: StealthConfig
 ) -> tuple[list[QueryResult], float]:
     results: list[QueryResult] = []
     wall_start = time.monotonic()
@@ -125,9 +122,6 @@ async def _run_pydoll_engine(
         browser = await _start_browser(engine, config)
 
         for q_idx, query in enumerate(queries, 1):
-            if jitter > 0 and q_idx > 1:
-                await asyncio.sleep(random.uniform(0, jitter))
-
             print(f"  [{engine}] [{q_idx}/{len(queries)}] {query[:40]!r}", file=sys.stderr)
             try:
                 result = await _run_one_tab(browser, query, engine, config)
@@ -178,8 +172,9 @@ async def _run_httpx_engine(engine: str, queries: list[str]) -> tuple[list[Query
     return results, time.monotonic() - wall_start
 
 
-# Build browser with engine-specific session dir and inject consent cookies
+# Build browser with engine-specific session dir, proxy, and consent cookies
 async def _start_browser(engine: str, config: StealthConfig):
+    eng_cfg = ENGINE_SELECTORS[engine]["config"]
     engine_slug = engine.replace(" ", "_")
     session_dir = f"{SESSION_BASE}/{engine_slug}"
 
@@ -190,6 +185,9 @@ async def _start_browser(engine: str, config: StealthConfig):
     options.block_notifications = True
     options.webrtc_leak_protection = config.webrtc_leak_protection
     options.browser_preferences = config.browser_preferences
+
+    if eng_cfg["proxy"]:
+        options.add_argument(f"--proxy-server={eng_cfg['proxy']}")
 
     for arg in build_chrome_args(config):
         options.add_argument(arg)
@@ -213,15 +211,16 @@ async def _inject_consent_cookies(tab) -> None:
     ))
 
 
-# Open tab (or isolated context when use_contexts=True), navigate, parse, close — return QueryResult
+# Open tab (or isolated context), navigate, handle captcha, parse — return QueryResult
 async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) -> QueryResult:
     cfg = ENGINE_SELECTORS[engine]
+    eng_cfg = cfg["config"]
     start = time.monotonic()
     tab = None
     context_id = None
 
     try:
-        if config.use_contexts:
+        if eng_cfg["use_context"]:
             context_id = await browser.create_browser_context()
             tab = await browser.new_tab(browser_context_id=context_id)
         else:
@@ -247,14 +246,14 @@ async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) 
             elapsed = time.monotonic() - start
             return QueryResult(query, engine, 0, elapsed, "consent_redirect", "")
 
-        if cfg.get("captcha_detect_js"):
-            raw = await tab.execute_script(cfg["captcha_detect_js"])
+        if eng_cfg["captcha_detect_js"]:
+            raw = await tab.execute_script(eng_cfg["captcha_detect_js"])
             detected = _extract_nested(raw)
             if detected:
                 elapsed = time.monotonic() - start
                 return QueryResult(query, engine, 0, elapsed, "slider_captcha", "")
 
-        await asyncio.sleep(DOM_SETTLE_SECONDS)
+        await asyncio.sleep(eng_cfg["settle_seconds"])
         items = await _parse_results(tab, cfg)
         elapsed = time.monotonic() - start
         first_title = items[0].get("title", "")[:60] if items else ""
@@ -266,7 +265,7 @@ async def _run_one_tab(browser, query: str, engine: str, config: StealthConfig) 
         return QueryResult(query, engine, 0, elapsed, str(e)[:120], "")
 
     finally:
-        if config.use_contexts and context_id:
+        if eng_cfg["use_context"] and context_id:
             try:
                 await browser.delete_browser_context(context_id)
             except Exception:
@@ -489,15 +488,7 @@ if __name__ == "__main__":
     parser.add_argument("--headed", action="store_true", help="Run with visible browser")
     parser.add_argument("--limit", type=int, default=None, help="Only first N queries")
     parser.add_argument("--engine", type=str, default=None, help="Only test this engine")
-    parser.add_argument("--use-contexts", action="store_true", help="browser.new_context() per query (Brave tuning)")
-    parser.add_argument("--canvas-noise", action="store_true", help="Enable canvas fingerprint noise")
-    parser.add_argument("--jitter", type=float, default=0.0, help="Random delay between queries (seconds)")
     args = parser.parse_args()
 
-    config = dataclasses.replace(
-        DEFAULT_CONFIG,
-        headless=not args.headed,
-        use_contexts=args.use_contexts,
-        patch_canvas_noise=args.canvas_noise,
-    )
-    asyncio.run(run_stress_test(config, args.limit, args.engine, args.jitter))
+    config = dataclasses.replace(DEFAULT_CONFIG, headless=not args.headed)
+    asyncio.run(run_stress_test(config, args.limit, args.engine))

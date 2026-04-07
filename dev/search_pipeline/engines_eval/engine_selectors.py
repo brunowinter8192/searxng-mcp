@@ -7,6 +7,12 @@ All parse_js strings use bare 'JSON.stringify(...)' expressions (no outer 'retur
 pydoll's has_return_outside_function() mishandles scripts with '//' inside string literals,
 so we avoid the outer 'return' entirely. The bare expression is sent via Runtime.evaluate
 and extracted via _extract_nested (raw["result"]["result"]["value"]).
+
+Each pydoll engine has a 'config' dict:
+  proxy           — proxy URL or None (e.g. "socks5://127.0.0.1:9050" for Tor)
+  settle_seconds  — DOM settle sleep after navigation (0.0 if engine is fast enough)
+  use_context     — create fresh browser context per query for cookie isolation
+  captcha_detect_js — JS returning truthy if a captcha is present (None if not needed)
 """
 
 # INFRASTRUCTURE
@@ -39,6 +45,12 @@ def _mojeek_url(q):
 ENGINE_SELECTORS = {
 
     "google": {
+        "config": {
+            "proxy": None,
+            "settle_seconds": 0.0,
+            "use_context": False,
+            "captcha_detect_js": None,
+        },
         "url_fn": _google_url,
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('#rso h3').length",
@@ -77,6 +89,12 @@ JSON.stringify((function() {
     },
 
     "google scholar": {
+        "config": {
+            "proxy": None,
+            "settle_seconds": 0.0,
+            "use_context": False,
+            "captcha_detect_js": None,
+        },
         "url_fn": _scholar_url,
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('div.gs_r.gs_or.gs_scl').length",
@@ -111,6 +129,12 @@ JSON.stringify((function() {
     },
 
     "bing": {
+        "config": {
+            "proxy": None,
+            "settle_seconds": 0.0,
+            "use_context": False,
+            "captcha_detect_js": None,
+        },
         "url_fn": _bing_url,
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('li.b_algo').length",
@@ -135,15 +159,20 @@ JSON.stringify((function() {
     },
 
     "brave": {
-        "url_fn": _brave_url,
-        "wait": "poll",
-        "wait_js": "return document.querySelectorAll('div.snippet').length",
-        "captcha_detect_js": """
+        "config": {
+            "proxy": "socks5://127.0.0.1:9050",
+            "settle_seconds": 2.0,
+            "use_context": False,
+            "captcha_detect_js": """
 (function() {
     var dlg = document.querySelector('dialog .captcha-card, div.captcha-card');
     return dlg ? true : false;
 })()
 """,
+        },
+        "url_fn": _brave_url,
+        "wait": "poll",
+        "wait_js": "return document.querySelectorAll('div.snippet').length",
         "parse_js": """
 JSON.stringify((function() {
     var snippets = document.querySelectorAll('div.snippet');
@@ -168,6 +197,12 @@ JSON.stringify((function() {
     },
 
     "startpage": {
+        "config": {
+            "proxy": None,
+            "settle_seconds": 2.0,
+            "use_context": False,
+            "captcha_detect_js": None,
+        },
         "url_fn": _startpage_url,
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('div.result').length",
@@ -192,6 +227,12 @@ JSON.stringify((function() {
     },
 
     "mojeek": {
+        "config": {
+            "proxy": None,
+            "settle_seconds": 2.0,
+            "use_context": False,
+            "captcha_detect_js": None,
+        },
         "url_fn": _mojeek_url,
         "wait": "poll",
         "wait_js": "return document.querySelectorAll('ul.results-standard li').length",
