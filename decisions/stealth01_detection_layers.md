@@ -75,14 +75,48 @@ Google 30/30 und Brave 1/30 nutzen identische Stealth-Config (DEFAULT_CONFIG). U
 
 ### Brave PoW CAPTCHA (2026-04-07)
 - Screenshot: "Confirm you're a human being / I'm not a robot" Dialog mit "Learn more about Proof of Work Captcha"
-- Svelte-basierter Slider CAPTCHA — kein einfacher Button-Click
-- Tritt ab Query 2 auf (Query 1 liefert 23 Results)
+- Svelte-basierter CAPTCHA — PoW (Proof of Work) Challenge, nicht Slider
+- Tritt ab Query 2-3 auf (Query 1 liefert Results)
 - Mit Tor-Proxy: 0/30 (Tor Exit-Nodes auf Blocklist)
-- captcha_detect_js Selektor (`dialog .captcha-card`) matcht nicht das tatsächliche DOM
+- captcha_detect_js Selektor (`dialog .captcha-card`) matcht nicht das tatsächliche DOM — korrekt wäre `[class*="pow-captcha"]` oder Title-Check
+
+### Brave PoW CAPTCHA Technische Analyse (2026-04-09)
+- Algorithmus: Argon2 (Memory-Hard Hash) via WASM, berechnet in Web Worker
+- Challenge-Parameter: zero_count=1 (trivial), 21 Tokens, iterations=2, memory_size=512KB
+- Privacy Pass: VOPRF-Protokoll (Blind Tokens) in separatem WASM-Modul
+- API-Endpoint: POST `/api/captcha/pow?brave=0` mit solutions + blinded_messages
+- Server antwortet mit signed_tokens → Cookie → Zugang
+- Klick auf "I'm not a robot": Spinner "Letting you in..." erscheint, nach 3s keine Weiterleitung — unklar ob Berechnung zu langsam oder Server rejected wegen Fingerprint
+- Zwei CAPTCHA-Tiers: PoW ("I'm not a robot") für Chrome/pydoll, Slider ("Drag the slider") für Patchright/Chromium
+
+### Stealth-Patch-Matrix Brave (2026-04-09)
+
+| Stack / Patch | X/30 | Erste Failure | Delta vs Baseline |
+|---------------|------|---------------|-------------------|
+| pydoll Baseline (settle=0.0, proxy=None) | 3/30 | Query 3 | — |
+| pydoll + patch_webgl=True | 10/30 | Query 11 | +7 |
+| pydoll + patch_canvas_noise=True | 6/30 | Query 7 | +3 |
+| pydoll + patch_permissions=True | 0/30 | Query 1 | -3 (kontraproduktiv) |
+| pydoll + chrome.runtime + navigator.plugins | 0/30 | Query 1 | -3 (kontraproduktiv) |
+| pydoll + alle Patches kombiniert | 0/30 | Query 1 | -3 (schlechte Patches dominieren) |
+| Patchright (Chromium Binary) | 0/30 | Query 1 | -3 (Slider CAPTCHA statt PoW) |
+| Camoufox (Firefox, headless) | 7/30 | Query 8 | +4 |
+
+Erkenntnis: WebGL-Fingerprint ist das stärkste Einzelsignal. Browser-Typ (Chrome vs Firefox) ist sekundär. Brave detects JS-Overrides von Permissions und navigator.plugins direkt → kontraproduktiv. Keine Kombination erreicht >10/30.
 
 ### puppeteer-extra-plugin-stealth Vergleich (2026-04-07)
 - Fehlende Patches vs. puppeteer-extra: chrome.runtime Masking, navigator.plugins Spoofing
 - Quelle: GitHub puppeteer-extra-plugin-stealth Source
+- Nachträglich implementiert und getestet: beide kontraproduktiv bei Brave (0/30)
+
+### Brave Detection-Signale (2026-04-09, aus Reverse-Engineering)
+- CDP Runtime.enable + Error.stack Getter Trap (pydoll betroffen, Patchright fixt es)
+- navigator.userAgentData.brands: "Chromium" vs "Google Chrome" (Patchright mit Chromium-Binary betroffen)
+- __playwright_evaluation_script__ in Function.prototype.toString
+- navigator.webdriver = true
+- WebGL SwiftShader Renderer (starkes Signal — WebGL-Patch bringt +7)
+- navigator.brave.isBrave fehlt (Soft-Signal)
+- Quellen: nullpt-rs/blog (Brave CAPTCHA Reverse-Engineering), BotBrowser CHANGELOG, stealth-browser-mcp Source
 
 ### Mojeek Rate-Limit (2026-04-09)
 - Exakt 15 Requests pro ~60s Sliding Window
@@ -92,28 +126,30 @@ Google 30/30 und Brave 1/30 nutzen identische Stealth-Config (DEFAULT_CONFIG). U
 
 ## Recommendation (SOLL)
 
-### Brave — Stealth-Patch-Evaluation ausstehend
+### Brave — Stealth allein reicht nicht
 
-Pending — folgende Patches müssen einzeln getestet werden (eine Variable pro 30-Query-Run):
-1. patch_webgl=True
-2. patch_canvas_noise=True
-3. patch_permissions=True
-4. chrome.runtime Masking (implementieren + testen)
-5. navigator.plugins Spoofing (implementieren + testen)
+Stealth-Patches verzögern die CAPTCHA, verhindern sie nicht. Bester Wert: 10/30 (WebGL). Keine Kombination von Fingerprint-Patches erreicht 30/30. Brave's Detection ist multi-layered: Fingerprint-Score bestimmt Rate-Limit-Schwelle, nach 7-10 schnellen Queries kommt CAPTCHA egal welcher Stack.
 
-Ziel: Messen welche Patches die CAPTCHA-Schwelle hochsetzen (von 1/30 auf X/30).
+**Verbleibende Optionen (nicht getestet):**
+1. Clean Slate: use_context=True (frischer Browser-Context pro Query) — verhindert Session-Accumulation. Unklar ob Brave per IP oder per Session trackt.
+2. CAPTCHA lösen: Klick + länger warten (10-15s), oder Argon2 PoW programmatisch lösen (Privacy Pass VOPRF ist der Blocker).
+3. Patchright mit echtem Chrome: `patchright install chrome` + `channel="chrome"` + headless=True — nie korrekt getestet (vorheriger Test nutzte Chromium Binary).
+4. Brave Search API: 2K Queries/Monat gratis, $3/15K. Kein CAPTCHA, kein Fingerprint. Pragmatischste Lösung.
 
 ### Andere Engines
 
-Pending — Evaluation nicht abgeschlossen.
+Pending — nur 5-Query-Tests durchgeführt, keine belastbaren 30/30 Runs.
 
 ## Offene Fragen
 
-- Brave: Ist das Problem rein Fingerprint-basiert, oder Fingerprint + IP-Rate-Limit Kombination? (Stealth-Patches könnten den Fingerprint-Score verbessern → höhere Rate-Limit-Schwelle)
-- Brave captcha_detect_js: Falscher Selektor — muss aus DOM-Dump korrigiert werden
-- Startpage: Root Cause komplett unklar (0/30, kein Error)
-- Google Scholar: Engine-Crash Root Cause unklar
+- Brave: Trackt Brave per IP oder per Session? (use_context=True würde Session-Tracking brechen, nicht IP-Tracking)
+- Brave: CAPTCHA-Klick mit 10-15s Wartezeit — reicht die Zeit für PoW + API-Call? Oder rejected Server wegen Fingerprint?
+- Brave: Patchright mit echtem Chrome Binary (nicht Chromium) — wurde nie korrekt getestet
+- Brave captcha_detect_js: Falscher Selektor — korrekt wäre `[class*="pow-captcha"]` oder Title-Check auf "Captcha"
+- Startpage: Root Cause komplett unklar (0/30 im Stresstest, "transient" laut Worker — nicht belastbar)
+- Google Scholar: Engine-Crash Root Cause unklar ("transient" — nicht belastbar)
 - Residential Proxies als Alternative zu Tor: Nicht verfügbar, aber wäre optimale IP-Rotation
+- Camoufox: Könnte mit zusätzlichen Firefox-spezifischen Stealth-Settings besser werden — nicht weiter exploriert
 
 ## Quellen
 
@@ -122,3 +158,11 @@ Pending — Evaluation nicht abgeschlossen.
 - `dev/search_pipeline/engines_eval/28_reports/stress_20260407_184152.md` — Stresstest Baseline
 - puppeteer-extra-plugin-stealth (GitHub) — Fehlende Patch-Analyse
 - pydoll GitHub Source + Docs — Stealth-Capabilities
+- daijro/camoufox (GitHub) — Firefox-basierte Stealth-Automation
+- saifyxpro/HeadlessX (GitHub) — Camoufox-basierte Plattform
+- nichochar/stealth-browser-mcp (GitHub) — Patchright + Chrome + Xvfb Referenz-Implementation
+- Kaliiiiiiiiii-Vinyzu/patchright-python (GitHub) — Playwright-Fork mit CDP-Leak-Fix
+- debug-it/brave-captcha-solver (GitHub) — YOLO v11n PoW CAPTCHA Solver
+- nullpt-rs/blog (GitHub) — Brave CAPTCHA Reverse-Engineering (reversing-botid.mdx)
+- FriendlyCaptcha/friendly-challenge (GitHub) — PoW CAPTCHA Referenz-Implementation
+- BotBrowser CHANGELOG (GitHub) — Browser-Fingerprint-Emulation Details
