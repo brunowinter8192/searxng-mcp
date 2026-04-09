@@ -24,4 +24,13 @@
 | GitHub Issue #5922 | github.com | Issue | search02_routing | Referenced |
 | GitHub PR #5644 | github.com | PR | search01_engines | Referenced |
 
+| daijro/camoufox | Repo | stealth01 | Referenced |
+| saifyxpro/HeadlessX | Repo | stealth01 | Referenced |
+| nichochar/stealth-browser-mcp | Repo | stealth01 | Referenced |
+| Kaliiiiiiiiii-Vinyzu/patchright-python | Repo | stealth01 | Referenced |
+| debug-it/brave-captcha-solver | Repo | stealth01 | Referenced |
+| nullpt-rs/blog (reversing-botid.mdx) | Web | stealth01 | Referenced |
+| FriendlyCaptcha/friendly-challenge | Repo | stealth01 | Referenced |
+| BotBrowser CHANGELOG | Repo | stealth01 | Referenced |
+
 Consult via RAG search before making assumptions. Pipeline step references match `decisions/` files.
