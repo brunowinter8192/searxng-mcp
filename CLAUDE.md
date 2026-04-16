@@ -1,6 +1,6 @@
 # SearXNG MCP Server
 
-Web search and scraping via local SearXNG instance.
+Web search (pydoll-based custom engine, 4 engines) and scraping (Crawl4AI) MCP server. Note: the plugin keeps the 'searxng' name for historical reasons — the SearXNG Docker wrapper was replaced by a custom pydoll implementation in the engine-cut refactor 2026-04-15.
 
 ## Sources
 
