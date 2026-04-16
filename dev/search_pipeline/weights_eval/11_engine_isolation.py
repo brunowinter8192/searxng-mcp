@@ -61,7 +61,7 @@ TEST_QUERIES = [
 
 # ORCHESTRATOR
 def run_isolation_eval():
-    engine_results: dict[str, dict[int, list[str]]] = {e: {} for e in ENGINES}
+    engine_results: dict[str, dict[int, list[dict]]] = {e: {} for e in ENGINES}
 
     for qi, query in enumerate(TEST_QUERIES):
         print(f"[Query {qi + 1}/{len(TEST_QUERIES)}] {query}", file=sys.stderr)
@@ -73,11 +73,16 @@ def run_isolation_eval():
                     reported_engines = r.get("engines", [])
                     if reported_engines and engine not in reported_engines:
                         print(f"    WARNING: Result from {reported_engines}, expected {engine}", file=sys.stderr)
-                urls = [r.get("url", "") for r in results if r.get("url")][:TOP_N]
+                items = [
+                    {"url": r.get("url", ""), "title": r.get("title", "") or ""}
+                    for r in results if r.get("url")
+                ][:TOP_N]
+                for pos, item in enumerate(items, 1):
+                    item["position"] = pos
             except Exception as e:
                 print(f"    SKIP: {e}", file=sys.stderr)
-                urls = []
-            engine_results[engine][qi] = urls
+                items = []
+            engine_results[engine][qi] = items
             if ei < len(ENGINES) - 1:
                 time.sleep(DELAY_BETWEEN_ENGINES)
         if qi < len(TEST_QUERIES) - 1:
@@ -103,18 +108,19 @@ def compute_per_engine_summary(engine_results: dict) -> dict:
         position_total = 0
 
         for qi in range(query_count):
-            urls = engine_results[engine].get(qi, [])
+            items = engine_results[engine].get(qi, [])
+            urls = [d["url"] for d in items]
             url_set = set(urls)
             total_urls += len(url_set)
 
-            for pos, url in enumerate(urls, 1):
-                position_sum += pos
+            for item in items:
+                position_sum += item["position"]
                 position_total += 1
 
             other_urls: set = set()
             for other_engine in ENGINES:
                 if other_engine != engine:
-                    other_urls |= set(engine_results[other_engine].get(qi, []))
+                    other_urls |= {d["url"] for d in engine_results[other_engine].get(qi, [])}
 
             for url in url_set:
                 if url in other_urls:
@@ -140,7 +146,7 @@ def compute_jaccard_matrix(engine_results: dict) -> dict:
     for engine in ENGINES:
         all_urls: set = set()
         for qi in range(len(TEST_QUERIES)):
-            all_urls |= set(engine_results[engine].get(qi, []))
+            all_urls |= {d["url"] for d in engine_results[engine].get(qi, [])}
         global_sets[engine] = all_urls
 
     jaccard: dict[str, dict[str, float]] = {}

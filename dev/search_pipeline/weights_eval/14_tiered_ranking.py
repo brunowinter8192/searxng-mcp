@@ -15,24 +15,24 @@ TOP_N_PER_ENGINE = 10
 TIER1_SIZE = 20
 
 ENGINES = [
-    "google", "bing", "mojeek", "brave", "startpage",
-    "duckduckgo", "google scholar", "semantic scholar", "crossref",
+    "google", "bing", "google scholar", "crossref",
 ]
 
 
 # ORCHESTRATOR
 def run_tiered_ranking(query: str) -> None:
-    url_data = collect_results(query)
-    tier1, tier2, tier3 = split_tiers(url_data)
+    per_engine = collect_results(query)
+    url_data = aggregate_url_data(per_engine)
+    tier1, tier2, tier3 = compute_tiers(url_data)
     report = build_report(query, tier1, tier2, tier3)
     save_report(query, report)
 
 
 # FUNCTIONS
 
-# Fetch results from all engines, aggregate URL metadata
-def collect_results(query: str) -> dict[str, dict]:
-    url_data: dict[str, dict] = {}
+# Fetch results from all engines, collect per-engine position-keyed items
+def collect_results(query: str) -> dict[str, list[dict]]:
+    per_engine: dict[str, list[dict]] = {}
     for i, engine in enumerate(ENGINES):
         print(f"[{i + 1}/{len(ENGINES)}] {engine}", file=sys.stderr)
         try:
@@ -40,81 +40,89 @@ def collect_results(query: str) -> dict[str, dict]:
         except Exception as e:
             print(f"  SKIP: {e}", file=sys.stderr)
             results = []
-        for result in results[:TOP_N_PER_ENGINE]:
+        items = []
+        for pos, result in enumerate(results[:TOP_N_PER_ENGINE], 1):
             url = result.get("url", "")
-            if not url:
-                continue
-            if url not in url_data:
-                url_data[url] = {"engines": [], "title": "", "snippet": ""}
-            url_data[url]["engines"].append(engine)
-            candidate_snippet = result.get("content", "") or ""
-            if len(candidate_snippet) > len(url_data[url]["snippet"]):
-                url_data[url]["snippet"] = candidate_snippet
-                url_data[url]["title"] = result.get("title", "") or ""
+            if url:
+                items.append({"url": url, "title": result.get("title", "") or "", "position": pos})
+        per_engine[engine] = items
         if i < len(ENGINES) - 1:
             time.sleep(DELAY_BETWEEN_ENGINES)
+    return per_engine
+
+
+# Aggregate per-engine results into url_data with RRF scores
+def aggregate_url_data(per_engine: dict[str, list[dict]]) -> dict[str, dict]:
+    url_data: dict[str, dict] = {}
+    for engine, items in per_engine.items():
+        for item in items:
+            url = item["url"]
+            if url not in url_data:
+                url_data[url] = {"engine_positions": [], "title": ""}
+            url_data[url]["engine_positions"].append((engine, item["position"]))
+            if not url_data[url]["title"] and item["title"]:
+                url_data[url]["title"] = item["title"]
+    for d in url_data.values():
+        d["count"] = len(d["engine_positions"])
+        d["rrf"] = sum(1.0 / pos for _, pos in d["engine_positions"])
     return url_data
 
 
-# Split URL data into 3 tiers by engine count
-def split_tiers(url_data: dict) -> tuple[list, list, list]:
-    consensus = sorted(
-        [(url, d) for url, d in url_data.items() if len(d["engines"]) >= 2],
-        key=lambda x: len(x[1]["engines"]),
-        reverse=True,
+# Split url_data into 3 tiers: top TIER1_SIZE by (count DESC, rrf DESC), then remainder by count
+def compute_tiers(url_data: dict) -> tuple[list, list, list]:
+    sorted_urls = sorted(
+        url_data.items(),
+        key=lambda x: (-x[1]["count"], -x[1]["rrf"]),
     )
-    unique = [
-        (url, d) for url, d in url_data.items() if len(d["engines"]) == 1
-    ]
-
-    tier1 = consensus[:TIER1_SIZE]
-    tier2 = consensus[TIER1_SIZE:]
-    tier3 = unique
+    tier1 = sorted_urls[:TIER1_SIZE]
+    remainder = sorted_urls[TIER1_SIZE:]
+    tier2 = [(u, d) for u, d in remainder if d["count"] >= 2]
+    tier3 = [(u, d) for u, d in remainder if d["count"] == 1]
     return tier1, tier2, tier3
 
 
-# Build markdown report with 3 tier tables
+# Build markdown report with 3 tier tables and RRF scores
 def build_report(query: str, tier1: list, tier2: list, tier3: list) -> str:
     lines = [
-        f'# Tiered Search: "{query}"',
+        f'# Query: "{query}"',
         "",
         f"**Tier 1:** {len(tier1)} results | "
         f"**Tier 2:** {len(tier2)} more (≥2 engines) | "
         f"**Tier 3:** {len(tier3)} unique (1 engine)",
         "",
-        "## Tier 1 — Top Results",
+        "## Tier 1 (Top 20)",
         "",
-        "| # | URL | Engines | Engine Count | Title |",
-        "|---|-----|---------|-------------|-------|",
+        "| # | URL | Engines | Count | RRF-Score | Title |",
+        "|---|-----|---------|-------|-----------|-------|",
     ]
     for rank, (url, d) in enumerate(tier1, 1):
-        engines_str = ", ".join(d["engines"])
+        engines_str = ", ".join(e for e, _ in d["engine_positions"])
         title = d["title"].replace("|", "\\|")[:80]
-        lines.append(f"| {rank} | {url} | {engines_str} | {len(d['engines'])} | {title} |")
+        lines.append(f"| {rank} | {url} | {engines_str} | {d['count']} | {d['rrf']:.3f} | {title} |")
 
     lines += [
         "",
-        f"## Tier 2 — Extended Consensus (≥2 engines)",
+        "## Tier 2 (≥2 Engines, not in Tier 1)",
         "",
-        "| # | URL | Engines | Engine Count | Title |",
-        "|---|-----|---------|-------------|-------|",
+        "| # | URL | Engines | Count | RRF-Score | Title |",
+        "|---|-----|---------|-------|-----------|-------|",
     ]
     for rank, (url, d) in enumerate(tier2, 1):
-        engines_str = ", ".join(d["engines"])
+        engines_str = ", ".join(e for e, _ in d["engine_positions"])
         title = d["title"].replace("|", "\\|")[:80]
-        lines.append(f"| {rank} | {url} | {engines_str} | {len(d['engines'])} | {title} |")
+        lines.append(f"| {rank} | {url} | {engines_str} | {d['count']} | {d['rrf']:.3f} | {title} |")
 
     lines += [
         "",
-        "## Tier 3 — Unique (1 engine only)",
+        "## Tier 3 (1 Engine)",
         "",
-        "| # | URL | Engine | Title |",
-        "|---|-----|--------|-------|",
+        "| # | URL | Engine | Position | Title |",
+        "|---|-----|--------|----------|-------|",
     ]
     for rank, (url, d) in enumerate(tier3, 1):
-        engine = d["engines"][0]
+        engine, pos = d["engine_positions"][0]
         title = d["title"].replace("|", "\\|")[:80]
-        lines.append(f"| {rank} | {url} | {engine} | {title} |")
+        lines.append(f"| {rank} | {url} | {engine} | {pos} | {title} |")
 
     return "\n".join(lines)
 

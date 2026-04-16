@@ -1,6 +1,7 @@
 """Report building and saving for 11_engine_isolation.py."""
 
 # INFRASTRUCTURE
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -81,7 +82,7 @@ def build_overlap_report(summary: dict, jaccard: dict, engines: list, test_queri
     return "\n".join(lines)
 
 
-# Build engine_<name>.md: all queries with top-N URLs and positions for one engine
+# Build engine_<name>.md: all queries with top-N URLs, positions and titles for one engine
 def build_engine_report(engine: str, engine_results: dict, test_queries: list, top_n: int) -> str:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
 
@@ -93,22 +94,31 @@ def build_engine_report(engine: str, engine_results: dict, test_queries: list, t
     ]
 
     for qi, query in enumerate(test_queries):
-        urls = engine_results[engine].get(qi, [])
+        items = engine_results[engine].get(qi, [])
         lines.append(f"## Query {qi + 1}: {query}")
         lines.append("")
-        if not urls:
+        if not items:
             lines.append("_No results returned._")
         else:
-            lines.append("| Pos | URL |")
-            lines.append("|-----|-----|")
-            for pos, url in enumerate(urls, 1):
-                lines.append(f"| {pos} | {url} |")
+            lines.append("| Pos | URL | Title |")
+            lines.append("|-----|-----|-------|")
+            for item in items:
+                title = (item.get("title") or "").replace("|", "\\|")[:80]
+                lines.append(f"| {item['position']} | {item['url']} | {title} |")
         lines.append("")
 
     return "\n".join(lines)
 
 
-# Save overlap_matrix.md and one engine_<name>.md per engine
+# Serialize engine_results with string keys for JSON compatibility
+def _to_json_serializable(engine_results: dict) -> dict:
+    return {
+        engine: {str(qi): items for qi, items in query_map.items()}
+        for engine, query_map in engine_results.items()
+    }
+
+
+# Save overlap_matrix.md, one engine_<name>.md per engine, and raw_data.json
 def save_reports(engine_results: dict, summary: dict, jaccard: dict, engines: list, test_queries: list, top_n: int) -> None:
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -123,3 +133,7 @@ def save_reports(engine_results: dict, summary: dict, jaccard: dict, engines: li
         engine_path = REPORTS_DIR / filename
         engine_path.write_text(engine_report)
         print(f"Report saved: {engine_path}")
+
+    raw_path = REPORTS_DIR / "raw_data.json"
+    raw_path.write_text(json.dumps(_to_json_serializable(engine_results), ensure_ascii=False, indent=2))
+    print(f"Raw data saved: {raw_path}")
