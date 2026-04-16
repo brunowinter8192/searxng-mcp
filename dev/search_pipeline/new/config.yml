@@ -1,0 +1,78 @@
+browser:
+  engine: pydoll
+  binary: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
+  headless: true
+  session_dir: ~/.searxng-mcp/browser-session-smoke
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.7727.101 Safari/537.36"
+  window_width: 1920
+  window_height: 1080
+
+stealth:
+  disable_blink_features:
+    - AutomationControlled
+  webrtc_leak_protection: true
+  block_popups: true
+  block_notifications: true
+  js_patches:
+    screen_dimensions: true
+    device_pixel_ratio: true
+    outer_dimensions: true
+    css_active_text: true
+  browser_preferences:
+    autofill: true
+    safebrowsing: true
+    search_suggest: true
+    credentials: true
+    do_not_track: false
+
+google:
+  url_template: "https://www.google.com/search?q={query}&hl={hl}&num={num}"
+  hl: en
+  num: 10
+  consent_domain: consent.google.com
+  captcha_path: /sorry/
+  wait_for_results:
+    max_cycles: 15
+    interval_seconds: 1.0
+  selectors:
+    result_container: "div.g"
+    title: "h3"
+    link: "a[href^='http'], a[href^='//']"
+    snippet_fallbacks:
+      - ".VwiC3b"
+      - "[data-sncf]"
+      - ".lEBKkf"
+      - "[data-content-feature]"
+  consent_buttons:
+    - "button[jsname='b3VHJd']"
+    - ".lssxud"
+    - "form[action*='consent'] button[type='submit']"
+    - "button[aria-label*='Accept']"
+
+run:
+  queries_file: ./queries.txt
+  delay_between_queries: 10
+  page_load_timeout: 20
+  consent_settle: 2.0
+
+detection:
+  signals:
+    - url_count
+    - unique_domains
+    - page_title
+    - current_url_after_load
+    - google_internal_urls
+    - status_label
+  status_rules:
+    captcha: "'/sorry/' in current_url"
+    consent: "'consent.google.com' in current_url"
+    empty: "url_count == 0"
+    blocked: "url_count == 0 and 'Google Search' not in page_title"
+    ok: "url_count >= 8 and unique_domains >= 5"
+    suspect: "0 < url_count < 8"
+
+report:
+  output_dir: ./01_reports
+  format: markdown
+  include_sample_urls: 5
+  include_page_title: true

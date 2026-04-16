@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
 # INFRASTRUCTURE
+import asyncio
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-from src.search.search_web import fetch_search_results
-from _isolation_report import save_reports
+from src.search.search_web import _select_engines, _query_engines_concurrent
+from src.search.browser import close_browser
+from _isolation_report import save_reports  # noqa: E402 — local dev module
 
 DELAY_BETWEEN_ENGINES = 5
 DELAY_BETWEEN_QUERIES = 10
@@ -46,7 +47,7 @@ TEST_QUERIES = [
     "Datenschutz DSGVO Website Impressum",
     # Niche/Specific
     "crawl4ai stealth browser detection bypass",
-    "SearXNG engine weight configuration",
+    "pydoll chromium CDP automation",
     "tmux session management scripting",
     "trafilatura vs readability content extraction",
     "SPLADE sparse retrieval model implementation",
@@ -60,40 +61,67 @@ TEST_QUERIES = [
 
 
 # ORCHESTRATOR
-def run_isolation_eval():
+
+# Run all queries × engines in one event loop to avoid browser singleton / dead-loop bug
+async def run_isolation_eval_async():
     engine_results: dict[str, dict[int, list[dict]]] = {e: {} for e in ENGINES}
 
-    for qi, query in enumerate(TEST_QUERIES):
-        print(f"[Query {qi + 1}/{len(TEST_QUERIES)}] {query}", file=sys.stderr)
-        for ei, engine in enumerate(ENGINES):
-            print(f"  [{ei + 1}/{len(ENGINES)}] {engine}", file=sys.stderr)
-            try:
-                results = fetch_search_results(query, "", "en", None, engine, 1)
-                for r in results:
-                    reported_engines = r.get("engines", [])
-                    if reported_engines and engine not in reported_engines:
-                        print(f"    WARNING: Result from {reported_engines}, expected {engine}", file=sys.stderr)
-                items = [
-                    {"url": r.get("url", ""), "title": r.get("title", "") or ""}
-                    for r in results if r.get("url")
-                ][:TOP_N]
-                for pos, item in enumerate(items, 1):
-                    item["position"] = pos
-            except Exception as e:
-                print(f"    SKIP: {e}", file=sys.stderr)
-                items = []
-            engine_results[engine][qi] = items
-            if ei < len(ENGINES) - 1:
-                time.sleep(DELAY_BETWEEN_ENGINES)
-        if qi < len(TEST_QUERIES) - 1:
-            time.sleep(DELAY_BETWEEN_QUERIES)
+    try:
+        for qi, query in enumerate(TEST_QUERIES):
+            print(f"[Query {qi + 1}/{len(TEST_QUERIES)}] {query}", file=sys.stderr)
+            for ei, engine in enumerate(ENGINES):
+                print(f"  [{ei + 1}/{len(ENGINES)}] {engine}", file=sys.stderr)
+                single_engine = _select_engines(engine)
+                try:
+                    results = await _query_engines_concurrent(query, "en", 10, single_engine)
+                    items = [
+                        {"url": r.url, "title": r.title or "", "position": pos}
+                        for pos, r in enumerate(results[:TOP_N], 1)
+                        if r.url
+                    ]
+                    result_count = len(items)
+                    if result_count == 0:
+                        print(f"    WARNING: 0 results for {engine} — possible rate-limit or CAPTCHA", file=sys.stderr)
+                    else:
+                        print(f"    {result_count} results", file=sys.stderr)
+                except Exception as e:
+                    print(f"    SKIP: {e}", file=sys.stderr)
+                    items = []
+                engine_results[engine][qi] = items
+                if ei < len(ENGINES) - 1:
+                    await asyncio.sleep(DELAY_BETWEEN_ENGINES)
+            if qi < len(TEST_QUERIES) - 1:
+                await asyncio.sleep(DELAY_BETWEEN_QUERIES)
+    finally:
+        await close_browser()
 
+    _check_engine_coverage(engine_results)
     summary = compute_per_engine_summary(engine_results)
     jaccard = compute_jaccard_matrix(engine_results)
     save_reports(engine_results, summary, jaccard, ENGINES, TEST_QUERIES, TOP_N)
 
 
+def run_isolation_eval():
+    asyncio.run(run_isolation_eval_async())
+
+
 # FUNCTIONS
+
+# Warn if any engine returned 0 results for more than 50% of queries (likely blocked)
+def _check_engine_coverage(engine_results: dict) -> None:
+    query_count = len(TEST_QUERIES)
+    for engine in ENGINES:
+        zero_count = sum(
+            1 for qi in range(query_count)
+            if len(engine_results[engine].get(qi, [])) == 0
+        )
+        if zero_count > query_count * 0.5:
+            print(
+                f"STOP: Engine '{engine}' returned 0 results for {zero_count}/{query_count} queries. "
+                "Likely rate-limited or CAPTCHA-blocked. Investigate before using data.",
+                file=sys.stderr,
+            )
+
 
 # Compute per-engine metrics: avg URLs/query, total unique, consensus rate, avg position
 def compute_per_engine_summary(engine_results: dict) -> dict:

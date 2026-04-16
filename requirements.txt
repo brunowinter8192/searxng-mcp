@@ -7,3 +7,4 @@ pydoll-python
 beautifulsoup4
 lxml
 httpx
+pyyaml
