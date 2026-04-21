@@ -35,14 +35,27 @@ google:
     max_cycles: 15
     interval_seconds: 1.0
   selectors:
-    result_container: "div.g"
-    title: "h3"
-    link: "a[href^='http'], a[href^='//']"
-    snippet_fallbacks:
-      - ".VwiC3b"
-      - "[data-sncf]"
-      - ".lEBKkf"
-      - "[data-content-feature]"
+    wait_js: "return document.querySelectorAll('#rso h3').length"
+    parse_js: |
+      var _h3s = document.querySelectorAll('#rso h3');
+      var _out = [];
+      for (var _i = 0; _i < _h3s.length; _i++) {
+          var _h3 = _h3s[_i];
+          var _a = _h3.closest('a[href^="http"]') || _h3.closest('a[href]');
+          var _block = _h3.closest('.MjjYud') || _h3.closest('#rso > div') || _h3.parentElement;
+          if (!_a && _block) { _a = _block.querySelector('a[href^="http"]'); }
+          if (!_a) continue;
+          var _snip = _block ? (_block.querySelector('.wHYlTd') || _block.querySelector('.VwiC3b') || _block.querySelector('[data-sncf]') || _block.querySelector('.lEBKkf')) : null;
+          _out.push({url: _a.href, title: _h3.textContent.trim(), snippet: _snip ? _snip.textContent.trim() : ''});
+      }
+      return JSON.stringify(_out);
+  consent_cookie:
+    name: SOCS
+    value: "CAISHAgCEhJnd3NfMjAyNjA0MDctMCAgIBgEIAEaBgiA_fC8Bg"
+    domain: ".google.com"
+    path: "/"
+    secure: true
+
   consent_buttons:
     - "button[jsname='b3VHJd']"
     - ".lssxud"
@@ -51,7 +64,7 @@ google:
 
 run:
   queries_file: ./queries.txt
-  delay_between_queries: 10
+  delay_between_queries: 0
   page_load_timeout: 20
   consent_settle: 2.0
 
