@@ -40,6 +40,10 @@ Each iteration after a stress-break adds a NEW numbered script (02_\<name\>.py, 
 | 2026-04-21 | baseline-run-1 | `config.yml` @ `a2cff3d` | Baseline established (SOCS + new selectors + parse_js fix) | — | — | 30/30 | — | — / — | — / — | `01_reports/smoke_20260421_022343.md` |
 | 2026-04-21 | baseline-run-2 | `config.yml` @ `e0077dd` | Re-verify same config after refactor | — (same config) | — | 28/30 | 2× CAPTCHA | — / — | — / — | `01_reports/smoke_20260421_182917.md` |
 | 2026-04-21 | baseline-run-3 | `config.yml` @ `80cff93` | First run with timing measurement — same baseline config | — (timing instrumentation only) | — | 28/30 | 2× CAPTCHA (Q24+Q25) | 551 / 816 | 1 / 4 | `01_reports/smoke_20260421_193051.md` |
+| 2026-04-22 | stress-run-1 | `config.yml` @ `f63b688` | Back-to-back stress without cooldown provokes rate-limit break | — (same config, run 1 of batch) | 5 (rate-limit) | 30/30 | — | 520 / 887 | 2 / 3 | `01_reports/smoke_20260422_012435.md` |
+| 2026-04-22 | stress-run-2 | `config.yml` @ `f63b688` | Back-to-back stress without cooldown provokes rate-limit break | — (same config, run 2 of batch) | 5 (rate-limit) | 27/30 | 3× CAPTCHA (Q26) | 422 / 701 | 2 / 5 | `01_reports/smoke_20260422_012456.md` |
+| 2026-04-22 | stress-run-3 | `config.yml` @ `f63b688` | Back-to-back stress without cooldown provokes rate-limit break | — (same config, run 3 of batch) | 5 (rate-limit) | 28/30 | 2× CAPTCHA (Q11) | 345 / 664 | 3 / 9 | `01_reports/smoke_20260422_012516.md` |
+| 2026-04-22 | stress-run-4 | `config.yml` @ `f63b688` | Back-to-back stress without cooldown provokes rate-limit break | — (same config, hard-break run) | 5 (rate-limit) | 0/30 | 30× CAPTCHA (Q1) | 537 / 661 | 0 / 0 | `01_reports/smoke_20260422_012539.md` |
 
 Convention for new entries:
 - **Run-ID:** `<hypothesis-slug>-run-N` (e.g. `webgl-run-1`)
