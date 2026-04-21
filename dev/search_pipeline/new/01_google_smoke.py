@@ -15,6 +15,8 @@ import yaml
 from pydoll.browser import Chrome
 from pydoll.browser.options import ChromiumOptions
 from pydoll.commands import PageCommands
+from pydoll.commands.network_commands import NetworkCommands
+from pydoll.protocol.network.types import CookieSameSite
 
 SCRIPT_DIR = Path(__file__).parent
 CONFIG_PATH = SCRIPT_DIR / "config.yml"
@@ -155,7 +157,20 @@ def _kill_stale_chrome(session_dir: str) -> None:
     )
 
 
-# Start browser, apply fingerprint patches to initial tab
+# Inject SOCS consent cookie via CDP to bypass Google consent page
+async def _inject_consent_cookie(tab, cfg: dict) -> None:
+    cookie = cfg["google"]["consent_cookie"]
+    await tab._execute_command(NetworkCommands.set_cookie(
+        name=cookie["name"],
+        value=cookie["value"],
+        domain=cookie["domain"],
+        path=cookie["path"],
+        secure=cookie["secure"],
+        same_site=CookieSameSite.LAX,
+    ))
+
+
+# Start browser, apply fingerprint patches and consent cookie to initial tab
 async def start_browser(cfg: dict) -> Chrome:
     session_dir = os.path.expanduser(cfg["browser"]["session_dir"])
     _kill_stale_chrome(session_dir)
@@ -168,6 +183,7 @@ async def start_browser(cfg: dict) -> Chrome:
                 source=js, run_immediately=True
             )
         )
+    await _inject_consent_cookie(tab, cfg)
     await tab.close()
     return browser
 
@@ -193,6 +209,7 @@ async def run_query(browser: Chrome, query: str, cfg: dict) -> dict:
                 source=js_patches, run_immediately=True
             )
         )
+    await _inject_consent_cookie(tab, cfg)
 
     record = {
         "query": query,
@@ -301,8 +318,7 @@ return false;
 
 # Poll for result containers, return True when found
 async def _wait_for_results(tab, gc: dict) -> bool:
-    sel = gc["selectors"]["result_container"]
-    js = f"return document.querySelectorAll({json.dumps(sel)}).length"
+    js = gc["selectors"]["wait_js"]
     max_cycles = gc["wait_for_results"]["max_cycles"]
     interval = gc["wait_for_results"]["interval_seconds"]
     for _ in range(max_cycles):
@@ -322,32 +338,7 @@ async def _get_title(tab) -> str:
 
 # Parse result containers into list of {url, title, snippet}
 async def _parse_results(tab, gc: dict) -> list[dict]:
-    sel = gc["selectors"]
-    snippet_fallbacks_json = json.dumps(sel["snippet_fallbacks"])
-    js = f"""
-return JSON.stringify((function() {{
-    var nodes = document.querySelectorAll({json.dumps(sel['result_container'])});
-    var out = [];
-    for (var i = 0; i < nodes.length; i++) {{
-        var el = nodes[i];
-        var a = el.querySelector({json.dumps(sel['link'])});
-        var h3 = el.querySelector({json.dumps(sel['title'])});
-        if (!a || !h3) continue;
-        var snip = null;
-        var fallbacks = {snippet_fallbacks_json};
-        for (var j = 0; j < fallbacks.length; j++) {{
-            snip = el.querySelector(fallbacks[j]);
-            if (snip) break;
-        }}
-        out.push({{
-            url: a.href,
-            title: h3.textContent.trim(),
-            snippet: snip ? snip.textContent.trim() : ''
-        }});
-    }}
-    return out;
-}})());
-"""
+    js = gc["selectors"]["parse_js"]
     raw = await tab.execute_script(js)
     value = _extract_scalar(raw)
     if not value or not isinstance(value, str):
