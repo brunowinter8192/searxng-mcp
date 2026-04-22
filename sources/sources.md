@@ -33,5 +33,8 @@
 | FriendlyCaptcha/friendly-challenge | Repo | stealth01 | Referenced |
 | BotBrowser CHANGELOG | Repo | stealth01 | Referenced |
 | autoscrape-labs/pydoll | Repo | stealth00, stealth01, stealth03 | Referenced |
+| opsdisk/yagooglesearch | Repo | stealth05 | Referenced |
+| karust/openserp | Repo | stealth05, stealth07 | Referenced |
+| 2captcha/2captcha-go | Repo | stealth07 | Referenced |
 
 Consult via RAG search before making assumptions. Pipeline step references match `decisions/` files.

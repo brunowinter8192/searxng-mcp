@@ -68,9 +68,15 @@ Evidenz für IP-Block (nicht Fingerprint-Detection):
 
 ## Recommendation (SOLL)
 
-Pending — 0 Delay ist die korrekte Baseline. Delay nur einführen wenn Stress-Tests einen konkreten Rate-Limit-Break zeigen.
+**Change:** `delay_between_queries: 0 → uniform(12, 18)` in `dev/search_pipeline/config.yml` und analog `src/search/rate_limiter.py` Token-Bucket auf ~4 Req/min.
 
-**Stress-Test-Protokoll:** Mehrere Runs back-to-back ohne Cooldown — erst wenn Google anfängt zu blocken, ist Rate-Limiting die Hypothese.
+Begründung:
+- Empirisch (Batch 1, 2026-04-22): 12 Req/min bricht nach ~90 kumulativen Queries. Threshold ist nicht instantan-Rate-basiert sondern kumulativer Score pro IP.
+- Community-Baseline: `karust/openserp` config (aktive Commits April 2026) defaultet Google auf `rate_requests: 4, rate_burst: 2` — defensiver Floor weit unter jeder plausiblen Schwelle.
+- 12–18s ergibt ~4 Req/min mit natürlichem Jitter. Bei Burst-Toleranz (openserp `rate_burst: 2`) können 2 Queries schnell hintereinander, danach Drosselung.
+- Für Agentic-Search-Use-Case (4 Queries pro Engine × N Engines → Dedup) passt das: 4 Queries in ~60s pro Engine statt 30 Queries in 2.5min.
+
+**Stress-Test-Protokoll (bleibt):** Für zukünftige Layer-Experimente — Back-to-Back-Runs ohne Cooldown auf ANDEREM IP-Kontext als Library-NAT. Shared-IP-Scraping verzerrt sowohl die Baseline (andere Nutzer beeinflussen Score) als auch ist ethisch zweifelhaft (andere leiden unter unseren CAPTCHAs).
 
 ## Offene Fragen
 

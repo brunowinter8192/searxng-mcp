@@ -12,7 +12,8 @@ Baseline-first stealth/search experimentation. Single active engine (Google) wit
 | `queries.txt` | 30 baseline queries (Tech 8 + Science 6 + German 6 + Niche 5 + Broad 5) |
 | `01_google_smoke.py` | Baseline 30-query smoke runner — reads config.yml, writes timestamped report to `01_reports/` |
 | `00_single_query.py` | Single-query diagnostic harness — same config, runs one query with verbose output (use for fast iteration during layer experiments) |
-| `01_reports/` | Per-run markdown reports from `01_google_smoke.py` |
+| `_capture_sorry.py` | Standalone helper to navigate Google, detect `/sorry/` redirect, save PNG + HTML + metadata to `01_reports/sorry_<ts>.*` (artifacts gitignored, contain public IP) |
+| `01_reports/` | Per-run markdown reports from `01_google_smoke.py` + cross-run stress summaries |
 
 ## Baseline (current)
 
