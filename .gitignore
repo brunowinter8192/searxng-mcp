@@ -29,3 +29,8 @@ __pycache__/
 
 # Persistent failure log from production scrape_url runs
 dev/scrape_pipeline/failures.jsonl
+
+# Sorry/block capture artifacts (contain IP data — local session evidence only)
+dev/search_pipeline/01_reports/sorry_*.html
+dev/search_pipeline/01_reports/sorry_*.png
+dev/search_pipeline/01_reports/sorry_*.md
