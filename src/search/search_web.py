@@ -3,6 +3,7 @@ import asyncio
 import logging
 from mcp.types import TextContent
 
+from src.search.browser import close_browser
 from src.search.engines.google import GoogleEngine
 from src.search.engines.bing import BingEngine
 from src.search.engines.scholar import ScholarEngine
@@ -38,6 +39,24 @@ async def search_web_workflow(
     deduped = _deduplicate(raw_results)
     formatted_text = _format_results(query, deduped)
     return [TextContent(type="text", text=formatted_text)]
+
+
+# Run N queries sequentially in shared Chrome, close browser in finally
+async def search_batch_workflow(
+    queries: list[str],
+    category: str,
+    language: str = "en",
+    time_range: str | None = None,
+    engines: str | None = None,
+    pages: int = 3,
+) -> list[list[TextContent]]:
+    results = []
+    try:
+        for q in queries:
+            results.append(await search_web_workflow(q, category, language, time_range, engines, pages))
+    finally:
+        await close_browser()
+    return results
 
 
 # Synchronous wrapper for dev scripts — runs event loop internally

@@ -8,15 +8,13 @@ logger = logging.getLogger(__name__)
 
 MAX_REQUESTS = 10
 WINDOW_SECONDS = 60.0
-JITTER_MIN = 1.0
-JITTER_MAX = 3.0
 BACKOFF_BASE = 30.0
 
 _limiters: dict[str, "RateLimiter"] = {}
 
 
 class RateLimiter:
-    """Token bucket rate limiter with jitter and exponential backoff."""
+    """Token bucket rate limiter with exponential backoff."""
 
     def __init__(self, max_requests: int = MAX_REQUESTS, window_seconds: float = WINDOW_SECONDS):
         self._max_requests = max_requests
@@ -49,10 +47,6 @@ class RateLimiter:
                     await asyncio.sleep(wait)
                     now = time.monotonic()
                     self._tokens = [t for t in self._tokens if now - t < self._window_seconds]
-
-            # Add random jitter between requests
-            jitter = random.uniform(JITTER_MIN, JITTER_MAX)
-            await asyncio.sleep(jitter)
 
             self._tokens.append(time.monotonic())
 
