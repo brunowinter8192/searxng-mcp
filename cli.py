@@ -10,7 +10,7 @@ import asyncio
 import atexit
 
 from src.routing import check_plugin_routed
-from src.search.search_web import search_web_workflow
+from src.search.search_web import search_web_workflow, search_batch_workflow
 from src.search.browser import close_browser, kill_stale_chrome
 from src.scraper.scrape_url import scrape_url_workflow
 from src.scraper.scrape_url_raw import scrape_url_raw_workflow
@@ -37,6 +37,17 @@ def main():
                    help="Comma-separated engine list (e.g. 'google,bing' or 'google scholar,crossref')")
     p.add_argument("--pages", type=int, default=3,
                    help="Result pages to fetch and combine (default 3 = ~150 results)")
+
+    # ── search_batch ──────────────────────────────────────────────────────────
+    p = sub.add_parser("search_batch", help="Search multiple queries in one warm-Chrome session.")
+    p.add_argument("queries", nargs="+", help="One or more search queries")
+    p.add_argument("--category", choices=["general", "news", "it", "science"], default="general")
+    p.add_argument("--language", default="en", help="ISO language code (e.g. 'de')")
+    p.add_argument("--time-range", dest="time_range", choices=["day", "month", "year"], default=None)
+    p.add_argument("--engines", default=None,
+                   help="Comma-separated engine list (e.g. 'google,bing')")
+    p.add_argument("--pages", type=int, default=3,
+                   help="Result pages to fetch per query (default 3 = ~150 results)")
 
     # ── scrape_url ────────────────────────────────────────────────────────────
     p = sub.add_parser("scrape_url", help="Scrape URL to filtered markdown (PruningContentFilter).")
@@ -69,6 +80,14 @@ def main():
             args.query, args.category, args.language,
             args.time_range, args.engines, args.pages
         ))
+
+    elif args.cmd == "search_batch":
+        results = asyncio.run(search_batch_workflow(
+            args.queries, args.category, args.language,
+            args.time_range, args.engines, args.pages
+        ))
+        print("\n---\n".join(r[0].text for r in results))
+        return
 
     elif args.cmd == "scrape_url":
         if blocked := check_plugin_routed(args.url):
