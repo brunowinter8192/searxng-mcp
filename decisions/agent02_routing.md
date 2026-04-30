@@ -2,7 +2,7 @@
 
 ## Status Quo
 
-**Code:** `agents/web-research.md` (Step 2: Filter Results), `skills/agent-web-research/SKILL.md` (Plugin Routing section)
+**Code:** `skills/web-research/SKILL.md` (Plugin Routing section), `src/routing.py` (`check_plugin_routed()` — enforced at CLI level)
 
 **Routing table** (applied to all search results before scraping):
 
@@ -15,7 +15,7 @@
 
 **Routing logic:** URL-domain matching only. No content-based routing. No subdomain handling documented.
 
-**Agent output:** Plugin-routed URLs reported in a separate section ("Plugin-Routed URLs") with plugin action tagged. Not scraped.
+**Worker output:** When a `searxng-cli scrape_url <url>` call hits a routed domain, `check_plugin_routed()` returns a blocking TextContent with the routing message. The worker reports these in the "Plugin-Routed URLs" section of its output.
 
 ## Evidenz
 
@@ -48,12 +48,12 @@ One gap: no routing for `huggingface.co` (model cards, papers with code — freq
 - Should `huggingface.co` be added to the routing table? HF has no dedicated plugin currently, so it would need to either: (a) be scraped as normal, (b) be skipped, or (c) be noted for future plugin development.
 - What about `paperswithcode.com`? Frequently surfaces in ML benchmarks. No dedicated plugin, but content is structured and scrapable.
 - Subdomain handling: does `gist.github.com` match the `github.com` routing rule? If not, gists get scraped instead of plugin-routed.
-- Should the routing table be in `SKILL.md` only (tool reference) or duplicated in `agents/web-research.md` (agent instructions)? Currently duplicated — risk of divergence.
+- ~~Should the routing table be duplicated in `agents/web-research.md`?~~ → Resolved: `agents/web-research.md` removed. Canonical: `skills/web-research/SKILL.md`. `src/routing.py` enforces at runtime.
 
 ## Quellen
 
-- `agents/web-research.md` — Step 2 routing instructions
-- `skills/agent-web-research/SKILL.md` — Plugin Routing table (canonical reference)
+- `skills/web-research/SKILL.md` — Plugin Routing section (canonical reference)
+- `src/routing.py` — `check_plugin_routed()` implementation
 - Eval session findings (2026-03-15): 22/28/40+ plugin-routed URLs, no misrouting observed
 
 ### Zum Indexieren (für systematische Verbesserung)
