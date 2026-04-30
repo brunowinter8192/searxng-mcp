@@ -4,6 +4,9 @@ import json
 import logging
 from urllib.parse import quote_plus, urlparse, parse_qs
 
+from pydoll.commands.network_commands import NetworkCommands
+from pydoll.protocol.network.types import CookieSameSite
+
 from src.search.browser import new_tab
 from src.search.engines.base import BaseEngine
 from src.search.rate_limiter import RateLimiter, get_limiter, _limiters
@@ -14,32 +17,27 @@ logger = logging.getLogger(__name__)
 SEARCH_URL = "https://www.google.com/search?q={}&hl={}&num={}"
 CONSENT_DOMAIN = "consent.google.com"
 CAPTCHA_PATH = "/sorry/"
-MAX_WAIT_CYCLES = 15
-WAIT_INTERVAL = 1.0
+MAX_WAIT_CYCLES = 3
+WAIT_INTERVAL = 0.2
+SOCS_NAME = "SOCS"
+SOCS_VALUE = "CAISHAgCEhJnd3NfMjAyNjA0MDctMCAgIBgEIAEaBgiA_fC8Bg"
+SOCS_DOMAIN = ".google.com"
 
-_JS_WAIT = "return document.querySelectorAll('div.g').length"
+_JS_WAIT = "return document.querySelectorAll('#rso h3').length"
 
 _JS_PARSE = """
-return JSON.stringify((function() {
-    var nodes = document.querySelectorAll('div.g');
-    var out = [];
-    for (var i = 0; i < nodes.length; i++) {
-        var el = nodes[i];
-        var a = el.querySelector('a[href^="http"], a[href^="//"]');
-        var h3 = el.querySelector('h3');
-        if (!a || !h3) continue;
-        var snip = el.querySelector('.VwiC3b') ||
-                   el.querySelector('[data-sncf]') ||
-                   el.querySelector('.lEBKkf') ||
-                   el.querySelector('[data-content-feature]');
-        out.push({
-            url: a.href,
-            title: h3.textContent.trim(),
-            snippet: snip ? snip.textContent.trim() : ''
-        });
-    }
-    return out;
-})());
+var _h3s = document.querySelectorAll('#rso h3');
+var _out = [];
+for (var _i = 0; _i < _h3s.length; _i++) {
+    var _h3 = _h3s[_i];
+    var _a = _h3.closest('a[href^="http"]') || _h3.closest('a[href]');
+    var _block = _h3.closest('.MjjYud') || _h3.closest('#rso > div') || _h3.parentElement;
+    if (!_a && _block) { _a = _block.querySelector('a[href^="http"]'); }
+    if (!_a) continue;
+    var _snip = _block ? (_block.querySelector('.wHYlTd') || _block.querySelector('.VwiC3b') || _block.querySelector('[data-sncf]') || _block.querySelector('.lEBKkf')) : null;
+    _out.push({url: _a.href, title: _h3.textContent.trim(), snippet: _snip ? _snip.textContent.trim() : ''});
+}
+return JSON.stringify(_out);
 """
 
 _JS_CONSENT = """
@@ -66,11 +64,12 @@ class GoogleEngine(BaseEngine):
         limiter = get_limiter(self.name)
         await limiter.acquire()
         tab = await new_tab()
+        await _inject_socs_cookie(tab)
         search_url = _build_url(query, language, max_results)
         try:
             await tab.go_to(search_url, timeout=20)
             current = await tab.current_url
-            if CONSENT_DOMAIN in current:
+            if CONSENT_DOMAIN in current or await _has_inline_consent(tab):
                 await _handle_consent(tab)
                 await tab.go_to(search_url, timeout=20)
                 current = await tab.current_url
@@ -108,14 +107,34 @@ def _build_url(query: str, language: str, max_results: int) -> str:
     return SEARCH_URL.format(quote_plus(query), language, max_results)
 
 
-# Click consent accept button on consent.google.com
+# Inject SOCS consent cookie per-tab via CDP before navigation
+async def _inject_socs_cookie(tab) -> None:
+    await tab._execute_command(NetworkCommands.set_cookie(
+        name=SOCS_NAME,
+        value=SOCS_VALUE,
+        domain=SOCS_DOMAIN,
+        path="/",
+        secure=True,
+        same_site=CookieSameSite.LAX,
+    ))
+
+
+# Detect inline Google consent banner (no redirect — body text check)
+async def _has_inline_consent(tab) -> bool:
+    js = "var body = document.body ? document.body.innerText : ''; return body.indexOf('Before you continue') !== -1 || body.indexOf('cookies and data') !== -1;"
+    raw = await tab.execute_script(js)
+    val = _extract_value(raw)
+    return bool(val)
+
+
+# Click Google consent accept button — handles both redirect and inline variants
 async def _handle_consent(tab) -> None:
     logger.info("Google consent page detected — clicking accept")
     await tab.execute_script(_JS_CONSENT)
     await asyncio.sleep(2.0)
 
 
-# Poll for result containers up to MAX_WAIT_CYCLES seconds, return True when found
+# Poll for result containers up to MAX_WAIT_CYCLES × WAIT_INTERVAL seconds, return True when found
 async def _wait_for_results(tab) -> bool:
     for _ in range(MAX_WAIT_CYCLES):
         raw = await tab.execute_script(_JS_WAIT)
