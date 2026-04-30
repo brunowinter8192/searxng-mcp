@@ -10,10 +10,11 @@ Baseline-first stealth/search experimentation. Single active engine (Google) wit
 |------|---------|
 | `config.yml` | Single source of truth for browser, stealth patches, Google selectors, consent cookie, run params, detection rules, report format |
 | `queries.txt` | 30 baseline queries (Tech 8 + Science 6 + German 6 + Niche 5 + Broad 5) |
-| `01_google_smoke.py` | Baseline 30-query smoke runner — reads config.yml, writes timestamped report to `01_reports/` |
-| `00_single_query.py` | Single-query diagnostic harness — same config, runs one query with verbose output (use for fast iteration during layer experiments) |
+| `01_google_smoke.py` | Baseline 30-query smoke runner (standalone pydoll, dev-side control reference) — reads config.yml, writes timestamped report `smoke_<ts>.md` to `01_reports/` |
+| `02_burst_smoke.py` | Burst smoke against the production CLI — invokes `searxng-cli search_batch` per batch (one subprocess per N queries, warm Chrome amortized) and writes `burst_<ts>.md` to `01_reports/`. Exists to validate the prod CLI path under the architectural rate pattern (4 queries per burst, optional cooldown). CLI flags: `--queries-per-burst N` (default 4), `--cooldown S` (default 60), `--max-queries N` (default all from queries.txt). |
+| `00_single_query.py` | Single-query diagnostic harness — same config as 01, runs one query with verbose output (use for fast iteration during layer experiments) |
 | `_capture_sorry.py` | Standalone helper to navigate Google, detect `/sorry/` redirect, save PNG + HTML + metadata to `01_reports/sorry_<ts>.*` (artifacts gitignored, contain public IP) |
-| `01_reports/` | Per-run markdown reports from `01_google_smoke.py` + cross-run stress summaries |
+| `01_reports/` | Per-run markdown reports — `smoke_*.md` from 01, `burst_*.md` from 02, sorry captures gitignored |
 
 ## Baseline (current)
 
@@ -24,9 +25,15 @@ Baseline-first stealth/search experimentation. Single active engine (Google) wit
 ## Running
 
 ```bash
-# Full smoke (30 queries)
+# Standalone control (30 queries, dev pydoll, ~2.5 min)
 rm -rf ~/.searxng-mcp/browser-session-smoke/Singleton* 2>/dev/null
 ./venv/bin/python3 dev/search_pipeline/01_google_smoke.py
+
+# Burst against prod CLI (30 queries in 4-per-burst, no cooldown, ~1.7 min)
+./venv/bin/python3 dev/search_pipeline/02_burst_smoke.py --queries-per-burst 4 --cooldown 0
+
+# Burst with steady-state rate cap (30 queries, 4-per-burst, 60s cooldown between, ~9 min)
+./venv/bin/python3 dev/search_pipeline/02_burst_smoke.py --queries-per-burst 4 --cooldown 60
 
 # Single query diagnostic
 ./venv/bin/python3 dev/search_pipeline/00_single_query.py "your query here"

@@ -1,24 +1,31 @@
 # search/
 
-pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXNG-Docker wrapper (deleted 2026-04-15 in engine-cut). Exposes one `search_web_workflow()` coroutine consumed by `server.py` + one `fetch_search_results()` sync wrapper consumed by dev scripts.
+pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXNG-Docker wrapper (deleted 2026-04-15 in engine-cut). Exposes `search_web_workflow()` (single-query, fan-out across engines via asyncio.gather) and `search_batch_workflow()` (N queries sequentially in one warm-Chrome session, used by the CLI `search_batch` subcommand) — both consumed by `cli.py`. Plus `fetch_search_results()` sync wrapper consumed by dev scripts.
 
 **Active engines (4):** google, bing, google scholar, crossref. See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / duckduckgo / mojeek / semantic scholar.
 
 ## search_web.py
 
-**Purpose:** Search orchestrator. Fetches results from all active engines in parallel via `asyncio.gather`, deduplicates by URL, formats as `list[TextContent]`. Provides sync wrapper `fetch_search_results()` for dev scripts.
-**Input:** Query string, category, language, time range, engine filter, page count.
-**Output:** `list[TextContent]` with formatted markdown (workflow) OR `list[dict]` (sync wrapper).
+**Purpose:** Search orchestrator. Two entry points:
+- `search_web_workflow(query, ...)` — single query, fan-out across all active engines via `asyncio.gather`, deduplicates by URL, formats as `list[TextContent]`.
+- `search_batch_workflow(queries, ...)` — N queries sequentially through `search_web_workflow` in the SAME process (Chrome stays warm via shared singleton in `browser.py`), `close_browser()` in finally clause keeps teardown inside the active event loop. Used by `cli.py search_batch` subcommand to amortize Chrome cold-start across multiple queries (~5s boot + ~1s/query vs ~5s boot per query in subprocess-per-call mode).
+- `fetch_search_results()` — sync wrapper for dev scripts.
+
+**Input:** Query string (or list), category, language, time range, engine filter, page count.
+**Output:** `list[TextContent]` (single workflow), `list[list[TextContent]]` (batch workflow), or `list[dict]` (sync wrapper).
 
 ## browser.py
 
-**Purpose:** pydoll Chrome lifecycle. Starts a single shared Chrome instance on first call, creates a new tab per engine for isolation. Applies fingerprint patches (WebGL, canvas, permissions) at launch. Registered with `atexit` for cleanup.
+**Purpose:** pydoll Chrome lifecycle. Starts a single shared Chrome instance on first call, creates a new tab per engine for isolation. Applies fingerprint patches (WebGL, canvas, permissions) at launch. Two cleanup paths:
+- `close_browser()` — async, used inside an active event loop (e.g. by `search_batch_workflow` in finally). Issues CDP `Browser.close` and waits for response.
+- `kill_stale_chrome()` — sync `pkill -f "user-data-dir=<SESSION_DIR>"`, registered as `atexit` handler in `cli.py`. Replaces the previous async-CDP atexit which incurred a deterministic 60s timeout per CLI invocation (event-loop mismatch — see `decisions/`/session 2026-04-30 forensic).
+
 **Input:** None (singleton on first access).
 **Output:** pydoll Chrome instance and new tab contexts.
 
 ## rate_limiter.py
 
-**Purpose:** Per-engine token bucket rate limiter with jitter + exponential backoff. Prevents bursts from tripping engine rate limits.
+**Purpose:** Per-engine token bucket rate limiter with exponential backoff. Prevents bursts from tripping engine rate limits. Jitter (formerly 1-3s sleep per `acquire`) was removed 2026-04-30 — added pure overhead in CLI subprocess mode (each call gets a fresh limiter) without empirical benefit (dev's standalone smoke runs 30 queries with 0 delay and lands 30/30 OK).
 **Input:** Engine name.
 **Output:** Async context that blocks until a token is available.
 
@@ -38,7 +45,7 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ### engines/google.py
 
-**Purpose:** Google Search via pydoll. Handles Google consent cookie injection (CDP `Network.setCookie` for SOCS cookie on `.google.com`) and DOM parsing via `#rso h3` + `.MjjYud` selectors.
+**Purpose:** Google Search via pydoll. Three-layer consent handling: (1) SOCS cookie injection per-tab via `Network.setCookie` BEFORE navigation (primary bypass), (2) inline-consent body-text detection ("Before you continue" / "We use cookies and data") + button click on the search URL, (3) `consent.google.com` redirect handler as fallback. DOM parsing via `#rso h3` + `.MjjYud` selectors, parse_js without IIFE (pydoll's `execute_script` already wraps in function scope). Wait timeouts calibrated to dev p95: `MAX_WAIT_CYCLES=3`, `WAIT_INTERVAL=0.2s`. Rate-limit pre-registered at `max_requests=5, window_seconds=60` (capacity 5 per minute per process).
 
 ### engines/bing.py
 

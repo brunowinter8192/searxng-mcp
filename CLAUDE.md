@@ -16,7 +16,7 @@ See [sources/sources.md](sources/sources.md).
 | **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
 | **Browser** | pydoll Chrome (stealth fingerprint patches, per-engine JS selectors) | `src/search/browser.py`, `src/search/engines/`, `dev/search_pipeline/01_google_smoke.py` + `config.yml` |
 | **Rate Limiting** | Token-bucket per engine with backoff | `src/search/rate_limiter.py` |
-| **Orchestration** | `asyncio.gather` parallel fetch, deduplicated, formatted as TextContent | `src/search/search_web.py`, SNIPPET_LENGTH=5000 |
+| **Orchestration** | `asyncio.gather` parallel fetch across engines, deduplicated, formatted as TextContent. `search_web_workflow` for single query; `search_batch_workflow` for N queries sequentially in one warm-Chrome session | `src/search/search_web.py`, SNIPPET_LENGTH=5000 |
 | **Parked** | Brave (PoW CAPTCHA incompatible with parallel architecture) | See `decisions/stealth00_engine_status.md` |
 
 ### Scrape Pipeline (Crawl4AI)
@@ -37,7 +37,7 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 5 tools (search_web, scrape_url, scrape_url_raw, explore_site, download_pdf) |
+| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 6 tools (search_web, search_batch, scrape_url, scrape_url_raw, explore_site, download_pdf) |
 
 ### Key Files
 
@@ -60,7 +60,7 @@ See [sources/sources.md](sources/sources.md).
 
 ```
 searxng/
-├── cli.py                          → CLI dispatch (5 commands)
+├── cli.py                          → CLI dispatch (6 commands incl. search_batch warm-Chrome multi-query)
 ├── .env.example                    → Template for SEARXNG_PROJECT_ROOT
 ├── requirements.txt
 ├── README.md                       → [Setup & External Docs](README.md)
