@@ -2,7 +2,7 @@
 
 pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXNG-Docker wrapper (deleted 2026-04-15 in engine-cut). Exposes `search_web_workflow()` (single-query, fan-out across engines via asyncio.gather) and `search_batch_workflow()` (N queries sequentially in one warm-Chrome session, used by the CLI `search_batch` subcommand) — both consumed by `cli.py`. Plus `fetch_search_results()` sync wrapper consumed by dev scripts.
 
-**Active engines (4):** google, bing, google scholar, crossref. See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / duckduckgo / mojeek / semantic scholar.
+**Active engines (5):** google, bing, google scholar (pydoll); crossref, hn (HTTP). See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / duckduckgo / mojeek / semantic scholar. See `decisions/search05_engine_expansion.md` for HN-Algolia integration rationale + roadmap (Stack-Exchange next, Marginalia deferred).
 
 ## search_web.py
 
@@ -58,6 +58,10 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 ### engines/crossref.py
 
 **Purpose:** CrossRef REST API via httpx (no browser needed). Uses polite pool `mailto` header for higher rate limits. Returns bibliographic metadata as `SearchResult` entries.
+
+### engines/hn.py
+
+**Purpose:** HN Algolia REST API via httpx (no browser, no auth). Default filter `tags=story` excludes comment hits. Snippet synthesized from points + num_comments + author metadata (HN doesn't expose body text for link-stories). Fallback URL `news.ycombinator.com/item?id={objectID}` for hits with empty external `url` (Ask-HN, Show-HN with story-text). Returns story metadata as `SearchResult` entries.
 
 ## Stealth Decisions
 
