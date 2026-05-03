@@ -125,6 +125,13 @@ openalex:
   per_page: 10
   # mailto: set OPENALEX_MAILTO env var (polite-pool identifier, no default)
 
+stack_exchange:
+  api_base: "https://api.stackexchange.com/2.3/search/advanced"
+  site: stackoverflow
+  sort: relevance
+  filter: withbody
+  # key: set STACK_EXCHANGE_API_KEY env var (10k/day quota; unset = anonymous 300/day)
+
 run:
   queries_file: ./queries.txt
   delay_between_queries: 0
