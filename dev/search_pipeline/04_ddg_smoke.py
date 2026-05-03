@@ -54,7 +54,8 @@ async def run_smoke_test() -> None:
     nav_times = [r["navigation_time_ms"] for r in records if r["navigation_time_ms"] > 0]
     dom_times = [r["dom_wait_time_ms"] for r in records if r["dom_wait_time_ms"] > 0]
     if nav_times:
-        print(f"Timing: nav mean/max {int(sum(nav_times)/len(nav_times))}ms/{max(nav_times)}ms, dom mean/max {int(sum(dom_times)/len(dom_times))}ms/{max(dom_times)}ms", file=sys.stderr)
+        dom_str = f"{int(sum(dom_times)/len(dom_times))}ms/{max(dom_times)}ms" if dom_times else "0ms/0ms"
+        print(f"Timing: nav mean/max {int(sum(nav_times)/len(nav_times))}ms/{max(nav_times)}ms, dom mean/max {dom_str}", file=sys.stderr)
 
 
 # FUNCTIONS
