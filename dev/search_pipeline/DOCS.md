@@ -17,6 +17,8 @@ Baseline-first stealth/search experimentation. Active engines: Google (pydoll, 3
 | `05_search_smoke.py` | Multi-engine comparison smoke — imports `GoogleEngine` + `DuckDuckGoEngine` from `src/`, fans out per-engine in parallel via `asyncio.gather`, merges by URL preserving per-engine snippets, fetches previews via `src/search/preview.py`, writes `search_smoke_<ts>.md` to `01_reports/`. CLI flags: `--engines google duckduckgo` (default), `--max-queries N`. |
 | `06_mojeek_smoke.py` | Mojeek standalone smoke runner — reads config.yml `mojeek:` block, runs 30 baseline queries against `mojeek.com/search`, writes `mojeek_smoke_<ts>.md` to `01_reports/`. No consent, no CAPTCHA check, no URL cleaning. Status taxonomy: OK / EMPTY / BLOCKED / SUSPECT / ERROR. |
 | `07_lobsters_smoke.py` | Lobsters standalone smoke runner — reads config.yml `lobsters:` block, runs 30 baseline queries against `lobste.rs/search`, writes `lobsters_smoke_<ts>.md` to `01_reports/`. No consent, no CAPTCHA check, no URL cleaning. Snippet = domain-as-displayed (link-aggregator pattern). Status taxonomy: OK / EMPTY / BLOCKED / SUSPECT / ERROR. |
+| `08_scholar_smoke.py` | Google Scholar smoke runner — imports `ScholarEngine` from `src/`, calls `.search()` directly (pydoll browser managed by `src/search/browser.py` singleton), runs 30 baseline queries. Rate limiter is engine-internal (3 req/60s → ~10 min total). Writes `scholar_smoke_<ts>.md` to `01_reports/`. Status taxonomy: OK (≥3 results) / EMPTY / SUSPECT / ERROR. |
+| `09_openalex_smoke.py` | OpenAlex smoke runner — imports `OpenAlexEngine` from `src/`, calls `.search()` directly (pure HTTP, no browser), runs 30 baseline queries. Writes `openalex_smoke_<ts>.md` to `01_reports/`. Status taxonomy: OK / EMPTY / RATE_LIMITED / ERROR. OPENALEX_MAILTO env var forwarded automatically via engine. |
 | `00_single_query.py` | Single-query diagnostic harness — same config as 01, runs one query with verbose output (use for fast iteration during layer experiments) |
 | `_capture_sorry.py` | Standalone helper to navigate Google, detect `/sorry/` redirect, save PNG + HTML + metadata to `01_reports/sorry_<ts>.*` (artifacts gitignored, contain public IP) |
 | `01_reports/` | Per-run markdown reports — `smoke_*.md` from 01, `burst_*.md` from 02, `ddg_smoke_*.md` from 04, sorry captures gitignored |
@@ -57,6 +59,12 @@ rm -rf ~/.searxng-mcp/browser-session-smoke/Singleton* 2>/dev/null
 # Lobsters standalone smoke (30 queries, dev pydoll, link-aggregator index)
 ./venv/bin/python3 dev/search_pipeline/07_lobsters_smoke.py
 
+# Google Scholar smoke (30 queries via ScholarEngine, ~10 min — rate limit 3 req/60s)
+./venv/bin/python3 dev/search_pipeline/08_scholar_smoke.py
+
+# OpenAlex smoke (30 queries via OpenAlexEngine, ~8 min — rate limit 4 req/60s)
+OPENALEX_MAILTO=yourname@example.com ./venv/bin/python3 dev/search_pipeline/09_openalex_smoke.py
+
 # Multi-engine comparison smoke (30 queries × google + duckduckgo, ~8 min)
 ./venv/bin/python3 dev/search_pipeline/05_search_smoke.py --engines google duckduckgo
 
@@ -74,6 +82,20 @@ rm -rf ~/.searxng-mcp/browser-session-smoke/Singleton* 2>/dev/null
 - **Selectors:** `ul.results-standard > li > a.ob` (container), `li h2 a` (title), `li p.s` (snippet) — verified live 2026-05-03
 - **Rate-limit break:** 403 at query 10 (~9 queries in 7.5s = ~1.2 req/s burst). Production 4 req/min (1 per 15s) stays well within threshold.
 - **Nav timing:** mean 286ms / max 1033ms (queries 1-9 before 403 block)
+
+### Google Scholar
+
+- **Result:** 28/30 OK — first baseline run 2026-05-04 after JS fix, `01_reports/scholar_smoke_20260504_004124.md`
+- **Stack:** headless Chrome via pydoll + `ScholarEngine` (src/), rate limiter 3 req/60s (engine-internal), ~10 min for 30 queries
+- **Non-OK:** 1× SUSPECT (1 result), 1× EMPTY — content gaps, no CAPTCHA crash
+- **JS fix (2026-05-03):** `_JS_PARSE` rewritten from IIFE-with-leading-`return` to flat JS (var declarations first, `return JSON.stringify` at end). Root cause: pydoll `execute_script` wraps single-line `return` scripts but passes multi-line raw to `Runtime.evaluate` where top-level `return` is illegal.
+
+### OpenAlex
+
+- **Result:** 26/30 OK — first baseline run 2026-05-04, `01_reports/openalex_smoke_20260504_003111.md`
+- **Stack:** pure httpx, `OpenAlexEngine` (src/), rate limiter 4 req/60s, ~7 min for 30 queries
+- **Non-OK:** 4× EMPTY — content gaps (non-academic queries: "kubernetes vs docker swarm", "open source alternative to notion", etc.)
+- **Notes:** Abstract reconstructed from inverted index. URL preference: arXiv > DOI > openalex.org. Set `OPENALEX_MAILTO` env var for polite-pool quota.
 
 ### Lobsters
 

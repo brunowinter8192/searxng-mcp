@@ -19,24 +19,16 @@ WAIT_INTERVAL = 1.0
 
 _JS_WAIT = "return document.querySelectorAll('div.gs_r.gs_or.gs_scl').length"
 
-_JS_PARSE = """
-return JSON.stringify((function() {
-    var nodes = document.querySelectorAll('div.gs_r.gs_or.gs_scl');
-    var out = [];
-    for (var i = 0; i < nodes.length; i++) {
-        var el = nodes[i];
-        var a = el.querySelector('h3.gs_rt a');
-        var snip = el.querySelector('div.gs_rs');
-        if (!a) continue;
-        out.push({
-            url: a.href,
-            title: a.textContent.trim(),
-            snippet: snip ? snip.textContent.trim() : ''
-        });
-    }
-    return out;
-})());
-"""
+_JS_PARSE = """var _n = document.querySelectorAll('div.gs_r.gs_or.gs_scl');
+var _o = [];
+for (var _i = 0; _i < _n.length; _i++) {
+    var _el = _n[_i];
+    var _a = _el.querySelector('h3.gs_rt a');
+    var _s = _el.querySelector('div.gs_rs');
+    if (!_a) continue;
+    _o.push({url: _a.href, title: _a.textContent.trim(), snippet: _s ? _s.textContent.trim() : ''});
+}
+return JSON.stringify(_o)"""
 
 _JS_CONSENT = """
 var btn = document.querySelector('button[jsname="b3VHJd"]') ||

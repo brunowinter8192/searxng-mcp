@@ -120,6 +120,11 @@ lobsters:
       }
       return JSON.stringify(_out);
 
+openalex:
+  api_base: "https://api.openalex.org/works"
+  per_page: 10
+  # mailto: set OPENALEX_MAILTO env var (polite-pool identifier, no default)
+
 run:
   queries_file: ./queries.txt
   delay_between_queries: 0

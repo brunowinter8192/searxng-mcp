@@ -2,7 +2,7 @@
 
 pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXNG-Docker wrapper (deleted 2026-04-15 in engine-cut). Exposes `search_web_workflow()` (single-query, fan-out across engines via asyncio.gather) and `search_batch_workflow()` (N queries sequentially in one warm-Chrome session, used by the CLI `search_batch` subcommand) — both consumed by `cli.py`. Plus `fetch_search_results()` sync wrapper consumed by dev scripts.
 
-**Active engines (8):** google, bing, google scholar, duckduckgo, mojeek, lobsters (pydoll); crossref, hn (HTTP). See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / semantic scholar. See `decisions/search05_engine_expansion.md` for HN-Algolia + DDG + Mojeek + Lobsters integration rationale + roadmap (Stack-Exchange next, Marginalia deferred).
+**Active engines (9):** google, bing, google scholar, duckduckgo, mojeek, lobsters (pydoll); crossref, hn, openalex (HTTP). See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / semantic scholar. See `decisions/search05_engine_expansion.md` for HN-Algolia + DDG + Mojeek + Lobsters + OpenAlex integration rationale + roadmap (Stack-Exchange next, Marginalia deferred).
 
 ## search_web.py
 
@@ -59,7 +59,7 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ### engines/scholar.py
 
-**Purpose:** Google Scholar via pydoll. DOM parsing via `.gs_r.gs_or.gs_scl` + `.gs_rt`.
+**Purpose:** Google Scholar via pydoll. DOM parsing via `.gs_r.gs_or.gs_scl` + `.gs_rt`. Rate-limit pre-registered at `max_requests=3, window_seconds=60` (stricter than general search engines). CAPTCHA detection via `/sorry/` URL path. Consent redirect handling via `consent.google.com` domain check + JS button click. Note: `_JS_PARSE` uses flat JS (var declarations first, `return JSON.stringify` at end) — pydoll's `execute_script` rejects multi-line scripts that start with `return` as first statement (`SyntaxError: Illegal return statement`); verified fix 2026-05-03.
 
 ### engines/crossref.py
 
@@ -80,6 +80,10 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 ### engines/lobsters.py
 
 **Purpose:** Lobste.rs web search via pydoll (lobste.rs/search GET endpoint). Link-aggregator for tech/programming content — smaller index than general engines, bias toward quality technical posts. No consent handling, no CAPTCHA detection (none observed in DOM probe 2026-05-03), no URL cleaning (direct hrefs, no redirect wrapper). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Selectors: `li.story` (result containers), `a.u-url` (href + title text), `a.domain` (snippet — domain-as-displayed, may include path prefix for GitHub repos). Snippet = domain only by design; `og:description` from preview-fetch fills the description field downstream — verified live 2026-05-03.
+
+### engines/openalex.py
+
+**Purpose:** OpenAlex academic graph via httpx (no browser, no auth, no API key required). Successor to Microsoft Academic Graph — ~250M works (papers, preprints, books, datasets), free and open. Polite-pool identifier loaded from `OPENALEX_MAILTO` env var (no default; set to any identifier email to avoid throttling from the anonymous pool). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Abstract reconstruction: OpenAlex stores abstracts as an inverted index (`word → [positions]`); `_reconstruct_abstract` inverts back to text by sorting words by first position and joining. URL strategy: `ids.arxiv` (full arXiv URL) > `doi` (full DOI URL, `https://doi.org/...`) > `id` (OpenAlex work URL, `https://openalex.org/W...`). Fields used: `id, doi, title, abstract_inverted_index, authorships, publication_year, cited_by_count, ids, primary_location`.
 
 ## Stealth Decisions
 
