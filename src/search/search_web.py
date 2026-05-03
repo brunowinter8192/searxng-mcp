@@ -9,11 +9,11 @@ from src.search.preview import fetch_previews
 from src.search.engines.bing import BingEngine
 from src.search.engines.scholar import ScholarEngine
 from src.search.engines.crossref import CrossRefEngine
-from src.search.engines.hn import HNEngine
 from src.search.engines.duckduckgo import DuckDuckGoEngine
 from src.search.engines.mojeek import MojeekEngine
 from src.search.engines.lobsters import LobstersEngine
 from src.search.engines.openalex import OpenAlexEngine
+from src.search.engines.stack_exchange import StackExchangeEngine
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +24,11 @@ ENGINES = {
     "bing": BingEngine(),
     "google scholar": ScholarEngine(),
     "crossref": CrossRefEngine(),
-    "hn": HNEngine(),
     "duckduckgo": DuckDuckGoEngine(),
     "mojeek": MojeekEngine(),
     "lobsters": LobstersEngine(),
     "openalex": OpenAlexEngine(),
+    "stack_exchange": StackExchangeEngine(),
 }
 
 

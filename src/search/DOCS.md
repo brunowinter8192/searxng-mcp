@@ -2,7 +2,7 @@
 
 pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXNG-Docker wrapper (deleted 2026-04-15 in engine-cut). Exposes `search_web_workflow()` (single-query, fan-out across engines via asyncio.gather) and `search_batch_workflow()` (N queries sequentially in one warm-Chrome session, used by the CLI `search_batch` subcommand) — both consumed by `cli.py`. Plus `fetch_search_results()` sync wrapper consumed by dev scripts.
 
-**Active engines (9):** google, bing, google scholar, duckduckgo, mojeek, lobsters (pydoll); crossref, hn, openalex (HTTP). See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / semantic scholar. See `decisions/search05_engine_expansion.md` for HN-Algolia + DDG + Mojeek + Lobsters + OpenAlex integration rationale + roadmap (Stack-Exchange next, Marginalia deferred).
+**Active engines (9):** google, bing, google scholar, duckduckgo, mojeek, lobsters (pydoll); crossref, openalex, stack_exchange (HTTP). See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / semantic scholar. See `decisions/search05_engine_expansion.md` for DDG + Mojeek + Lobsters + OpenAlex + SE integration rationale (HN dropped 2026-05-04, Marginalia deferred).
 
 ## search_web.py
 
@@ -65,10 +65,6 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 **Purpose:** CrossRef REST API via httpx (no browser needed). Uses polite pool `mailto` header for higher rate limits. Returns bibliographic metadata as `SearchResult` entries.
 
-### engines/hn.py
-
-**Purpose:** HN Algolia REST API via httpx (no browser, no auth). Default filter `tags=story` excludes comment hits. Snippet synthesized from points + num_comments + author metadata (HN doesn't expose body text for link-stories). Fallback URL `news.ycombinator.com/item?id={objectID}` for hits with empty external `url` (Ask-HN, Show-HN with story-text). Returns story metadata as `SearchResult` entries.
-
 ### engines/duckduckgo.py
 
 **Purpose:** DuckDuckGo web search via pydoll (`html.duckduckgo.com/html/` GET endpoint). No consent handling needed — DDG html-endpoint does not show a consent banner. No cookie injection needed — `kl=wt-wt` (worldwide, no region filter) is included directly in the GET URL. DOM-based CAPTCHA detection (`form#challenge-form`). URL cleaning extracts the actual destination from DDG's redirect wrapper (`duckduckgo.com/l/?uddg=<encoded>`). Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min policy). Selectors: `#links > div.web-result` (result containers), `h2 a` (title + href), `a.result__snippet` (snippet) — verified live 2026-05-03.
@@ -84,6 +80,10 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 ### engines/openalex.py
 
 **Purpose:** OpenAlex academic graph via httpx (no browser, no auth, no API key required). Successor to Microsoft Academic Graph — ~250M works (papers, preprints, books, datasets), free and open. Polite-pool identifier loaded from `OPENALEX_MAILTO` env var (no default; set to any identifier email to avoid throttling from the anonymous pool). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Abstract reconstruction: OpenAlex stores abstracts as an inverted index (`word → [positions]`); `_reconstruct_abstract` inverts back to text by sorting words by first position and joining. URL strategy: `ids.arxiv` (full arXiv URL) > `doi` (full DOI URL, `https://doi.org/...`) > `id` (OpenAlex work URL, `https://openalex.org/W...`). Fields used: `id, doi, title, abstract_inverted_index, authorships, publication_year, cited_by_count, ids, primary_location`.
+
+### engines/stack_exchange.py
+
+**Purpose:** Stack Exchange API via httpx (no browser, no auth required). Targets `stackoverflow.com` by default via `search/advanced` endpoint. API key optional: set `STACK_EXCHANGE_API_KEY` env var for 10k req/day; without key, anonymous quota is 300 req/day (logged once as warning on first call). Snippet from `body` field (HTML stripped + truncated to 500 chars) when `filter=withbody`; fallback to `"Score N · K answers · tagged x,y"` if body absent. Title HTML-decoded via `html.unescape`. Rate-limit pre-registered at `max_requests=4, window_seconds=60`.
 
 ## Stealth Decisions
 

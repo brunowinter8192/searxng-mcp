@@ -1,5 +1,33 @@
 # search05 — Engine Expansion
 
+## HN dropped (2026-05-04)
+
+**Engine:** `src/search/engines/hn.py` — deleted  
+**Dropped by:** Bruno verdict
+
+**Reason:** HN Algolia's backoff behavior is rate-limit-cascade-hostile in the parallel engine architecture. Any query that yields 0 results (link-stories EMPTY, German queries, non-tech topics) triggers `limiter.backoff()` because `_wait_for_results` returns False on empty content — the engine cannot distinguish "rate limited" from "no matching content". In a 4-engine parallel gather, this compounds exponentially across consecutive empty queries (attempt 0: 34s → attempt 1: 63s → attempt 2: 125s → ...), effectively stalling the entire search gather on sequences of non-HN queries. Replaced by Stack Exchange API which returns empty result list cleanly without backoff penalty.
+
+---
+
+## Stack Exchange — Implementiert (2026-05-04)
+
+**Endpoint:** `https://api.stackexchange.com/2.3/search/advanced?site=stackoverflow&filter=withbody` (GET, JSON)  
+**Engine:** `src/search/engines/stack_exchange.py` — BaseEngine subclass, httpx, 4 req/min  
+**Smoke:** `dev/search_pipeline/10_stack_exchange_smoke.py` — 30-query baseline, report in `01_reports/se_smoke_*.md`
+
+**Why Stack Exchange:** Programmatic Q&A content from stackoverflow.com. Complements general web engines with structured developer answers that rarely surface at the top of general search. Free API, no browser needed. `filter=withbody` returns the question body for real snippet content vs. pure metadata. Anonymous quota 300 req/day; 10k/day with free registered API key.
+
+**Fields used:** `link` (URL), `title` (HTML-decoded), `body` (HTML stripped to plaintext, truncated 500 chars), `score`, `answer_count`, `tags` (fallback snippet when body absent).
+
+**Smoke baseline (2026-05-04):** `dev/search_pipeline/01_reports/se_smoke_20260504_012742.md`
+- 15/30 OK — German queries (6× EMPTY expected), pydoll/crawl4ai/trafilatura/SPLADE niche queries EMPTY (no SO matches)
+- No rate-limit block — anonymous 300/day quota not exhausted; 4 req/min token bucket paces correctly (59s wait every 4 queries)
+- Live CLI harness: 26 results for "python asyncio best practices" with body snippets + preview
+
+**Sources:** Stack Exchange API docs — `api.stackexchange.com/docs/search`
+
+---
+
 ## Lobsters — Implementiert (2026-05-03)
 
 **Endpoint:** `https://lobste.rs/search?q={query}&what=stories&order=relevance` (GET, server-rendered HTML, no JS required)  

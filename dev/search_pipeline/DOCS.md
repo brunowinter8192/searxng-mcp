@@ -12,7 +12,7 @@ Baseline-first stealth/search experimentation. Active engines: Google (pydoll, 3
 | `queries.txt` | 30 baseline queries (Tech 8 + Science 6 + German 6 + Niche 5 + Broad 5) |
 | `01_google_smoke.py` | Baseline 30-query smoke runner (standalone pydoll, dev-side control reference) — reads config.yml, writes timestamped report `smoke_<ts>.md` to `01_reports/` |
 | `02_burst_smoke.py` | Burst smoke against the production CLI — invokes `searxng-cli search_batch` per batch (one subprocess per N queries, warm Chrome amortized) and writes `burst_<ts>.md` to `01_reports/`. Exists to validate the prod CLI path under the architectural rate pattern (4 queries per burst, optional cooldown). CLI flags: `--queries-per-burst N` (default 4), `--cooldown S` (default 60), `--max-queries N` (default all from queries.txt). |
-| `03_hn_smoke.py` | HN-Algolia smoke runner — direct `HNEngine().search()` call (pure HTTP, no browser), runs the 30 baseline queries, writes timestamped report `hn_smoke_<ts>.md` to `01_reports/`. Status taxonomy: OK / EMPTY / ERROR. Smoke result is content-bound — German queries always EMPTY (HN is English), niche-tech queries depend on `tags=story` filter (see search05). |
+| `10_stack_exchange_smoke.py` | Stack Exchange smoke runner — imports `StackExchangeEngine` from `src/`, calls `.search()` directly (pure HTTP, no browser), runs 30 baseline queries against `api.stackexchange.com/2.3/search/advanced?site=stackoverflow`. Writes `se_smoke_<ts>.md` to `01_reports/`. Status taxonomy: OK / EMPTY / RATE_LIMITED / ERROR. Set `STACK_EXCHANGE_API_KEY` env var for 10k/day quota (without key: anonymous 300/day). |
 | `04_ddg_smoke.py` | DuckDuckGo smoke runner — standalone pydoll, reads config.yml `duckduckgo:` block, runs 30 baseline queries against `html.duckduckgo.com/html/` GET endpoint, writes `ddg_smoke_<ts>.md` to `01_reports/`. No consent handling, DOM-based CAPTCHA detection, URL cleaning from DDG redirect wrapper. Status taxonomy: OK / EMPTY / BLOCKED / CAPTCHA / SUSPECT / ERROR. |
 | `05_search_smoke.py` | Multi-engine comparison smoke — imports `GoogleEngine` + `DuckDuckGoEngine` from `src/`, fans out per-engine in parallel via `asyncio.gather`, merges by URL preserving per-engine snippets, fetches previews via `src/search/preview.py`, writes `search_smoke_<ts>.md` to `01_reports/`. CLI flags: `--engines google duckduckgo` (default), `--max-queries N`. |
 | `06_mojeek_smoke.py` | Mojeek standalone smoke runner — reads config.yml `mojeek:` block, runs 30 baseline queries against `mojeek.com/search`, writes `mojeek_smoke_<ts>.md` to `01_reports/`. No consent, no CAPTCHA check, no URL cleaning. Status taxonomy: OK / EMPTY / BLOCKED / SUSPECT / ERROR. |
@@ -65,6 +65,11 @@ rm -rf ~/.searxng-mcp/browser-session-smoke/Singleton* 2>/dev/null
 # OpenAlex smoke (30 queries via OpenAlexEngine, ~8 min — rate limit 4 req/60s)
 OPENALEX_MAILTO=yourname@example.com ./venv/bin/python3 dev/search_pipeline/09_openalex_smoke.py
 
+# Stack Exchange smoke (30 queries via StackExchangeEngine, ~8 min — rate limit 4 req/60s)
+./venv/bin/python3 dev/search_pipeline/10_stack_exchange_smoke.py
+# with API key (10k/day quota):
+STACK_EXCHANGE_API_KEY=your_key ./venv/bin/python3 dev/search_pipeline/10_stack_exchange_smoke.py
+
 # Multi-engine comparison smoke (30 queries × google + duckduckgo, ~8 min)
 ./venv/bin/python3 dev/search_pipeline/05_search_smoke.py --engines google duckduckgo
 
@@ -104,6 +109,13 @@ OPENALEX_MAILTO=yourname@example.com ./venv/bin/python3 dev/search_pipeline/09_o
 - **Selectors:** `li.story` (container), `a.u-url` (title + href), `a.domain` (snippet as domain-as-displayed) — verified live 2026-05-03
 - **Nav timing:** mean 488ms / max 1639ms; DOM-wait mean 477ms / max 613ms
 - **Notes:** Link-aggregator — smaller index; German + off-topic queries EMPTY (expected). No rate-limit block observed. Snippet = domain only by design.
+
+### Stack Exchange
+
+- **Result:** 15/30 OK — first baseline run 2026-05-04, `01_reports/se_smoke_20260504_012742.md`
+- **Stack:** pure httpx, `StackExchangeEngine` (src/), rate limiter 4 req/60s, site=stackoverflow, filter=withbody, anonymous quota
+- **Non-OK:** 15× EMPTY — German queries (6), pydoll/crawl4ai/trafilatura/SPLADE niche queries, "kubernetes vs docker swarm" (SO has it as EMPTY with current filter)
+- **Notes:** Anonymous 300 req/day quota without API key; set `STACK_EXCHANGE_API_KEY` for 10k/day. Token bucket correctly paces to 59s wait every 4 queries.
 
 ### 05 — Multi-engine comparison
 
