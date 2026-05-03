@@ -65,9 +65,11 @@ rm -rf ~/.searxng-mcp/browser-session-smoke/Singleton* 2>/dev/null
 
 ### Mojeek
 
-- **Result:** TBD — first smoke run via `06_mojeek_smoke.py`
+- **Result:** 7/30 OK (stress baseline, 0-delay) — first run 2026-05-03, `01_reports/mojeek_smoke_20260503_193022.md`
 - **Stack:** headless Chrome via pydoll, fingerprint patches (screen/DPR/outer/css), no consent cookie, GET `mojeek.com/search?q={}&safe=1`, 0 delay
 - **Selectors:** `ul.results-standard > li > a.ob` (container), `li h2 a` (title), `li p.s` (snippet) — verified live 2026-05-03
+- **Rate-limit break:** 403 at query 10 (~9 queries in 7.5s = ~1.2 req/s burst). Production 4 req/min (1 per 15s) stays well within threshold.
+- **Nav timing:** mean 286ms / max 1033ms (queries 1-9 before 403 block)
 
 ### 05 — Multi-engine comparison
 

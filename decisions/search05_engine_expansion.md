@@ -15,6 +15,12 @@
 - In-page "×Mojeek User Survey" notification does not block result parsing
 - `page_title` pattern: `"{query} - Mojeek Search"` — used in `_derive_status` BLOCKED check
 
+**Smoke baseline (2026-05-03):** `dev/search_pipeline/01_reports/mojeek_smoke_20260503_193022.md`
+- 7/30 OK at 0-delay stress — 403 block kicks in at query 10 (~9 queries in 7.5s = ~1.2 req/s burst)
+- 2× SUSPECT: valid results (10 hits) with low domain diversity (4 domains) — not a detection signal
+- Production 4 req/min limiter (1 query per 15s) stays well within burst threshold
+- Nav timing queries 1-9: mean 286ms / max 1033ms
+
 **Sources:** `searxng/searxng searx/engines/mojeek.py` (selector reference, s-param note)
 
 ---
