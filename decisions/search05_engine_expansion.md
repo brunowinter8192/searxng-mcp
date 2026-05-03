@@ -117,6 +117,40 @@ Recherche-Pass GitHub-Search 2026-05-01 zur Frage: welche Engines erweitern den 
 - Marginalia Hosted-API: existiert ein offener Endpoint ohne API-Key, oder ist alles per-Key? Klärt sich beim ersten HTTP-Probe.
 - Engine-Routing & Dedup: HN- und SE-Treffer-Domains weichen stark von Google/Bing-Treffern ab. Dedup-Logik im Search-Workflow muss prüfen ob URLs aus unterschiedlichen Engines korrekt mergen (HN-Hits führen oft zu denselben URLs wie Google-Treffer plus zusätzlicher Diskussion).
 
+## Scholar Re-Eval (2026-05-03)
+
+**Status before:** "Engine-Crash 0/0, cause unklar" (2026-04-21 SearXNG stack).
+
+**Phase-A findings (2026-05-03, pydoll stack):**
+- DOM probe: page loads correctly, no CAPTCHA, no `/sorry/` redirect, 170 KB HTML
+- Selectors `div.gs_r.gs_or.gs_scl` = 10, `.gs_rt` = 10, `h3.gs_rt a` = 10 — all correct
+- `ScholarEngine().search()` returns 0 results despite correct DOM
+- Root cause (confirmed via raw pydoll result dict): `_JS_PARSE` is a Python triple-quoted string starting with `\nreturn JSON.stringify(...)`. Pydoll's `execute_script` wraps single-line scripts in a function context that permits `return`, but passes multi-line scripts raw to Chrome's `Runtime.evaluate`, where a top-level `return` statement is illegal → `SyntaxError: Illegal return statement`. `_extract_value()` silently returns `None` → `_parse_results()` returns `[]`.
+
+**Fix applied (2026-05-03):** Rewrote `_JS_PARSE` as flat JS: variable declarations first (`var _n`, `var _o`, for-loop), `return JSON.stringify(_o)` as the final statement. No IIFE wrapper. Pattern matches config.yml selector blocks (mojeek/DDG/Lobsters). Selectors unchanged. Rate limit unchanged (3 req/60s — stricter than general engines).
+
+**Smoke baseline:** `dev/search_pipeline/01_reports/scholar_smoke_*.md` (2026-05-03).
+
+---
+
+## OpenAlex — Implementiert (2026-05-03)
+
+**Endpoint:** `https://api.openalex.org/works?search={query}&per_page=10[&mailto={email}]` (GET, JSON, no auth)  
+**Engine:** `src/search/engines/openalex.py` — BaseEngine subclass, httpx-only, 4 req/min  
+**Smoke:** `dev/search_pipeline/09_openalex_smoke.py` — 30-query baseline, report in `01_reports/openalex_smoke_*.md`
+
+**Why OpenAlex:** Successor to Microsoft Academic Graph. ~250M works (papers, preprints, books, datasets). Free, open, no API key required. Provides rich structured metadata including abstracts (as inverted index), citation counts, author lists, and external IDs (arXiv, DOI, PMID, MAG). Strongest academic coverage in the HTTP-engine category — complements CrossRef (DOI-focused), HN (tech discussion). No CAPTCHA, no browser load, no stealth concerns.
+
+**Abstract inverted index:** OpenAlex stores abstracts as `{word: [position1, position2, ...]}`. Reconstruction: build position→word mapping, sort by position, join with spaces. ~5 lines of Python. Not all papers have abstracts (some only have `tldr`-equivalent from the works API).
+
+**URL strategy:** `ids.arxiv` (full URL `https://arxiv.org/abs/...`, best for CS/ML papers) > `doi` (full URL `https://doi.org/...`, journal papers) > `id` (full URL `https://openalex.org/W...`, always present, lowest signal value).
+
+**Rate limiting:** Anonymous polite-pool: no published hard limit, but OpenAlex asks for `mailto=` parameter to identify polite users. Set `OPENALEX_MAILTO` env var — engine includes it in all requests when present. No default (don't hardcode an email). Production 4 req/min limiter stays well within observed anonymous limits.
+
+**Semantic Scholar drop rationale:** Tested 2026-05-03. Anonymous tier blocked after 3 rapid requests; 429 persisted for > 180s. Even with 4 req/min limiter, startup/warmup scenarios (prior session already hit the API) would cause persistent 429. Free key requires academic-institution email gate. OpenAlex provides equivalent academic metadata without the rate-cascade risk.
+
+---
+
 ## Quellen
 
 - StractOrg/stract — Stract Search Engine (Repo, dropped: $27/mo commercial API)

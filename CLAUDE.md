@@ -12,7 +12,7 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **Engines (active)** | Google, Bing, Google Scholar, DuckDuckGo, Mojeek, Lobsters (pydoll); CrossRef, HN-Algolia (HTTP) | 8-engine set, HN added 2026-05-01, DDG + Mojeek + Lobsters added 2026-05-03 |
+| **Engines (active)** | Google, Bing, Google Scholar, DuckDuckGo, Mojeek, Lobsters (pydoll); CrossRef, HN-Algolia, OpenAlex (HTTP) | 9-engine set, HN added 2026-05-01, DDG + Mojeek + Lobsters added 2026-05-03, OpenAlex + Scholar JS-fix 2026-05-03 |
 | **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
 | **Browser** | pydoll Chrome (stealth fingerprint patches, per-engine JS selectors) | `src/search/browser.py`, `src/search/engines/`, `dev/search_pipeline/01_google_smoke.py` + `config.yml` |
 | **Rate Limiting** | Token-bucket per engine with backoff | `src/search/rate_limiter.py` |
@@ -48,7 +48,7 @@ See [sources/sources.md](sources/sources.md).
 | `src/search/preview.py` | URL preview fetcher (og/meta via httpx + lxml, top-20) |
 | `src/search/browser.py` | pydoll Chrome lifecycle (shared singleton) |
 | `src/search/rate_limiter.py` | Per-engine token bucket |
-| `src/search/engines/` | Per-engine parsers: `google.py`, `bing.py`, `scholar.py`, `crossref.py`, `hn.py`, `duckduckgo.py`, `mojeek.py`, `lobsters.py` |
+| `src/search/engines/` | Per-engine parsers: `google.py`, `bing.py`, `scholar.py`, `crossref.py`, `hn.py`, `duckduckgo.py`, `mojeek.py`, `lobsters.py`, `openalex.py` |
 | `src/scraper/scrape_url.py` | URL scraping (filtered) |
 | `src/scraper/scrape_url_raw.py` | Raw URL scraping (for RAG indexing) |
 | `src/scraper/download_pdf.py` | PDF file download |
@@ -82,13 +82,13 @@ searxng/
 │   └── search06_preview.md
 ├── src/                            → [DOCS.md](src/DOCS.md)
 │   ├── routing.py                  → Plugin domain routing
-│   ├── search/                     → [DOCS.md](src/search/DOCS.md) — search engines (6 active: 4 browser + 2 API)
+│   ├── search/                     → [DOCS.md](src/search/DOCS.md) — search engines (9 active: 6 browser + 3 API)
 │   │   └── engines/                → Per-engine parsers (google, bing, scholar, crossref, hn, duckduckgo)
 │   ├── scraper/                    → [DOCS.md](src/scraper/DOCS.md)
 │   ├── crawler/                    → [DOCS.md](src/crawler/DOCS.md) — CLI-only (`/crawl-site` pipeline)
 │   └── spawn/                      → Worker spawn utilities (in src/DOCS.md)
 ├── dev/                            → [DOCS.md](dev/DOCS.md)
-│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md) — Per-engine smoke stack (01_google_smoke, 02_burst_smoke, 03_hn_smoke, 04_ddg_smoke, 05_search_smoke, 06_mojeek_smoke, config.yml, 01_reports/)
+│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md) — Per-engine smoke stack (01_google_smoke, 02_burst_smoke, 03_hn_smoke, 04_ddg_smoke, 05_search_smoke, 06_mojeek_smoke, 07_lobsters_smoke, 08_scholar_smoke, 09_openalex_smoke, config.yml, 01_reports/)
 │   ├── scrape_pipeline/            → [DOCS.md](dev/scrape_pipeline/DOCS.md)
 │   │   ├── browser_eval/           → scrape01_browser
 │   │   ├── filter_eval/            → scrape02_filtering

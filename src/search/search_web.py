@@ -13,6 +13,7 @@ from src.search.engines.hn import HNEngine
 from src.search.engines.duckduckgo import DuckDuckGoEngine
 from src.search.engines.mojeek import MojeekEngine
 from src.search.engines.lobsters import LobstersEngine
+from src.search.engines.openalex import OpenAlexEngine
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ ENGINES = {
     "duckduckgo": DuckDuckGoEngine(),
     "mojeek": MojeekEngine(),
     "lobsters": LobstersEngine(),
+    "openalex": OpenAlexEngine(),
 }
 
 
