@@ -27,9 +27,22 @@ N. {title}
 
 ## Evidenz
 
-Smoke run `dev/search_pipeline/05_search_smoke.py --engines google duckduckgo` over 30 baseline queries.
+Smoke run `dev/search_pipeline/05_search_smoke.py --engines google duckduckgo` — 2026-05-03, 30 baseline queries.  
+Report: `dev/search_pipeline/01_reports/search_smoke_20260503_182524.md`
 
-<!-- Populated after first smoke run — report path: dev/search_pipeline/01_reports/search_smoke_<ts>.md -->
+| Metric | Value |
+|--------|-------|
+| Queries with results | 30/30 |
+| Total unique URLs (sum) | 522 |
+| Google results (sum) | 285 |
+| DuckDuckGo results (sum) | 297 |
+| Overlap (both engines, sum) | 60 (11.5%) |
+| Preview fetch success | 407/522 (77%) |
+
+**Observations:**
+- 77% preview success rate at 3s/8-parallel — acceptable for first cut, covers vast majority of results
+- Low overlap (11.5%) confirms DDG adds genuine coverage beyond Google for this query set
+- DDG produces slightly more results per query than Google (297 vs 285 across 30 queries)
 
 ## Quellen
 
