@@ -14,8 +14,8 @@ See [sources/sources.md](sources/sources.md).
 |-----------|---------------|--------|
 | **Engines (active)** | Google, Bing, Google Scholar, DuckDuckGo, Mojeek, Lobsters (pydoll); CrossRef, OpenAlex, Stack Exchange (HTTP) | 9-engine set, HN dropped 2026-05-04 (rate-limit-cascade-hostile), SE added 2026-05-04 |
 | **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
-| **Browser** | pydoll Chrome (stealth fingerprint patches, per-engine JS selectors) | `src/search/browser.py`, `src/search/engines/`, `dev/search_pipeline/01_google_smoke.py` + `config.yml` |
-| **Rate Limiting** | Token-bucket per engine with backoff | `src/search/rate_limiter.py` |
+| **Browser** | pydoll Chrome (stealth fingerprint patches, per-engine JS selectors) | `src/search/browser.py`, `src/search/engines/`, `dev/search_pipeline/` smokes |
+| **Rate Limiting** | Token-bucket per engine, uniform 4 req/min; backoff only on CAPTCHA/HTTP-429/exception (not on EMPTY) | `src/search/rate_limiter.py` |
 | **Orchestration** | `asyncio.gather` parallel fetch across engines, deduplicated, formatted as TextContent. `search_web_workflow` for single query; `search_batch_workflow` for N queries sequentially in one warm-Chrome session | `src/search/search_web.py`, SNIPPET_LENGTH=5000 |
 | **Preview** | httpx + lxml fetch of og:description / meta:description for top-20 results, async parallel (concurrency=8, timeout=3s), silent skip on fail, default-on | `src/search/preview.py`, see `decisions/search06_preview.md` |
 | **Parked** | Brave (PoW CAPTCHA incompatible with parallel architecture) | See `decisions/stealth00_engine_status.md` |

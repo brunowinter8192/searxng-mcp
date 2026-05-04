@@ -39,8 +39,8 @@ if (btn) { btn.click(); return true; }
 return false;
 """
 
-# Pre-register with strict config (3 req/60s) — Scholar is stricter than web Google
-_limiters["google_scholar"] = RateLimiter(max_requests=3, window_seconds=60)
+# Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
+_limiters["google_scholar"] = RateLimiter(max_requests=4, window_seconds=60)
 
 
 # ORCHESTRATOR
@@ -68,7 +68,6 @@ class ScholarEngine(BaseEngine):
                 return []
             if not await _wait_for_results(tab):
                 logger.warning("No Scholar results loaded for: %s", query)
-                limiter.backoff()
                 return []
             results = await _parse_results(tab, max_results)
         except Exception as e:

@@ -33,7 +33,7 @@ for (var _i = 0; _i < _cs.length; _i++) {
 return JSON.stringify(_out);
 """
 
-# Pre-register with uniform 4 req/min policy (Google-Baseline)
+# Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
 _limiters["duckduckgo"] = RateLimiter(max_requests=4, window_seconds=60)
 
 
@@ -57,7 +57,6 @@ class DuckDuckGoEngine(BaseEngine):
                 return []
             if not await _wait_for_results(tab):
                 logger.warning("No DuckDuckGo results loaded for: %s", query)
-                limiter.backoff()
                 return []
             results = await _parse_results(tab, max_results)
         except Exception as e:
