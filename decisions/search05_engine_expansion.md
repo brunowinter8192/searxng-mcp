@@ -1,5 +1,70 @@
 # search05 — Engine Expansion
 
+## Bing dropped (2026-05-04)
+
+**Engine:** `src/search/engines/bing.py` — deleted; `BingEngine` import + ENGINES entry removed from `src/search/search_web.py`
+**Dropped by:** Bruno verdict
+
+**Reason:** No added value over DuckDuckGo. DDG's web index IS Bing — DDG queries Bing under the hood and re-ranks with its own snippet generation. Adding Bing-direct gave us only snippet-and-ranking variation on the same URL set, not actual coverage. Plus Bing's selector `#b_results .b_algo` had drifted (DOM change since the engine was wired) and required a repair effort that didn't pay back. DDG remains as the Bing-index access path; a Bing-direct re-eval can be revisited later if a clear use case emerges (own snippet quality vs. DDG, Bing News / Images sub-pipelines).
+
+---
+
+## HN dropped (2026-05-04)
+
+**Engine:** `src/search/engines/hn.py` — deleted  
+**Dropped by:** Bruno verdict
+
+**Reason:** HN Algolia's backoff behavior is rate-limit-cascade-hostile in the parallel engine architecture. Any query that yields 0 results (link-stories EMPTY, German queries, non-tech topics) triggers `limiter.backoff()` because `_wait_for_results` returns False on empty content — the engine cannot distinguish "rate limited" from "no matching content". In a 4-engine parallel gather, this compounds exponentially across consecutive empty queries (attempt 0: 34s → attempt 1: 63s → attempt 2: 125s → ...), effectively stalling the entire search gather on sequences of non-HN queries. Replaced by Stack Exchange API which returns empty result list cleanly without backoff penalty.
+
+---
+
+## Stack Exchange — Implementiert (2026-05-04)
+
+**Endpoint:** `https://api.stackexchange.com/2.3/search/advanced?site=stackoverflow&filter=withbody` (GET, JSON)  
+**Engine:** `src/search/engines/stack_exchange.py` — BaseEngine subclass, httpx, 4 req/min  
+**Smoke:** `dev/search_pipeline/10_stack_exchange_smoke.py` — 30-query baseline, report in `01_reports/se_smoke_*.md`
+
+**Why Stack Exchange:** Programmatic Q&A content from stackoverflow.com. Complements general web engines with structured developer answers that rarely surface at the top of general search. Free API, no browser needed. `filter=withbody` returns the question body for real snippet content vs. pure metadata. Anonymous quota 300 req/day; 10k/day with free registered API key.
+
+**Fields used:** `link` (URL), `title` (HTML-decoded), `body` (HTML stripped to plaintext, truncated 500 chars), `score`, `answer_count`, `tags` (fallback snippet when body absent).
+
+**Smoke baseline (2026-05-04):** `dev/search_pipeline/01_reports/se_smoke_20260504_012742.md`
+- 15/30 OK — German queries (6× EMPTY expected), pydoll/crawl4ai/trafilatura/SPLADE niche queries EMPTY (no SO matches)
+- No rate-limit block — anonymous 300/day quota not exhausted; 4 req/min token bucket paces correctly (59s wait every 4 queries)
+- Live CLI harness: 26 results for "python asyncio best practices" with body snippets + preview
+
+**Sources:** Stack Exchange API docs — `api.stackexchange.com/docs/search`
+
+---
+
+## Lobsters — Implementiert (2026-05-03)
+
+**Endpoint:** `https://lobste.rs/search?q={query}&what=stories&order=relevance` (GET, server-rendered HTML, no JS required)  
+**Engine:** `src/search/engines/lobsters.py` — BaseEngine subclass, pydoll Chrome, 4 req/min  
+**Smoke:** `dev/search_pipeline/07_lobsters_smoke.py` — 30-query baseline, report in `01_reports/lobsters_smoke_*.md`
+
+**Why Lobsters:** Link-aggregator focused on tech/programming. Curated community with high signal-to-noise for developer queries. Complements Google/DDG/Mojeek with community-filtered content rather than crawl-ranked results. Free, no auth, no API-key, no bot challenge observed.
+
+**Phase-A DOM probe findings (2026-05-03):**
+- Selectors verified live: `li.story` (20 hits), `a.u-url` (20 hits, href = direct destination URL), `a.domain` (domain-as-displayed string)
+- `a.u-url.href` is direct destination URL — no redirect wrapper, no `_clean_url` needed
+- No CAPTCHA form, no cookie banner, no bot-block on first contact. html_bytes = 47870 (normal page).
+- `page_title` pattern: `"Search | Lobsters"` — used in `_derive_status` BLOCKED check (`"Lobsters" not in title`)
+- No URL redirect on navigation — `current_url` matches input URL exactly
+- `a.domain` shows Lobsters' display domain which may include path prefix for GitHub (e.g. `github.com/joaocarvalhoopen`) — correct link-aggregator behavior, not a parsing error
+
+**Snippet caveat:** Lobsters search page has no body text — only title + domain + tags + comments-count + submitter. Snippet = `a.domain` (domain-as-displayed) by design. `og:description` from preview-fetch fills the description field downstream.
+
+**Smoke baseline (2026-05-03):** `dev/search_pipeline/01_reports/lobsters_smoke_20260503_224702.md`
+- 16/30 OK at 0-delay stress — 11× EMPTY (German queries + content-empty: crawl4ai, pydoll, epidemiology, climate change), 3× SUSPECT (3 results, low domain diversity)
+- No rate-limit block observed — EMPTY = Lobsters simply has no matching content for those queries
+- Nav timing: mean 488ms / max 1639ms; DOM-wait mean 477ms / max 613ms
+- Production 4 req/min limiter stays within burst threshold
+
+**Sources:** `searxng/searxng searx/engines/lobsters.py` (selector reference)
+
+---
+
 ## Mojeek — Implementiert (2026-05-03)
 
 **Endpoint:** `https://www.mojeek.com/search?q={query}&safe=1` (GET, server-rendered HTML, no JS required)  
@@ -88,6 +153,40 @@ Recherche-Pass GitHub-Search 2026-05-01 zur Frage: welche Engines erweitern den 
 - SE-API: ohne Key 300/Tag — reicht das für agentic-search-Volume oder direkt mit kostenlosem Key starten?
 - Marginalia Hosted-API: existiert ein offener Endpoint ohne API-Key, oder ist alles per-Key? Klärt sich beim ersten HTTP-Probe.
 - Engine-Routing & Dedup: HN- und SE-Treffer-Domains weichen stark von Google/Bing-Treffern ab. Dedup-Logik im Search-Workflow muss prüfen ob URLs aus unterschiedlichen Engines korrekt mergen (HN-Hits führen oft zu denselben URLs wie Google-Treffer plus zusätzlicher Diskussion).
+
+## Scholar Re-Eval (2026-05-03)
+
+**Status before:** "Engine-Crash 0/0, cause unklar" (2026-04-21 SearXNG stack).
+
+**Phase-A findings (2026-05-03, pydoll stack):**
+- DOM probe: page loads correctly, no CAPTCHA, no `/sorry/` redirect, 170 KB HTML
+- Selectors `div.gs_r.gs_or.gs_scl` = 10, `.gs_rt` = 10, `h3.gs_rt a` = 10 — all correct
+- `ScholarEngine().search()` returns 0 results despite correct DOM
+- Root cause (confirmed via raw pydoll result dict): `_JS_PARSE` is a Python triple-quoted string starting with `\nreturn JSON.stringify(...)`. Pydoll's `execute_script` wraps single-line scripts in a function context that permits `return`, but passes multi-line scripts raw to Chrome's `Runtime.evaluate`, where a top-level `return` statement is illegal → `SyntaxError: Illegal return statement`. `_extract_value()` silently returns `None` → `_parse_results()` returns `[]`.
+
+**Fix applied (2026-05-03):** Rewrote `_JS_PARSE` as flat JS: variable declarations first (`var _n`, `var _o`, for-loop), `return JSON.stringify(_o)` as the final statement. No IIFE wrapper. Pattern matches config.yml selector blocks (mojeek/DDG/Lobsters). Selectors unchanged. Rate limit unchanged (3 req/60s — stricter than general engines).
+
+**Smoke baseline:** `dev/search_pipeline/01_reports/scholar_smoke_*.md` (2026-05-03).
+
+---
+
+## OpenAlex — Implementiert (2026-05-03)
+
+**Endpoint:** `https://api.openalex.org/works?search={query}&per_page=10[&mailto={email}]` (GET, JSON, no auth)  
+**Engine:** `src/search/engines/openalex.py` — BaseEngine subclass, httpx-only, 4 req/min  
+**Smoke:** `dev/search_pipeline/09_openalex_smoke.py` — 30-query baseline, report in `01_reports/openalex_smoke_*.md`
+
+**Why OpenAlex:** Successor to Microsoft Academic Graph. ~250M works (papers, preprints, books, datasets). Free, open, no API key required. Provides rich structured metadata including abstracts (as inverted index), citation counts, author lists, and external IDs (arXiv, DOI, PMID, MAG). Strongest academic coverage in the HTTP-engine category — complements CrossRef (DOI-focused), HN (tech discussion). No CAPTCHA, no browser load, no stealth concerns.
+
+**Abstract inverted index:** OpenAlex stores abstracts as `{word: [position1, position2, ...]}`. Reconstruction: build position→word mapping, sort by position, join with spaces. ~5 lines of Python. Not all papers have abstracts (some only have `tldr`-equivalent from the works API).
+
+**URL strategy:** `ids.arxiv` (full URL `https://arxiv.org/abs/...`, best for CS/ML papers) > `doi` (full URL `https://doi.org/...`, journal papers) > `id` (full URL `https://openalex.org/W...`, always present, lowest signal value).
+
+**Rate limiting:** Anonymous polite-pool: no published hard limit, but OpenAlex asks for `mailto=` parameter to identify polite users. Set `OPENALEX_MAILTO` env var — engine includes it in all requests when present. No default (don't hardcode an email). Production 4 req/min limiter stays well within observed anonymous limits.
+
+**Semantic Scholar drop rationale:** Tested 2026-05-03. Anonymous tier blocked after 3 rapid requests; 429 persisted for > 180s. Even with 4 req/min limiter, startup/warmup scenarios (prior session already hit the API) would cause persistent 429. Free key requires academic-institution email gate. OpenAlex provides equivalent academic metadata without the rate-cascade risk.
+
+---
 
 ## Quellen
 

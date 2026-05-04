@@ -19,24 +19,16 @@ WAIT_INTERVAL = 1.0
 
 _JS_WAIT = "return document.querySelectorAll('div.gs_r.gs_or.gs_scl').length"
 
-_JS_PARSE = """
-return JSON.stringify((function() {
-    var nodes = document.querySelectorAll('div.gs_r.gs_or.gs_scl');
-    var out = [];
-    for (var i = 0; i < nodes.length; i++) {
-        var el = nodes[i];
-        var a = el.querySelector('h3.gs_rt a');
-        var snip = el.querySelector('div.gs_rs');
-        if (!a) continue;
-        out.push({
-            url: a.href,
-            title: a.textContent.trim(),
-            snippet: snip ? snip.textContent.trim() : ''
-        });
-    }
-    return out;
-})());
-"""
+_JS_PARSE = """var _n = document.querySelectorAll('div.gs_r.gs_or.gs_scl');
+var _o = [];
+for (var _i = 0; _i < _n.length; _i++) {
+    var _el = _n[_i];
+    var _a = _el.querySelector('h3.gs_rt a');
+    var _s = _el.querySelector('div.gs_rs');
+    if (!_a) continue;
+    _o.push({url: _a.href, title: _a.textContent.trim(), snippet: _s ? _s.textContent.trim() : ''});
+}
+return JSON.stringify(_o)"""
 
 _JS_CONSENT = """
 var btn = document.querySelector('button[jsname="b3VHJd"]') ||
@@ -47,8 +39,8 @@ if (btn) { btn.click(); return true; }
 return false;
 """
 
-# Pre-register with strict config (3 req/60s) — Scholar is stricter than web Google
-_limiters["google_scholar"] = RateLimiter(max_requests=3, window_seconds=60)
+# Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
+_limiters["google_scholar"] = RateLimiter(max_requests=4, window_seconds=60)
 
 
 # ORCHESTRATOR
@@ -76,7 +68,6 @@ class ScholarEngine(BaseEngine):
                 return []
             if not await _wait_for_results(tab):
                 logger.warning("No Scholar results loaded for: %s", query)
-                limiter.backoff()
                 return []
             results = await _parse_results(tab, max_results)
         except Exception as e:

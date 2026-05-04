@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Google smoke test — invokes GoogleEngine().search() for 30 baseline queries."""
+"""Lobsters smoke test — invokes LobstersEngine().search() for 30 baseline queries."""
 
 # INFRASTRUCTURE
 import asyncio
@@ -12,7 +12,7 @@ from pathlib import Path
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
-from src.search.engines.google import GoogleEngine
+from src.search.engines.lobsters import LobstersEngine
 from src.search.browser import close_browser
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -27,7 +27,7 @@ async def run_smoke_test() -> None:
     queries = load_queries(QUERIES_FILE)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
 
-    engine = GoogleEngine()
+    engine = LobstersEngine()
     records = []
 
     try:
@@ -62,7 +62,7 @@ def load_queries(path: Path) -> list[str]:
 
 
 # Run one query, return record dict
-async def run_query(engine: GoogleEngine, query: str) -> dict:
+async def run_query(engine: LobstersEngine, query: str) -> dict:
     record: dict = {"query": query, "count": 0, "sample_urls": [], "status": "EMPTY", "elapsed_ms": 0}
     try:
         results = await engine.search(query)
@@ -78,11 +78,11 @@ async def run_query(engine: GoogleEngine, query: str) -> dict:
 # Write markdown report and return path
 def write_report(records: list[dict], report_dir: Path) -> Path:
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = report_dir / f"google_smoke_{ts}.md"
+    path = report_dir / f"lobsters_smoke_{ts}.md"
 
     ok_count = sum(1 for r in records if r["status"] == "OK")
     lines = [
-        f"# Google Smoke Test — {ts}",
+        f"# Lobsters Smoke Test — {ts}",
         "",
         f"**Queries:** {len(records)}  ",
         f"**OK:** {ok_count}  ",

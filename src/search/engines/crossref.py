@@ -4,12 +4,15 @@ import logging
 import httpx
 
 from src.search.engines.base import BaseEngine
-from src.search.rate_limiter import get_limiter
+from src.search.rate_limiter import RateLimiter, _limiters, get_limiter
 from src.search.result import SearchResult
 
 logger = logging.getLogger(__name__)
 
 API_URL = "https://api.crossref.org/works"
+
+# Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
+_limiters["crossref"] = RateLimiter(max_requests=4, window_seconds=60)
 
 
 # ORCHESTRATOR

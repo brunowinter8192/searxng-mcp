@@ -15,6 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.search.browser import close_browser
 from src.search.engines.google import GoogleEngine
 from src.search.engines.duckduckgo import DuckDuckGoEngine
+from src.search.engines.mojeek import MojeekEngine
+from src.search.engines.lobsters import LobstersEngine
+from src.search.engines.scholar import ScholarEngine
+from src.search.engines.crossref import CrossRefEngine
+from src.search.engines.openalex import OpenAlexEngine
+from src.search.engines.stack_exchange import StackExchangeEngine
 from src.search.preview import fetch_previews, PREVIEW_TOP_N
 from src.search.result import SearchResult
 
@@ -25,6 +31,12 @@ REPORT_DIR = SCRIPT_DIR / "01_reports"
 AVAILABLE_ENGINES = {
     "google": GoogleEngine,
     "duckduckgo": DuckDuckGoEngine,
+    "mojeek": MojeekEngine,
+    "lobsters": LobstersEngine,
+    "google scholar": ScholarEngine,
+    "crossref": CrossRefEngine,
+    "openalex": OpenAlexEngine,
+    "stack_exchange": StackExchangeEngine,
 }
 
 
@@ -202,7 +214,7 @@ if __name__ == "__main__":
         nargs="+",
         default=["google", "duckduckgo"],
         choices=list(AVAILABLE_ENGINES.keys()),
-        help="Engines to test (default: google duckduckgo)",
+        help="Engines to test (default: google duckduckgo). Available: google duckduckgo mojeek lobsters 'google scholar' crossref openalex stack_exchange",
     )
     parser.add_argument(
         "--max-queries",

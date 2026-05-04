@@ -11,38 +11,37 @@ from src.search.result import SearchResult
 
 logger = logging.getLogger(__name__)
 
-SEARCH_URL = "https://www.mojeek.com/search?q={}&safe=1"
+SEARCH_URL = "https://lobste.rs/search?q={}&what=stories&order=relevance"
 MAX_WAIT_CYCLES = 3
 WAIT_INTERVAL = 0.2
 
-_JS_WAIT = "return document.querySelectorAll('ul.results-standard > li > a.ob').length"
+_JS_WAIT = "return document.querySelectorAll('li.story').length"
 
 _JS_PARSE = """
-var _cs = document.querySelectorAll('ul.results-standard > li > a.ob');
+var _cs = document.querySelectorAll('li.story');
 var _out = [];
 for (var _i = 0; _i < _cs.length; _i++) {
-    var _a = _cs[_i];
-    var _li = _a.closest('li');
-    var _h2a = _li ? _li.querySelector('h2 a') : null;
-    var _ps = _li ? _li.querySelector('p.s') : null;
-    if (!_a.href) continue;
-    _out.push({url: _a.href, title: _h2a ? _h2a.textContent.trim() : '', snippet: _ps ? _ps.textContent.trim() : ''});
+    var _li = _cs[_i];
+    var _a = _li.querySelector('a.u-url');
+    var _dom = _li.querySelector('a.domain');
+    if (!_a || !_a.href) continue;
+    _out.push({url: _a.href, title: _a.textContent.trim(), snippet: _dom ? _dom.textContent.trim() : ''});
 }
 return JSON.stringify(_out);
 """
 
 # Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
-_limiters["mojeek"] = RateLimiter(max_requests=4, window_seconds=60)
+_limiters["lobsters"] = RateLimiter(max_requests=4, window_seconds=60)
 
 
 # ORCHESTRATOR
 
-# Mojeek web search via pydoll stealth browser (mojeek.com/search endpoint, direct hrefs, no captcha check)
-class MojeekEngine(BaseEngine):
-    name = "mojeek"
+# Lobsters web search via pydoll stealth browser (lobste.rs/search endpoint, direct hrefs, no captcha check)
+class LobstersEngine(BaseEngine):
+    name = "lobsters"
 
     async def search(self, query: str, language: str = "en", max_results: int = 10) -> list[SearchResult]:
-        logger.info("Mojeek search: %s", query)
+        logger.info("Lobsters search: %s", query)
         limiter = get_limiter(self.name)
         await limiter.acquire()
         tab = await new_tab()
@@ -50,11 +49,11 @@ class MojeekEngine(BaseEngine):
         try:
             await tab.go_to(search_url, timeout=20)
             if not await _wait_for_results(tab):
-                logger.warning("No Mojeek results loaded for: %s", query)
+                logger.warning("No Lobsters results loaded for: %s", query)
                 return []
             results = await _parse_results(tab, max_results)
         except Exception as e:
-            logger.error("Mojeek search failed: %s", e)
+            logger.error("Lobsters search failed: %s", e)
             limiter.backoff()
             return []
         finally:
@@ -73,7 +72,7 @@ def _extract_value(result):
         return None
 
 
-# Build Mojeek search URL with encoded query
+# Build Lobsters search URL with encoded query
 def _build_url(query: str) -> str:
     return SEARCH_URL.format(quote_plus(query))
 
@@ -108,7 +107,7 @@ async def _parse_results(tab, max_results: int) -> list[SearchResult]:
             url=url,
             title=item.get("title", ""),
             snippet=item.get("snippet", ""),
-            engine="mojeek",
+            engine="lobsters",
             position=i + 1,
         ))
     return results
