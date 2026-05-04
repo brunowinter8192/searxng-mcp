@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 API_URL = "https://api.stackexchange.com/2.3/search/advanced"
 
+# Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
 _limiters["stack_exchange"] = RateLimiter(max_requests=4, window_seconds=60)
 
 _KEY_WARNED = False

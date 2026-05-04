@@ -51,7 +51,7 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ### engines/google.py
 
-**Purpose:** Google Search via pydoll. Three-layer consent handling: (1) SOCS cookie injection per-tab via `Network.setCookie` BEFORE navigation (primary bypass), (2) inline-consent body-text detection ("Before you continue" / "We use cookies and data") + button click on the search URL, (3) `consent.google.com` redirect handler as fallback. DOM parsing via `#rso h3` + `.MjjYud` selectors, parse_js without IIFE (pydoll's `execute_script` already wraps in function scope). Wait timeouts calibrated to dev p95: `MAX_WAIT_CYCLES=3`, `WAIT_INTERVAL=0.2s`. Rate-limit pre-registered at `max_requests=5, window_seconds=60` (capacity 5 per minute per process).
+**Purpose:** Google Search via pydoll. Three-layer consent handling: (1) SOCS cookie injection per-tab via `Network.setCookie` BEFORE navigation (primary bypass), (2) inline-consent body-text detection ("Before you continue" / "We use cookies and data") + button click on the search URL, (3) `consent.google.com` redirect handler as fallback. DOM parsing via `#rso h3` + `.MjjYud` selectors, parse_js without IIFE (pydoll's `execute_script` already wraps in function scope). Wait timeouts calibrated to dev p95: `MAX_WAIT_CYCLES=3`, `WAIT_INTERVAL=0.2s`. Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). `limiter.backoff()` only on CAPTCHA (`/sorry/` URL) or exception — not on EMPTY (no-results ≠ rate-limit signal).
 
 ### engines/bing.py
 
@@ -59,23 +59,23 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ### engines/scholar.py
 
-**Purpose:** Google Scholar via pydoll. DOM parsing via `.gs_r.gs_or.gs_scl` + `.gs_rt`. Rate-limit pre-registered at `max_requests=3, window_seconds=60` (stricter than general search engines). CAPTCHA detection via `/sorry/` URL path. Consent redirect handling via `consent.google.com` domain check + JS button click. Note: `_JS_PARSE` uses flat JS (var declarations first, `return JSON.stringify` at end) — pydoll's `execute_script` rejects multi-line scripts that start with `return` as first statement (`SyntaxError: Illegal return statement`); verified fix 2026-05-03.
+**Purpose:** Google Scholar via pydoll. DOM parsing via `.gs_r.gs_or.gs_scl` + `.gs_rt`. Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). CAPTCHA detection via `/sorry/` URL path. Consent redirect handling via `consent.google.com` domain check + JS button click. `limiter.backoff()` only on CAPTCHA or exception — not on EMPTY. Note: `_JS_PARSE` uses flat JS (var declarations first, `return JSON.stringify` at end) — pydoll's `execute_script` rejects multi-line scripts that start with `return` as first statement (`SyntaxError: Illegal return statement`); verified fix 2026-05-03.
 
 ### engines/crossref.py
 
-**Purpose:** CrossRef REST API via httpx (no browser needed). Uses polite pool `mailto` header for higher rate limits. Returns bibliographic metadata as `SearchResult` entries.
+**Purpose:** CrossRef REST API via httpx (no browser needed). Uses polite pool `mailto` header for higher rate limits. Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04; previously fell through to default 10/60). Returns bibliographic metadata as `SearchResult` entries.
 
 ### engines/duckduckgo.py
 
-**Purpose:** DuckDuckGo web search via pydoll (`html.duckduckgo.com/html/` GET endpoint). No consent handling needed — DDG html-endpoint does not show a consent banner. No cookie injection needed — `kl=wt-wt` (worldwide, no region filter) is included directly in the GET URL. DOM-based CAPTCHA detection (`form#challenge-form`). URL cleaning extracts the actual destination from DDG's redirect wrapper (`duckduckgo.com/l/?uddg=<encoded>`). Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min policy). Selectors: `#links > div.web-result` (result containers), `h2 a` (title + href), `a.result__snippet` (snippet) — verified live 2026-05-03.
+**Purpose:** DuckDuckGo web search via pydoll (`html.duckduckgo.com/html/` GET endpoint). No consent handling needed — DDG html-endpoint does not show a consent banner. No cookie injection needed — `kl=wt-wt` (worldwide, no region filter) is included directly in the GET URL. DOM-based CAPTCHA detection (`form#challenge-form`). URL cleaning extracts the actual destination from DDG's redirect wrapper (`duckduckgo.com/l/?uddg=<encoded>`). Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). `limiter.backoff()` only on CAPTCHA or exception — not on EMPTY. Selectors: `#links > div.web-result` (result containers), `h2 a` (title + href), `a.result__snippet` (snippet) — verified live 2026-05-03.
 
 ### engines/mojeek.py
 
-**Purpose:** Mojeek web search via pydoll (mojeek.com/search GET endpoint). Own crawler index — not Bing-derivative, third independent index after Google + DDG. No consent handling, no CAPTCHA detection (none observed in DOM probe 2026-05-03), no URL cleaning (direct hrefs, no redirect wrapper). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Selectors: `ul.results-standard > li > a.ob` (container anchor with direct `href`), `li h2 a` (title text), `li p.s` (snippet) — verified live 2026-05-03.
+**Purpose:** Mojeek web search via pydoll (mojeek.com/search GET endpoint). Own crawler index — not Bing-derivative, third independent index after Google + DDG. No consent handling, no CAPTCHA detection (none observed in DOM probe 2026-05-03), no URL cleaning (direct hrefs, no redirect wrapper). Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). `limiter.backoff()` only on exception — not on EMPTY. Selectors: `ul.results-standard > li > a.ob` (container anchor with direct `href`), `li h2 a` (title text), `li p.s` (snippet) — verified live 2026-05-03.
 
 ### engines/lobsters.py
 
-**Purpose:** Lobste.rs web search via pydoll (lobste.rs/search GET endpoint). Link-aggregator for tech/programming content — smaller index than general engines, bias toward quality technical posts. No consent handling, no CAPTCHA detection (none observed in DOM probe 2026-05-03), no URL cleaning (direct hrefs, no redirect wrapper). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Selectors: `li.story` (result containers), `a.u-url` (href + title text), `a.domain` (snippet — domain-as-displayed, may include path prefix for GitHub repos). Snippet = domain only by design; `og:description` from preview-fetch fills the description field downstream — verified live 2026-05-03.
+**Purpose:** Lobste.rs web search via pydoll (lobste.rs/search GET endpoint). Link-aggregator for tech/programming content — smaller index than general engines, bias toward quality technical posts. No consent handling, no CAPTCHA detection (none observed in DOM probe 2026-05-03), no URL cleaning (direct hrefs, no redirect wrapper). Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). `limiter.backoff()` only on exception — not on EMPTY. Selectors: `li.story` (result containers), `a.u-url` (href + title text), `a.domain` (snippet — domain-as-displayed, may include path prefix for GitHub repos). Snippet = domain only by design; `og:description` from preview-fetch fills the description field downstream — verified live 2026-05-03.
 
 ### engines/openalex.py
 
@@ -87,4 +87,4 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ## Stealth Decisions
 
-Active stealth configuration: `dev/search_pipeline/01_google_smoke.py` (JS patches, SOCS cookie injection, browser options) + `dev/search_pipeline/config.yml` (all parameters). Historical research from the 9-engine exploration is documented in `decisions/stealth00_engine_status.md` (overview + dropped-engine verdicts) and `decisions/stealth01_fingerprint.md` through `stealth07_captcha.md` (per-layer detail).
+Active stealth configuration lives in `src/search/browser.py` (hardcoded JS patches, UA, window size, Chrome options) and per-engine files (SOCS cookie for Google). `dev/search_pipeline/config.yml` no longer carries browser or stealth parameters — all that was stress-test scaffolding now removed. Historical research from the 9-engine exploration is documented in `decisions/stealth00_engine_status.md` (overview + dropped-engine verdicts) and `decisions/stealth01_fingerprint.md` through `stealth07_captcha.md` (per-layer detail).
