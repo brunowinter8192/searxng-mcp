@@ -4,7 +4,7 @@ Web search, URL scraping, and site crawling for Claude Code — powered by a pyd
 
 ## Features
 
-- **Multi-Engine Web Search** — 4 search engines (Google, Bing, Google Scholar, CrossRef) with automatic deduplication and ranking
+- **Multi-Engine Web Search** — 8 search engines (Google, DuckDuckGo, Mojeek, Lobsters, Google Scholar, CrossRef, OpenAlex, Stack Exchange) with overlap-ranked, slot-allocated 20-URL output and disk-cached pagination via `search_more`
 - **JavaScript-Aware Scraping** — full page rendering via Crawl4AI with stealth fallback, cookie consent removal, and garbage detection
 - **Site Exploration** — sitemap and BFS-based URL discovery for crawl planning
 - **Autonomous Research Agent** — Haiku-powered agent that searches broadly, scrapes aggressively, and routes domain-specific results to specialized plugins (arXiv→RAG, GitHub→GitHub, Reddit→Reddit)
@@ -42,10 +42,12 @@ python -m venv venv
 
 | Tool | What it does | When to use |
 |------|-------------|-------------|
-| `search_web` | Search the web with category, language, and time-range filters | Any web search — categories: `general`, `news`, `it`, `science` |
+| `search_web` | Search the web with language and time-range filters, returns top 20 URLs ranked across 8 engines (overlap + slot-allocation) | Any web search |
+| `search_more` | Get the next batch of URLs from the cached search (sha256-keyed disk cache, 1h TTL) | Pagination beyond the first 20 |
 | `scrape_url` | Fetch a page as filtered markdown with JS rendering | Read full content of a search result |
 | `scrape_url_raw` | Fetch a page as raw markdown, saved to file | Prepare content for RAG indexing |
 | `explore_site` | Discover all URLs on a site via sitemap/BFS | Plan a crawl before committing to it |
+| `download_pdf` | Download a PDF file to local disk | When a result URL ends in `.pdf` |
 
 ### Skills & Commands
 
@@ -59,7 +61,7 @@ python -m venv venv
 
 **Search → Scrape**
 
-1. `search_web` with broad query → ranked results from 4 engines
+1. `search_web` with broad query → top 20 URLs ranked across 8 engines (overlap-counted across general engines, plus reserved slots for academic and Q&A engines), with `search_more` for the next batch from the disk cache
 2. Pick relevant URLs → `scrape_url` for full page content as markdown
 3. Plugin-domain URLs (arXiv, GitHub, Reddit) get routed to specialized plugins instead
 

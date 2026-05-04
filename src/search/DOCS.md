@@ -6,13 +6,15 @@ pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXN
 
 ## search_web.py
 
-**Purpose:** Search orchestrator. Two entry points:
-- `search_web_workflow(query, ...)` — single query, fan-out across all active engines via `asyncio.gather`, deduplicates by URL, formats as `list[TextContent]`.
+**Purpose:** Search orchestrator. Three entry points:
+- `search_web_workflow(query, ...)` — single query, fan-out across all active engines via `asyncio.gather`, then `_merge_and_rank` (URL-merge with engine-aggregation + overlap-rank within `GENERAL = {google, duckduckgo, mojeek}` + slot allocation `12 general / 4 academic {google scholar, openalex, crossref} / 2 Q&A {stack_exchange, lobsters} / 2 overflow → 20 URLs total`), `fetch_previews(top_n=20)`, `_select_snippet` per URL via 7-step source-priority chain (specialty engine native > crossref synthesized > lobsters-only domain > DDG > Mojeek > og preview > Google/Scholar with bloat-strip), `cache.cache_write` for the FULL ranked list (~60-80 URLs, not just top-20 — backs `search_more`), formats top-20 as `list[TextContent]`.
 - `search_batch_workflow(queries, ...)` — N queries sequentially through `search_web_workflow` in the SAME process (Chrome stays warm via shared singleton in `browser.py`), `close_browser()` in finally clause keeps teardown inside the active event loop. Used by `cli.py search_batch` subcommand to amortize Chrome cold-start across multiple queries (~5s boot + ~1s/query vs ~5s boot per query in subprocess-per-call mode).
 - `fetch_search_results()` — sync wrapper for dev scripts.
 
-**Input:** Query string (or list), category, language, time range, engine filter, page count.
-**Output:** `list[TextContent]` (single workflow), `list[list[TextContent]]` (batch workflow), or `list[dict]` (sync wrapper).
+**Bloat-strip patterns** for the Google/Scholar fallback in `_select_snippet` are imported from `dev/search_pipeline/snippet_quality_analysis.py` (single source of truth, do not redefine). 9 patterns: URL breadcrumb (`›`), Read-more, `^Web results`, `^Featured snippet from the web`, social-proof, Scholar ellipsis, Mojeek nav-dump, HTML entities, `Tagged with` suffix.
+
+**Input:** Query string (or list), category, language, time range, engine filter.
+**Output:** `list[TextContent]` (single workflow), `list[list[TextContent]]` (batch workflow), or `list[dict]` (sync wrapper). Side effect: writes disk cache under `~/.cache/searxng/<key>.json`.
 
 ## browser.py
 
@@ -31,13 +33,20 @@ pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXN
 
 ## preview.py
 
-**Purpose:** Async preview fetcher. `fetch_previews(results, top_n=20)` hits the top-N result URLs in parallel (concurrency=8, timeout=3s per URL), extracts `og:description` + `meta name="description"` via lxml xpath, attaches as `preview: dict | None` to each `SearchResult` via `dataclasses.replace`. Silent skip on any fetch failure. Called from `search_web_workflow` after dedup, before format. Also used by `05_search_smoke.py`.
+**Purpose:** Async preview fetcher. `fetch_previews(results, top_n=20)` hits the top-N result URLs in parallel (concurrency=8, timeout=3s per URL), extracts `og:description` + `meta name="description"` via lxml xpath, attaches as `preview: dict | None` to each `SearchResult` via `dataclasses.replace`. Silent skip on any fetch failure. Called from `search_web_workflow` after `_merge_and_rank`, before `_format_results`. Also used by `05_search_smoke.py`.
 **Input:** `list[SearchResult]`, optional `top_n` int.
 **Output:** `list[SearchResult]` with `preview` field populated for top-N (None for rest or failed fetches).
+**Known issue (2026-05-04):** `og:description` text from some Springer URLs contains HTML-encoded entities (`K&#252;ndigungsfrist`) that are not decoded before being passed back. Tracked as follow-up bead — fix is `html.unescape()` on the extracted og + meta strings.
+
+## cache.py
+
+**Purpose:** Disk cache for search results. Backs the `search_more` CLI subcommand for pagination beyond the first 20 URLs without re-running the engine fan-out. Cache key: `sha256(query|language|engines|time_range)[:16]`. Path: `~/.cache/searxng/<key>.json`. TTL: 1 hour, mtime-based. Atomic writes via `tempfile.NamedTemporaryFile(dir=cache_dir, delete=False)` + `os.replace(tmp, final)` — prevents partial reads on concurrent CLI calls. JSON structure stores `{query, language, engines, time_range, timestamp, returned_count, urls: [{url, title, snippet, engines, snippets}, ...]}` — `urls` is the full ranked list so search_more can slice from offset 20.
+**Input:** Cache key, ranked URL list, search params.
+**Output:** Persisted JSON dict; cache_read returns the dict on hit (mtime within TTL) or None on miss/expired. `format_cached_slice` formats a slice for the search_more output with a header annotation indicating cache state.
 
 ## result.py
 
-**Purpose:** `SearchResult` dataclass (url, title, snippet, engine, position, preview). `preview: dict | None = None` field carries `{"og": str|None, "meta": str|None}` from `preview.py`. All engine constructors leave it at default `None`.
+**Purpose:** `SearchResult` dataclass (url, title, snippet, engine, position, preview, engines, snippets). `preview: dict | None = None` field carries `{"og": str|None, "meta": str|None}` from `preview.py`. `engines: list[str]` and `snippets: dict[str, str]` are populated by `_merge_and_rank` in `search_web.py` when multiple engines return the same URL — `engines` carries the engine names for overlap-counting and slot-allocation, `snippets` keys engine-name → that engine's raw snippet text so `_select_snippet` can pick the best source per URL. All engine constructors leave preview/engines/snippets at default empty.
 **Input:** —
 **Output:** —
 
@@ -59,7 +68,7 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ### engines/crossref.py
 
-**Purpose:** CrossRef REST API via httpx (no browser needed). Uses polite pool `mailto` header for higher rate limits. Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04; previously fell through to default 10/60). Returns bibliographic metadata as `SearchResult` entries.
+**Purpose:** CrossRef REST API via httpx (no browser needed). Uses polite pool `mailto` header for higher rate limits. Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). Snippet construction (post-bead-a45 2026-05-04): when `abstract` field is present (~16% of returns), strips all XML tags including JATS namespaces (`<jats:p>`, `<ns4:p>`) via generic `re.sub(r'<[^>]+>', '', x)` plus `html.unescape`; when `abstract` is absent (~84% of returns), synthesizes from `author[0].family` + initial of `given` + ` et al.` (if multi-author) + ` (year)` + `, container-title[0]` — e.g. `"de Groot, C. (2022), Asynchronous Python Programming with Asyncio and Async/await"`. Returns bibliographic metadata as `SearchResult` entries.
 
 ### engines/duckduckgo.py
 
@@ -75,7 +84,8 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 
 ### engines/openalex.py
 
-**Purpose:** OpenAlex academic graph via httpx (no browser, no auth, no API key required). Successor to Microsoft Academic Graph — ~250M works (papers, preprints, books, datasets), free and open. Polite-pool identifier loaded from `OPENALEX_MAILTO` env var (no default; set to any identifier email to avoid throttling from the anonymous pool). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Abstract reconstruction: OpenAlex stores abstracts as an inverted index (`word → [positions]`); `_reconstruct_abstract` inverts back to text by sorting words by first position and joining. URL strategy: `ids.arxiv` (full arXiv URL) > `doi` (full DOI URL, `https://doi.org/...`) > `id` (OpenAlex work URL, `https://openalex.org/W...`). Fields used: `id, doi, title, abstract_inverted_index, authorships, publication_year, cited_by_count, ids, primary_location`.
+**Purpose:** OpenAlex academic graph via httpx (no browser, no auth, no API key required). Successor to Microsoft Academic Graph — ~250M works (papers, preprints, books, datasets), free and open. Polite-pool identifier loaded from `OPENALEX_MAILTO` env var (no default; set to any identifier email to avoid throttling from the anonymous pool). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Abstract reconstruction: OpenAlex stores abstracts as an inverted index (`word → [positions]`); `_reconstruct_abstract` inverts back to text by sorting words by first position and joining. URL strategy: `ids.arxiv` (full arXiv URL) > `doi` (full DOI URL, `https://doi.org/...`) > `id` (OpenAlex work URL, `https://openalex.org/W...`). Fields used: `id, doi, title, abstract_inverted_index, authorships, publication_year, cited_by_count, ids, primary_location`. Citation suffix added 2026-05-04: when `cited_by_count > 50`, appends ` (Cited N×)` to the snippet for visibility of high-impact papers (threshold tunable via constant, see `decisions/search07_ranking_format.md`).
+**Known issue (2026-05-04):** `_reconstruct_abstract` does NOT decode HTML entities. Some German academic works (e.g. Springer-published) have entity-encoded text in the inverted index (`K&#252;ndigungsfrist`) which surfaces unprocessed in the output. Tracked as follow-up bead — fix is `html.unescape()` on the joined abstract string.
 
 ### engines/stack_exchange.py
 

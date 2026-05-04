@@ -16,7 +16,7 @@ See [sources/sources.md](sources/sources.md).
 | **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
 | **Browser** | pydoll Chrome (stealth fingerprint patches, per-engine JS selectors) | `src/search/browser.py`, `src/search/engines/`, `dev/search_pipeline/` smokes |
 | **Rate Limiting** | Token-bucket per engine, uniform 4 req/min; backoff only on CAPTCHA/HTTP-429/exception (not on EMPTY) | `src/search/rate_limiter.py` |
-| **Orchestration** | `asyncio.gather` parallel fetch across engines, deduplicated, formatted as TextContent. `search_web_workflow` for single query; `search_batch_workflow` for N queries sequentially in one warm-Chrome session | `src/search/search_web.py`, SNIPPET_LENGTH=5000 |
+| **Orchestration** | `asyncio.gather` parallel fetch across engines, merged-and-ranked via `_merge_and_rank` (overlap-counted within general engines, slot-allocated 12 general / 4 academic / 2 Q&A / 2 overflow → 20 URLs), preview-fetched, snippet-selected per source-priority chain, formatted as TextContent. `search_web_workflow` for single query; `search_batch_workflow` for N queries sequentially in one warm-Chrome session. Disk cache (`~/.cache/searxng/<key>.json`, 1h TTL) backs the `search_more` pagination subcommand. | `src/search/search_web.py`, `src/search/cache.py`, `decisions/search07_ranking_format.md` |
 | **Preview** | httpx + lxml fetch of og:description / meta:description for top-20 results, async parallel (concurrency=8, timeout=3s), silent skip on fail, default-on | `src/search/preview.py`, see `decisions/search06_preview.md` |
 | **Parked** | Brave (PoW CAPTCHA incompatible with parallel architecture); Bing (dropped — DDG uses Bing index, no added value) | See `decisions/stealth00_engine_status.md` |
 
@@ -38,14 +38,15 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 6 tools (search_web, search_batch, scrape_url, scrape_url_raw, explore_site, download_pdf) |
+| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 7 tools (search_web, search_batch, search_more, scrape_url, scrape_url_raw, explore_site, download_pdf) |
 
 ### Key Files
 
 | File | Component |
 |------|-----------|
-| `src/search/search_web.py` | Search orchestrator (parallel engine fetch + dedup + preview) |
+| `src/search/search_web.py` | Search orchestrator (parallel engine fetch + merge-and-rank + slot-allocate + snippet-select + preview + cache-write) |
 | `src/search/preview.py` | URL preview fetcher (og/meta via httpx + lxml, top-20) |
+| `src/search/cache.py` | Disk cache for search results (sha256 key, 1h TTL, atomic write) |
 | `src/search/browser.py` | pydoll Chrome lifecycle (shared singleton) |
 | `src/search/rate_limiter.py` | Per-engine token bucket |
 | `src/search/engines/` | Per-engine parsers: `google.py`, `scholar.py`, `crossref.py`, `duckduckgo.py`, `mojeek.py`, `lobsters.py`, `openalex.py`, `stack_exchange.py` |
@@ -62,7 +63,7 @@ See [sources/sources.md](sources/sources.md).
 
 ```
 searxng/
-├── cli.py                          → CLI dispatch (6 commands incl. search_batch warm-Chrome multi-query)
+├── cli.py                          → CLI dispatch (7 commands incl. search_batch warm-Chrome multi-query + search_more cache-backed pagination)
 ├── .env.example                    → Template for SEARXNG_PROJECT_ROOT
 ├── requirements.txt
 ├── README.md                       → [Setup & External Docs](README.md)
@@ -79,7 +80,8 @@ searxng/
 │   ├── agent01_search.md
 │   ├── agent02_routing.md
 │   ├── agent03_coverage.md
-│   └── search06_preview.md
+│   ├── search06_preview.md
+│   └── search07_ranking_format.md
 ├── src/                            → [DOCS.md](src/DOCS.md)
 │   ├── routing.py                  → Plugin domain routing
 │   ├── search/                     → [DOCS.md](src/search/DOCS.md) — search engines (8 active: 5 browser + 3 API)
@@ -88,7 +90,7 @@ searxng/
 │   ├── crawler/                    → [DOCS.md](src/crawler/DOCS.md) — CLI-only (`/crawl-site` pipeline)
 │   └── spawn/                      → Worker spawn utilities (in src/DOCS.md)
 ├── dev/                            → [DOCS.md](dev/DOCS.md)
-│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md) — Per-engine smoke stack (01_google_smoke, 02_burst_smoke, 04_ddg_smoke, 05_search_smoke, 06_mojeek_smoke, 07_lobsters_smoke, 08_scholar_smoke, 09_openalex_smoke, 10_stack_exchange_smoke, config.yml, 01_reports/)
+│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md) — Per-engine smoke stack (01_google_smoke, 02_burst_smoke, 04_ddg_smoke, 05_search_smoke, 06_mojeek_smoke, 07_lobsters_smoke, 08_scholar_smoke, 09_openalex_smoke, 10_stack_exchange_smoke, config.yml) + diagnostic scripts (empty_classify_se, empty_classify_lobsters, snippet_quality_analysis) + 01_reports/
 │   ├── scrape_pipeline/            → [DOCS.md](dev/scrape_pipeline/DOCS.md)
 │   │   ├── browser_eval/           → scrape01_browser
 │   │   ├── filter_eval/            → scrape02_filtering
