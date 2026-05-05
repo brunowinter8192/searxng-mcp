@@ -51,6 +51,17 @@ async def fetch_previews(results: list[SearchResult], top_n: int = PREVIEW_TOP_N
 
 # FUNCTIONS
 
+# Iteratively unescape HTML entities until idempotent — handles double/triple-encoded entities
+def _deep_unescape(s: str | None) -> str | None:
+    if not s:
+        return s
+    while True:
+        new = html.unescape(s)
+        if new == s:
+            return new
+        s = new
+
+
 # Fetch one URL with semaphore guard, extract og:description + meta:description, return dict or None on any failure
 async def _fetch_one(
     client: httpx.AsyncClient,
@@ -68,7 +79,7 @@ async def _fetch_one(
             meta = tree.xpath("string(//meta[@name='description']/@content)") or None
             if not og and not meta:
                 return None
-            return {"og": html.unescape(og) if og else None, "meta": html.unescape(meta) if meta else None}
+            return {"og": _deep_unescape(og), "meta": _deep_unescape(meta)}
         except Exception as e:
             logger.debug("Preview fetch skipped %s: %s", url, e)
             return None
