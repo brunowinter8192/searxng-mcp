@@ -43,7 +43,6 @@ class LobstersEngine(BaseEngine):
     async def search(self, query: str, language: str = "en", max_results: int = 10) -> list[SearchResult]:
         logger.info("Lobsters search: %s", query)
         limiter = get_limiter(self.name)
-        await limiter.acquire()
         tab = await new_tab()
         search_url = _build_url(query)
         try:

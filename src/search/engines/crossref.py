@@ -25,7 +25,6 @@ class CrossRefEngine(BaseEngine):
 
     async def search(self, query: str, language: str = "en", max_results: int = 10) -> list[SearchResult]:
         limiter = get_limiter(self.name)
-        await limiter.acquire()
         items = await _fetch_results(query, max_results)
         if items is None:
             limiter.backoff()

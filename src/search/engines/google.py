@@ -62,7 +62,6 @@ class GoogleEngine(BaseEngine):
     async def search(self, query: str, language: str = "en", max_results: int = 10) -> list[SearchResult]:
         logger.info("Google search: %s", query)
         limiter = get_limiter(self.name)
-        await limiter.acquire()
         tab = await new_tab()
         await _inject_socs_cookie(tab)
         search_url = _build_url(query, language, max_results)

@@ -18,6 +18,7 @@ from src.search.engines.mojeek import MojeekEngine
 from src.search.engines.lobsters import LobstersEngine
 from src.search.engines.openalex import OpenAlexEngine
 from src.search.engines.stack_exchange import StackExchangeEngine
+from src.search.rate_limiter import get_limiter
 from src.search.result import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -190,19 +191,17 @@ def _select_engines(engines: str | None) -> dict:
 
 # Query selected engines concurrently, collect all SearchResult objects
 async def _query_engines_concurrent(query: str, language: str, max_results: int, selected: dict) -> list:
-    tasks = [engine.search(query, language, max_results) for engine in selected.values()]
-    results_per_engine = await asyncio.gather(*tasks, return_exceptions=True)
+    tasks = [_engine_with_timing(engine, query, language, max_results) for engine in selected.values()]
+    timed = await asyncio.gather(*tasks)
     combined = []
-    for r in results_per_engine:
-        if isinstance(r, Exception):
-            logger.warning("Engine error: %s", r)
-        else:
-            combined.extend(r)
+    for eng_results, _, _ in timed:
+        combined.extend(eng_results)
     return combined
 
 
 # Wrap a single engine search call; return (results, elapsed_ms, status) — status: OK/EMPTY/TIMEOUT/ERROR
 async def _engine_with_timing(engine, query: str, language: str, max_results: int, timeout: float | None = None) -> tuple[list, int, str]:
+    await get_limiter(engine.name).acquire()
     t0 = time.perf_counter()
     try:
         if timeout is not None:
