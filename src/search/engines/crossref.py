@@ -1,4 +1,5 @@
 # INFRASTRUCTURE
+import html
 import logging
 import re
 
@@ -35,6 +36,15 @@ class CrossRefEngine(BaseEngine):
 
 # FUNCTIONS
 
+# Iteratively unescape HTML entities until idempotent — handles double-encoded entities
+def _deep_unescape(s: str) -> str:
+    while True:
+        new = html.unescape(s)
+        if new == s:
+            return new
+        s = new
+
+
 # Fetch raw work items from CrossRef API
 async def _fetch_results(query: str, rows: int) -> list[dict] | None:
     params = {"query": query, "rows": rows}
@@ -54,7 +64,7 @@ def _parse_results(items: list[dict]) -> list[SearchResult]:
         doi = item.get("DOI", "")
         url = item.get("URL") or (f"https://doi.org/{doi}" if doi else "")
         title_list = item.get("title") or []
-        title = title_list[0] if title_list else ""
+        title = _deep_unescape(title_list[0]) if title_list else ""
         abstract = item.get("abstract") or ""
         snippet = _build_snippet(abstract, item)
         results.append(SearchResult(
@@ -98,7 +108,7 @@ def _synthesize(item: dict) -> str:
             year = str(parts[0][0])
             break
 
-    container = (item.get("container-title") or [""])[0]
+    container = _deep_unescape((item.get("container-title") or [""])[0])
 
     if author_str and year and container:
         return f"{author_str} ({year}), {container}"

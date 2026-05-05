@@ -37,6 +37,15 @@ class OpenAlexEngine(BaseEngine):
 
 # FUNCTIONS
 
+# Iteratively unescape HTML entities until idempotent — handles double-encoded entities
+def _deep_unescape(s: str) -> str:
+    while True:
+        new = html.unescape(s)
+        if new == s:
+            return new
+        s = new
+
+
 # Fetch raw work items from OpenAlex search API
 async def _fetch_results(query: str, max_results: int) -> list[dict] | None:
     params: dict = {"search": query, "per_page": max_results}
@@ -56,7 +65,7 @@ async def _fetch_results(query: str, max_results: int) -> list[dict] | None:
 def _parse_results(works: list[dict]) -> list[SearchResult]:
     results = []
     for i, work in enumerate(works):
-        title = work.get("title") or ""
+        title = _deep_unescape(work.get("title") or "")
         if not title:
             continue
         url = _pick_url(work)
@@ -84,7 +93,7 @@ def _reconstruct_abstract(aii: dict | None) -> str:
     for word, positions in aii.items():
         for pos in positions:
             pos_word[pos] = word
-    return html.unescape(" ".join(pos_word[p] for p in sorted(pos_word)))
+    return html.unescape(" ".join(html.unescape(pos_word[p]) for p in sorted(pos_word)))
 
 
 # Select canonical URL: arXiv > DOI > openalex.org
