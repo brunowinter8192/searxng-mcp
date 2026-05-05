@@ -2,9 +2,7 @@
 """Snippet quality analysis — auto-discovers newest pipeline_smoke_*.md baseline."""
 
 # INFRASTRUCTURE
-import ast
 import html
-import re
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -12,7 +10,11 @@ from pathlib import Path
 from statistics import mean, median as stat_median
 
 SCRIPT_DIR = Path(__file__).parent
+sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
+
+from _lib.parse import KNOWN_ENGINES, parse_smoke_report
+from _lib.text  import strip_bloat, lexical_density, detect_bloat
 
 REPORT_DIR   = SCRIPT_DIR / "01_reports"
 _smoke_candidates = sorted(REPORT_DIR.glob("pipeline_smoke_*.md"), reverse=True)
@@ -31,45 +33,6 @@ ALL_SOURCES = [
 MATRIX_ENGINES = [
     "google", "duckduckgo", "mojeek", "lobsters",
     "google_scholar", "openalex", "crossref", "stack_exchange",
-]
-KNOWN_ENGINES = set(MATRIX_ENGINES)
-
-# Combined EN + DE stopwords — hardcoded, no NLTK dependency
-STOPWORDS = {
-    "a","about","above","after","again","all","also","although","among","an","and","any",
-    "are","as","at","be","because","been","before","being","between","both","but","by",
-    "can","could","did","do","does","doing","during","each","even","ever","for","from",
-    "get","got","had","has","have","having","he","her","here","him","his","how","if",
-    "in","into","is","it","its","itself","just","like","may","me","might","more","most",
-    "much","my","nor","not","now","of","off","on","or","other","our","out","own","per",
-    "s","shall","she","should","since","so","some","such","t","than","that","the","their",
-    "them","then","there","these","they","this","those","through","to","too","under","up",
-    "us","very","was","we","were","what","when","where","which","while","who","will",
-    "with","would","you","your","re","ve","ll","d","m","no","use",
-    "aber","alle","allem","allen","aller","alles","als","also","am","an","ander","andere",
-    "anderen","anderer","anderes","auf","aus","bei","bin","bis","bist","da","damit","dann",
-    "das","dass","dem","den","denn","der","des","dessen","die","dies","diese","diesem",
-    "diesen","dieser","dieses","doch","dort","du","durch","ein","eine","einem","einen",
-    "einer","eines","er","es","etwas","fur","gegen","gibt","hat","hatte","haben","hier",
-    "hin","hinter","ich","im","in","ist","ja","jede","jedem","jeden","jeder","jedes",
-    "jetzt","kann","kein","keine","konnte","mal","man","mehr","mein","mit","nach","nicht",
-    "noch","nun","nur","ob","oder","ohne","schon","sehr","seit","sich","sie","sind","so",
-    "soll","sondern","uber","um","und","uns","unter","viel","vom","von","vor","war","was",
-    "weil","wenn","werden","wie","will","wir","wird","wo","wurde","zum","zur","zu",
-}
-
-# Bloat detection patterns (derived from Phase A eyeball of actual snippets)
-_BLOAT = [
-    ("B1_url_breadcrumb",   re.compile(r'›')),
-    ("B2_read_more",        re.compile(r'\bRead more\b')),
-    ("B3_web_results",      re.compile(r'^Web results')),
-    ("B4_featured_snippet", re.compile(r'^Featured snippet from the web')),
-    ("B5_social_proof",     re.compile(r'\d[\d,.]*[Kk]?\+? *(likes|comments|answers|posts) *·')),
-    ("B6_scholar_ellipsis", re.compile(r'^…\s|\s…\s|…$')),
-    ("B7_mojeek_nav_dump",  re.compile(r'^\.\.\. .{5,150} \.\.\.$')),
-    ("B8_meta_html_entity", re.compile(r'&[a-z]+;|&#\d+;')),
-    ("B9_meta_tag_noise",   re.compile(r'Tagged with [\w, ]+\.?$')),
-    ("B10_jats_xml",        re.compile(r'<jats:|<ns\d+:')),
 ]
 
 
@@ -101,158 +64,6 @@ def run_analysis() -> None:
 
 
 # FUNCTIONS
-
-# Parse Python repr-quoted string; fallback to stripping outer quote chars
-def _repr_unquote(s: str) -> str:
-    s = s.strip()
-    try:
-        return ast.literal_eval(s)
-    except (ValueError, SyntaxError):
-        if len(s) >= 2 and s[0] in ('"', "'") and s[-1] == s[0]:
-            return s[1:-1]
-        return s
-
-
-# Parse new pipeline_smoke MD format into URL records with snippets and previews
-def parse_smoke_report(path: Path) -> list[dict]:
-    lines = path.read_text(encoding="utf-8").splitlines()
-    records: list[dict]     = []
-    current_query: str | None = None
-    current_record: dict | None = None
-    query_counter   = 0
-    query_seen: dict[str, int] = {}
-    pos_per_query: dict[str, int] = defaultdict(int)
-
-    for line in lines:
-        # Query header: ## Q1: python asyncio best practices
-        m = re.match(r'^## Q\d+: (.+)$', line)
-        if m:
-            current_query = m.group(1).strip()
-            if current_query not in query_seen:
-                query_counter += 1
-                query_seen[current_query] = query_counter
-            continue
-
-        # URL entry: N. **[CLASS]** Title
-        m = re.match(r'^\d+\. \*\*\[([A-Z]+)\]\*\* (.+)$', line)
-        if m:
-            if current_record is not None:
-                records.append(current_record)
-            cls   = m.group(1)
-            title = m.group(2).strip()
-            qi    = query_seen.get(current_query, 0)
-            pos_per_query[current_query] += 1
-            pos   = pos_per_query[current_query]
-            current_record = {
-                "query":    current_query,
-                "class":    cls,
-                "title":    title,
-                "url":      None,
-                "engines":  [],
-                "source":   "",
-                "display":  "",
-                "og":       None,
-                "meta":     None,
-                "snippets": {},
-                "_qi":      qi,
-                "_pos":     pos,
-            }
-            continue
-
-        if current_record is None:
-            continue
-
-        # URL field
-        m = re.match(r'^\s+URL: (https?://\S+)', line)
-        if m:
-            current_record["url"] = m.group(1)
-            continue
-
-        # Engines field
-        m = re.match(r'^\s+Engines: (.+)$', line)
-        if m:
-            current_record["engines"] = [e.strip() for e in m.group(1).split(",")]
-            continue
-
-        # source | display line
-        m = re.match(r'^\s+source: (\S+) \| display: (.+)$', line)
-        if m:
-            current_record["source"]  = m.group(1)
-            current_record["display"] = _repr_unquote(m.group(2))
-            continue
-
-        # og | meta line — checked before generic engine pattern ("og" not in KNOWN_ENGINES)
-        m = re.match(r'^\s+og: (.*)', line)
-        if m:
-            rest = m.group(1)
-            if ' | meta: ' in rest:
-                og_part, meta_part = rest.split(' | meta: ', 1)
-            else:
-                og_part, meta_part = rest, "—"
-            current_record["og"]   = None if og_part.strip()   == "—" else og_part.strip()
-            current_record["meta"] = None if meta_part.strip() == "—" else meta_part.strip()
-            continue
-
-        # Per-engine snippet line: engine_name: 'repr-quoted text'
-        m = re.match(r'^\s+(\w+): (.+)$', line)
-        if m:
-            eng = m.group(1).lower()
-            if eng in KNOWN_ENGINES:
-                current_record["snippets"][eng] = _repr_unquote(m.group(2))
-            continue
-
-    if current_record is not None:
-        records.append(current_record)
-    return records
-
-
-# Return set of bloat indicator IDs that fire on text
-def detect_bloat(text: str) -> set[str]:
-    return {name for name, pat in _BLOAT if pat.search(text)}
-
-
-# Remove Google doubled title+domain prefix (heuristic: maximize cut across all repeated-chunk matches)
-def _strip_doubled_prefix(text: str) -> str:
-    if len(text) < 60:
-        return text
-    head = text[:300]
-    best_cut = 0
-    for L in (100, 70, 50, 30):
-        if len(head) < 2 * L:
-            continue
-        for start in range(0, min(len(head) - 2 * L, 100)):
-            chunk = head[start:start + L]
-            second = head.find(chunk, start + L)
-            if 0 < second and second + L <= len(head):
-                cut = second + L
-                if cut > best_cut:
-                    best_cut = cut
-    return text[best_cut:] if best_cut else text
-
-
-# Strip bloat patterns from text and return cleaned string
-def strip_bloat(text: str) -> str:
-    text = _strip_doubled_prefix(text)
-    text = re.sub(r'^Web results', '', text)
-    text = re.sub(r'^Featured snippet from the web', '', text)
-    text = re.sub(r'\bRead more\b.*', '', text)
-    text = re.sub(r'\d[\d,.]*[Kk]?\+? *(likes|comments|answers|posts) *·[^\n]*', '', text)
-    text = re.sub(r'\S*›\S*', '', text)
-    text = re.sub(r'\d{1,2} \w{3,9} \d{4} — ', '', text)
-    text = re.sub(r'&[a-z]+;|&#\d+;', '', text)
-    text = re.sub(r'Tagged with [\w, ]+\.?$', '', text)
-    text = re.sub(r'<[^>]+>', ' ', text)
-    return ' '.join(text.split())
-
-
-# Ratio of unique non-stopword content words (≥3 chars) to all word tokens
-def lexical_density(text: str) -> float:
-    words = re.findall(r'\b[a-zA-ZäöüÄÖÜßé]{3,}\b', text.lower())
-    if not words:
-        return 0.0
-    unique_content = {w for w in words if w not in STOPWORDS}
-    return len(unique_content) / len(words)
-
 
 # clean_len × lexical_density for one text (matches compute_source_stats formula)
 def _usefulness(text: str) -> float:
@@ -382,20 +193,9 @@ def compute_per_class_breakdown(records: list[dict], best_per_url: dict) -> dict
     return {k: dict(v) for k, v in breakdown.items()}
 
 
-# Render and write the markdown report
-def write_report(
-    stats: dict, overlap: dict, records: list[dict],
-    wins: dict, best_per_url: dict, breakdown: dict,
-) -> Path:
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = REPORT_DIR / f"snippet_quality_{ts}.md"
-    L: list[str] = []
-
-    total_wins = sum(wins.values())
-    n_urls     = len(records)
-
-    # Header
-    L += [
+# Render header metadata block
+def _render_header(ts: str, n_urls: int, total_wins: int) -> list[str]:
+    return [
         f"# Snippet Quality Analysis — {ts}",
         "",
         f"Source: `{SMOKE_REPORT.name}`  ",
@@ -404,8 +204,10 @@ def write_report(
         "",
     ]
 
-    # Section 1 — Per-Source Aggregated Stats
-    L += [
+
+# Render Section 1 — per-source aggregated stats table
+def _render_source_stats(stats: dict) -> list[str]:
+    L: list[str] = [
         "## 1. Per-Source Aggregated Stats",
         "",
         "Bloat indicators (any one fires → bloated): "
@@ -427,9 +229,12 @@ def write_report(
             f" | {st['pct_bloated']:.0f}% | {st['mean_clean_len']:.0f}"
             f" | {st['lexical_density']:.2f} | {st['usefulness_score']:.0f} |"
         )
+    return L
 
-    # Section 2 — Engine Overlap Matrix
-    L += [
+
+# Render Section 2 — 8×8 engine overlap matrix
+def _render_overlap_matrix(overlap: dict) -> list[str]:
+    L: list[str] = [
         "",
         "## 2. Engine Overlap Matrix",
         "",
@@ -450,9 +255,12 @@ def write_report(
             for e2 in MATRIX_ENGINES
         ]
         L.append("| " + " | ".join(row) + " |")
+    return L
 
-    # Section 3 — Best-by-Usefulness Winners
-    L += [
+
+# Render Section 3 — best-by-usefulness winners table
+def _render_winners(wins: dict, total_wins: int, n_urls: int) -> list[str]:
+    L: list[str] = [
         "",
         "## 3. Best-by-Usefulness Winners",
         "",
@@ -466,8 +274,11 @@ def write_report(
     for src, w in sorted(wins.items(), key=lambda x: -x[1]):
         rate = 100.0 * w / total_wins if total_wins else 0.0
         L.append(f"| {src} | {w} | {rate:.1f}% |")
+    return L
 
-    # Section 4 — Per-Class Breakdown
+
+# Render Section 4 — win-count split by URL slot class
+def _render_per_class_breakdown(breakdown: dict) -> list[str]:
     n_gen = sum(breakdown.get("GENERAL",  {}).values())
     n_ac  = sum(breakdown.get("ACADEMIC", {}).values())
     n_qa  = sum(breakdown.get("QA",       {}).values())
@@ -475,7 +286,7 @@ def write_report(
         {s for cls_d in breakdown.values() for s in cls_d},
         key=lambda s: -(breakdown.get("GENERAL", {}).get(s, 0)),
     )
-    L += [
+    L: list[str] = [
         "",
         "## 4. Per-Class Breakdown",
         "",
@@ -493,9 +304,12 @@ def write_report(
         ap = 100.0 * a / n_ac  if n_ac  else 0.0
         qp = 100.0 * q / n_qa  if n_qa  else 0.0
         L.append(f"| {src} | {g} | {gp:.1f}% | {a} | {ap:.1f}% | {q} | {qp:.1f}% |")
+    return L
 
-    # Section 5 — All URLs Side-by-Side
-    L += [
+
+# Render Section 5 — all URLs side-by-side snippet scores
+def _render_url_details(records: list[dict], best_per_url: dict) -> list[str]:
+    L: list[str] = [
         "",
         "## 5. All URLs — Side-by-Side Snippet Scores",
         "",
@@ -505,13 +319,12 @@ def write_report(
     ]
     prev_qi = None
     for rec in records:
-        # Query sub-header when query changes
         if rec["_qi"] != prev_qi:
             prev_qi = rec["_qi"]
             L += [f"### Q{rec['_qi']}: {rec['query']}", ""]
 
-        key    = (rec["query"], rec["url"])
-        winner = best_per_url.get(key, "empty")
+        key     = (rec["query"], rec["url"])
+        winner  = best_per_url.get(key, "empty")
         title_s = (rec.get("title") or "")[:70]
 
         candidates: dict[str, tuple] = {}
@@ -543,7 +356,26 @@ def write_report(
         else:
             L.append("*no content*")
         L.append("")
+    return L
 
+
+# Render and write the markdown report
+def write_report(
+    stats: dict, overlap: dict, records: list[dict],
+    wins: dict, best_per_url: dict, breakdown: dict,
+) -> Path:
+    ts         = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path       = REPORT_DIR / f"snippet_quality_{ts}.md"
+    total_wins = sum(wins.values())
+    n_urls     = len(records)
+    L = (
+        _render_header(ts, n_urls, total_wins)
+        + _render_source_stats(stats)
+        + _render_overlap_matrix(overlap)
+        + _render_winners(wins, total_wins, n_urls)
+        + _render_per_class_breakdown(breakdown)
+        + _render_url_details(records, best_per_url)
+    )
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
     return path
 

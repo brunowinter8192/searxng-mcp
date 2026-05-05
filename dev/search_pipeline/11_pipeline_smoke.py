@@ -113,20 +113,21 @@ def _build_record(query: str, urls: list[dict], slot_counts: dict, timings: dict
     }
 
 
-# Write markdown report to 01_reports/pipeline_smoke_<ts>.md, return path
-def _write_report(records: list[dict], language: str) -> Path:
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = REPORT_DIR / f"pipeline_smoke_{ts}.md"
-
-    all_total_ms = [r["timings"]["total_ms"] for r in records if r["timings"]]
-
-    lines: list[str] = [
+# Render pipeline smoke report header (title, language, query counts)
+def _render_header(records: list[dict], language: str, ts: str) -> list[str]:
+    return [
         f"# Pipeline Smoke Report -- {ts}",
         "",
         f"**Language:** {language}  ",
         f"**Queries:** {len(records)}  ",
         f"**Queries with results:** {sum(1 for r in records if r['total_urls'] > 0)}",
         "",
+    ]
+
+
+# Render static engine class definitions table and notes block
+def _render_class_defs() -> list[str]:
+    return [
         "## Engine Class Definitions",
         "",
         "| Class    | Engines                               | Output slots |",
@@ -141,72 +142,80 @@ def _write_report(records: list[dict], language: str) -> Path:
         "",
         "---",
         "",
+    ]
+
+
+# Render summary table header and one row per query record
+def _render_summary(records: list[dict]) -> list[str]:
+    L: list[str] = [
         "## Summary",
         "",
         "| # | Query | Total | GENERAL | ACADEMIC | QA |",
         "|---|-------|-------|---------|----------|----|",
     ]
-
     for i, r in enumerate(records, 1):
         q = r["query"][:55].replace("|", "\\|")
         s = r["slots"]
-        lines.append(
+        L.append(
             f"| {i} | {q} | {r['total_urls']} "
             f"| {s['GENERAL']} | {s['ACADEMIC']} | {s['QA']} |"
         )
+    return L
 
-    lines += ["", "---", ""]
 
-    for qi, r in enumerate(records, 1):
-        s      = r["slots"]
-        sc     = r["slot_counts"]
-        t      = r["timings"]
-        lines += [f"## Q{qi}: {r['query']}", ""]
-        if not r["urls"]:
-            lines += ["*No results returned.*", "", "---", ""]
-            continue
-        for idx, a in enumerate(r["urls"], 1):
-            title       = a["title"] if a["title"] else "(no title)"
-            engines_str = ", ".join(a["engines"])
-            src         = a["snippet_source"] or "—"
-            display     = (a["snippet_display"] or "")[:400].replace("\n", " ")
-            og_val      = (a["og"]   or "—")[:300].replace("\n", " ")
-            meta_val    = (a["meta"] or "—")[:300].replace("\n", " ")
-            lines += [
-                f"{idx}. **[{a['class']}]** {title}",
-                f"   URL: {a['url']}",
-                f"   Engines: {engines_str}",
-                f"   source: {src} | display: {display!r}",
-                f"   og: {og_val} | meta: {meta_val}",
-            ]
-            for eng, snip in sorted(a["snippets"].items()):
-                lines.append(f"   {eng}: {snip[:300].replace(chr(10), ' ')!r}")
-            lines.append("")
-        gen_target = sc.get("general", TARGET_GENERAL)
-        ac_target  = sc.get("academic", TARGET_ACADEMIC)
-        qa_target  = sc.get("qa", TARGET_QA)
-        lines.append(
-            f"Slot fill: GENERAL {gen_target}/{TARGET_GENERAL}, "
-            f"ACADEMIC {ac_target}/{TARGET_ACADEMIC}, "
-            f"QA {qa_target}/{TARGET_QA}, "
-            f"total {r['total_urls']}/{TARGET_TOTAL}"
-        )
-        engine_details = t.get("engine_details", {})
-        if engine_details:
-            parts = [f"{name}={d['status']}/{d['ms']}ms" for name, d in engine_details.items()]
-            lines.append(f"Engines: {' '.join(parts)}")
-        lines += [
-            "",
-            f"Timing: total={t.get('total_ms')}ms  fanout={t.get('engine_fanout_ms')}ms  "
-            f"merge={t.get('merge_rank_ms')}ms  preview={t.get('preview_ms')}ms  "
-            f"snippet_select={t.get('select_snippet_ms')}ms  cache_write={t.get('cache_write_ms')}ms",
-            "",
-            "---",
-            "",
+# Render per-query URL block with slot-fill, engine timing footer and separator
+def _render_query_block(r: dict, qi: int) -> list[str]:
+    L: list[str] = [f"## Q{qi}: {r['query']}", ""]
+    if not r["urls"]:
+        return L + ["*No results returned.*", "", "---", ""]
+    sc = r["slot_counts"]
+    t  = r["timings"]
+    for idx, a in enumerate(r["urls"], 1):
+        title       = a["title"] if a["title"] else "(no title)"
+        engines_str = ", ".join(a["engines"])
+        src         = a["snippet_source"] or "—"
+        display     = (a["snippet_display"] or "")[:400].replace("\n", " ")
+        og_val      = (a["og"]   or "—")[:300].replace("\n", " ")
+        meta_val    = (a["meta"] or "—")[:300].replace("\n", " ")
+        L += [
+            f"{idx}. **[{a['class']}]** {title}",
+            f"   URL: {a['url']}",
+            f"   Engines: {engines_str}",
+            f"   source: {src} | display: {display!r}",
+            f"   og: {og_val} | meta: {meta_val}",
         ]
+        for eng, snip in sorted(a["snippets"].items()):
+            L.append(f"   {eng}: {snip[:300].replace(chr(10), ' ')!r}")
+        L.append("")
+    gen_target = sc.get("general", TARGET_GENERAL)
+    ac_target  = sc.get("academic", TARGET_ACADEMIC)
+    qa_target  = sc.get("qa", TARGET_QA)
+    L.append(
+        f"Slot fill: GENERAL {gen_target}/{TARGET_GENERAL}, "
+        f"ACADEMIC {ac_target}/{TARGET_ACADEMIC}, "
+        f"QA {qa_target}/{TARGET_QA}, "
+        f"total {r['total_urls']}/{TARGET_TOTAL}"
+    )
+    engine_details = t.get("engine_details", {})
+    if engine_details:
+        parts = [f"{name}={d['status']}/{d['ms']}ms" for name, d in engine_details.items()]
+        L.append(f"Engines: {' '.join(parts)}")
+    L += [
+        "",
+        f"Timing: total={t.get('total_ms')}ms  fanout={t.get('engine_fanout_ms')}ms  "
+        f"merge={t.get('merge_rank_ms')}ms  preview={t.get('preview_ms')}ms  "
+        f"snippet_select={t.get('select_snippet_ms')}ms  cache_write={t.get('cache_write_ms')}ms",
+        "",
+        "---",
+        "",
+    ]
+    return L
 
-    # Timing summary
-    lines += [
+
+# Render timing section — per-query table and aggregate stats
+def _render_timing_section(records: list[dict]) -> list[str]:
+    all_total_ms = [r["timings"]["total_ms"] for r in records if r["timings"]]
+    L: list[str] = [
         "## Timing",
         "",
         "### Per-Query",
@@ -217,14 +226,13 @@ def _write_report(records: list[dict], language: str) -> Path:
     for i, r in enumerate(records, 1):
         t = r["timings"]
         q = r["query"][:40].replace("|", "\\|")
-        lines.append(
+        L.append(
             f"| {i} | {q} | {t.get('total_ms', '—')} | {t.get('engine_fanout_ms', '—')} "
             f"| {t.get('merge_rank_ms', '—')} | {t.get('preview_ms', '—')} "
             f"| {t.get('select_snippet_ms', '—')} | {t.get('cache_write_ms', '—')} |"
         )
-
     if all_total_ms:
-        lines += [
+        L += [
             "",
             "### Aggregate (total_ms across all queries)",
             "",
@@ -233,8 +241,11 @@ def _write_report(records: list[dict], language: str) -> Path:
             f"| {min(all_total_ms)} | {round(statistics.median(all_total_ms))} "
             f"| {round(statistics.mean(all_total_ms))} | {max(all_total_ms)} |",
         ]
+    return L
 
-    # Per-engine status aggregate across all queries
+
+# Render per-engine status aggregate section across all queries
+def _render_engine_status(records: list[dict]) -> list[str]:
     status_counts: dict[str, dict[str, int]] = {}
     for r in records:
         det = (r["timings"] or {}).get("engine_details", {})
@@ -242,20 +253,37 @@ def _write_report(records: list[dict], language: str) -> Path:
             if eng not in status_counts:
                 status_counts[eng] = {"OK": 0, "EMPTY": 0, "TIMEOUT": 0, "ERROR": 0}
             status_counts[eng][info["status"]] = status_counts[eng].get(info["status"], 0) + 1
-    if status_counts:
-        lines += [
-            "",
-            "## Per-Engine Status Aggregate",
-            "",
-            "| Engine | OK | EMPTY | TIMEOUT | ERROR |",
-            "|--------|----|-------|---------|-------|",
-        ]
-        for eng in sorted(status_counts):
-            c = status_counts[eng]
-            lines.append(
-                f"| {eng} | {c.get('OK', 0)} | {c.get('EMPTY', 0)} | {c.get('TIMEOUT', 0)} | {c.get('ERROR', 0)} |"
-            )
+    if not status_counts:
+        return []
+    L: list[str] = [
+        "",
+        "## Per-Engine Status Aggregate",
+        "",
+        "| Engine | OK | EMPTY | TIMEOUT | ERROR |",
+        "|--------|----|-------|---------|-------|",
+    ]
+    for eng in sorted(status_counts):
+        c = status_counts[eng]
+        L.append(
+            f"| {eng} | {c.get('OK', 0)} | {c.get('EMPTY', 0)} | {c.get('TIMEOUT', 0)} | {c.get('ERROR', 0)} |"
+        )
+    return L
 
+
+# Write markdown report to 01_reports/pipeline_smoke_<ts>.md, return path
+def _write_report(records: list[dict], language: str) -> Path:
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = REPORT_DIR / f"pipeline_smoke_{ts}.md"
+    lines = (
+        _render_header(records, language, ts)
+        + _render_class_defs()
+        + _render_summary(records)
+        + ["", "---", ""]
+    )
+    for qi, r in enumerate(records, 1):
+        lines += _render_query_block(r, qi)
+    lines += _render_timing_section(records)
+    lines += _render_engine_status(records)
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
