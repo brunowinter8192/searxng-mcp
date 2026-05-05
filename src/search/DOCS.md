@@ -36,7 +36,6 @@ pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXN
 **Purpose:** Async preview fetcher. `fetch_previews(results, top_n=20)` hits the top-N result URLs in parallel (concurrency=8, timeout=3s per URL), extracts `og:description` + `meta name="description"` via lxml xpath, attaches as `preview: dict | None` to each `SearchResult` via `dataclasses.replace`. Silent skip on any fetch failure. Called from `search_web_workflow` after `_merge_and_rank`, before `_format_results`. Also used by `05_search_smoke.py`.
 **Input:** `list[SearchResult]`, optional `top_n` int.
 **Output:** `list[SearchResult]` with `preview` field populated for top-N (None for rest or failed fetches).
-**Known issue (2026-05-04):** `og:description` text from some Springer URLs contains HTML-encoded entities (`K&#252;ndigungsfrist`) that are not decoded before being passed back. Tracked as follow-up bead — fix is `html.unescape()` on the extracted og + meta strings.
 
 ## cache.py
 
@@ -85,7 +84,6 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 ### engines/openalex.py
 
 **Purpose:** OpenAlex academic graph via httpx (no browser, no auth, no API key required). Successor to Microsoft Academic Graph — ~250M works (papers, preprints, books, datasets), free and open. Polite-pool identifier loaded from `OPENALEX_MAILTO` env var (no default; set to any identifier email to avoid throttling from the anonymous pool). Rate-limit pre-registered at `max_requests=4, window_seconds=60`. Abstract reconstruction: OpenAlex stores abstracts as an inverted index (`word → [positions]`); `_reconstruct_abstract` inverts back to text by sorting words by first position and joining. URL strategy: `ids.arxiv` (full arXiv URL) > `doi` (full DOI URL, `https://doi.org/...`) > `id` (OpenAlex work URL, `https://openalex.org/W...`). Fields used: `id, doi, title, abstract_inverted_index, authorships, publication_year, cited_by_count, ids, primary_location`. Citation suffix added 2026-05-04: when `cited_by_count > 50`, appends ` (Cited N×)` to the snippet for visibility of high-impact papers (threshold tunable via constant, see `decisions/search07_ranking_format.md`).
-**Known issue (2026-05-04):** `_reconstruct_abstract` does NOT decode HTML entities. Some German academic works (e.g. Springer-published) have entity-encoded text in the inverted index (`K&#252;ndigungsfrist`) which surfaces unprocessed in the output. Tracked as follow-up bead — fix is `html.unescape()` on the joined abstract string.
 
 ### engines/stack_exchange.py
 
