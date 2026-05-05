@@ -3,6 +3,7 @@ import asyncio
 import dataclasses
 import html
 import logging
+import re
 
 import httpx
 from lxml import html as lxml_html
@@ -59,7 +60,10 @@ async def _fetch_one(
     async with sem:
         try:
             resp = await client.get(url)
-            tree = lxml_html.fromstring(resp.content)
+            _ct = resp.headers.get("content-type", "")
+            _m = re.search(r"charset=([^\s;,]+)", _ct, re.I)
+            _enc = _m.group(1) if _m else "utf-8"
+            tree = lxml_html.fromstring(resp.content, parser=lxml_html.HTMLParser(encoding=_enc))
             og = tree.xpath("string(//meta[@property='og:description']/@content)") or None
             meta = tree.xpath("string(//meta[@name='description']/@content)") or None
             if not og and not meta:
