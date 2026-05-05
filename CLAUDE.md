@@ -90,8 +90,8 @@ searxng/
 │   ├── crawler/                    → [DOCS.md](src/crawler/DOCS.md) — CLI-only (`/crawl-site` pipeline)
 │   └── spawn/                      → Worker spawn utilities (in src/DOCS.md)
 ├── dev/                            → [DOCS.md](dev/DOCS.md)
-│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md) — Per-engine smoke stack (01_google_smoke, 02_burst_smoke, 04_ddg_smoke, 05_search_smoke, 06_mojeek_smoke, 07_lobsters_smoke, 08_scholar_smoke, 09_openalex_smoke, 10_stack_exchange_smoke, config.yml) + diagnostic scripts (empty_classify_se, empty_classify_lobsters, snippet_quality_analysis) + 01_reports/
-│   ├── scrape_pipeline/            → [DOCS.md](dev/scrape_pipeline/DOCS.md)
+│   ├── search_pipeline/            → [DOCS.md](dev/search_pipeline/DOCS.md) — Per-engine smoke stack (01_google_smoke, 02_burst_smoke, 04_ddg_smoke, 05_search_smoke, 06_mojeek_smoke, 07_lobsters_smoke, 08_scholar_smoke, 09_openalex_smoke, 10_stack_exchange_smoke, config.yml) + full-pipeline smoke (11_pipeline_smoke) + diagnostic scripts (empty_classify_se, empty_classify_lobsters, snippet_quality_analysis) + 01_reports/
+│   ├── scrape_pipeline/            → [DOCS.md](dev/scrape_pipeline/DOCS.md) — top-level dual-mode A/B harness (01_dual_mode_smoke) + sub-suites:
 │   │   ├── browser_eval/           → scrape01_browser
 │   │   ├── filter_eval/            → scrape02_filtering
 │   │   └── garbage_eval/           → scrape03_garbage

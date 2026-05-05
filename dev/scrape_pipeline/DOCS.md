@@ -2,6 +2,22 @@
 
 Quality monitoring and configuration testing for the URL scraper module.
 
+## Top-Level Scripts
+
+### 01_dual_mode_smoke.py
+
+**Purpose:** A/B comparison harness — takes a search-results markdown report (e.g. `dev/search_pipeline/01_reports/pipeline_smoke_*.md`), parses URLs from a chosen query, scrapes each URL through BOTH production CLI modes in parallel via asyncio: Mode 1 (`scrape_url_raw`, raw markdown to file, no filter) and Mode 2 (`scrape_url`, PruningContentFilter@0.48, 15K char cap, in-memory). Produces a side-by-side comparison report with per-URL byte sizes, garbage detection, first content lines.
+
+**Use case:** evaluate Mode 1 vs Mode 2 quality on the same URL set. Reusable for library A/B testing — replace the cli.py-subprocess invocation with another extraction library to compare.
+
+**Input:** `--input <path-to-search-md>` (required), `--query <id-or-text>` (default 1), `--output-dir <path>` (default `01_dual_mode_outputs/<ts>/`).
+
+**Output:** Per-mode subdirs (`mode1_raw/`, `mode2_filtered/`) with one .md per URL, plus `01_dual_mode_report.md` at parent level.
+
+```bash
+./venv/bin/python3 dev/scrape_pipeline/01_dual_mode_smoke.py --input dev/search_pipeline/01_reports/pipeline_smoke_<ts>.md --query 24
+```
+
 ## Shared Config (pipeline root)
 
 ### domains.txt
