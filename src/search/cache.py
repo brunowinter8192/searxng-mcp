@@ -18,8 +18,9 @@ DEFAULT_TTL = 3600  # 1 hour
 # FUNCTIONS
 
 # SHA-256 hex of canonical input string, first 16 chars
-def cache_key(query: str, language: str, engines: str | None, time_range: str | None) -> str:
-    canonical = f"{query.lower().strip()}|{language}|{engines or ''}|{time_range or ''}"
+def cache_key(query: str, language: str, engines: str | None, time_range: str | None, class_filter: frozenset[str] | None = None) -> str:
+    cf = "|".join(sorted(class_filter)) if class_filter else ""
+    canonical = f"{query.lower().strip()}|{language}|{engines or ''}|{time_range or ''}|{cf}"
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 
@@ -36,6 +37,10 @@ def cache_write(
     language: str,
     engines: str | None,
     time_range: str | None,
+    snippet_sources: dict[str, str] | None = None,
+    slot_counts: dict | None = None,
+    snippet_texts: dict[str, str] | None = None,
+    og_meta: dict[str, dict] | None = None,
 ) -> None:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -45,6 +50,7 @@ def cache_write(
         "time_range": time_range,
         "timestamp": int(time.time()),
         "returned_count": len(ranked),
+        "slot_counts": slot_counts,
         "urls": [
             {
                 "url": r.url,
@@ -52,6 +58,10 @@ def cache_write(
                 "snippet": r.snippet,
                 "engines": r.engines,
                 "snippets": r.snippets,
+                "snippet_source": snippet_sources.get(r.url) if snippet_sources else None,
+                "snippet_display": snippet_texts.get(r.url) if snippet_texts else None,
+                "og":   (og_meta.get(r.url) or {}).get("og")   if og_meta else None,
+                "meta": (og_meta.get(r.url) or {}).get("meta") if og_meta else None,
             }
             for r in ranked
         ],

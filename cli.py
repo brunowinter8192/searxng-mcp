@@ -39,6 +39,9 @@ def main():
     p.add_argument("--time-range", dest="time_range", choices=["day", "month", "year"], default=None)
     p.add_argument("--engines", default=None,
                    help="Comma-separated engine list (e.g. 'google,duckduckgo' or 'google scholar,crossref')")
+    p.add_argument("--general",  action="store_true", help="Restrict output slots to GENERAL class")
+    p.add_argument("--academic", action="store_true", help="Restrict output slots to ACADEMIC class")
+    p.add_argument("--qa",       action="store_true", help="Restrict output slots to QA class")
 
     # ── search_batch ──────────────────────────────────────────────────────────
     p = sub.add_parser(
@@ -50,6 +53,9 @@ def main():
     p.add_argument("--time-range", dest="time_range", choices=["day", "month", "year"], default=None)
     p.add_argument("--engines", default=None,
                    help="Comma-separated engine list (e.g. 'google,duckduckgo')")
+    p.add_argument("--general",  action="store_true", help="Restrict output slots to GENERAL class")
+    p.add_argument("--academic", action="store_true", help="Restrict output slots to ACADEMIC class")
+    p.add_argument("--qa",       action="store_true", help="Restrict output slots to QA class")
 
     # ── search_more ───────────────────────────────────────────────────────────
     p = sub.add_parser(
@@ -61,6 +67,9 @@ def main():
     p.add_argument("--language", default="en")
     p.add_argument("--engines", default=None)
     p.add_argument("--time-range", dest="time_range", choices=["day", "month", "year"], default=None)
+    p.add_argument("--general",  action="store_true", help="Must match original search_web call (part of cache key)")
+    p.add_argument("--academic", action="store_true", help="Must match original search_web call (part of cache key)")
+    p.add_argument("--qa",       action="store_true", help="Must match original search_web call (part of cache key)")
 
     # ── scrape_url ────────────────────────────────────────────────────────────
     p = sub.add_parser("scrape_url", help="Scrape URL to filtered markdown (PruningContentFilter).")
@@ -89,19 +98,25 @@ def main():
     args = parser.parse_args()
 
     if args.cmd == "search_web":
+        selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
+        class_filter = selected if selected else None
         result = asyncio.run(search_web_workflow(
-            args.query, args.language, args.time_range, args.engines
+            args.query, args.language, args.time_range, args.engines, class_filter=class_filter
         ))
 
     elif args.cmd == "search_batch":
+        selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
+        class_filter = selected if selected else None
         results = asyncio.run(search_batch_workflow(
-            args.queries, args.language, args.time_range, args.engines
+            args.queries, args.language, args.time_range, args.engines, class_filter=class_filter
         ))
         print("\n---\n".join(r[0].text for r in results))
         return
 
     elif args.cmd == "search_more":
-        key = cache_key(args.query, args.language, args.engines, args.time_range)
+        selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
+        class_filter = selected if selected else None
+        key = cache_key(args.query, args.language, args.engines, args.time_range, class_filter=class_filter)
         hit = cache_read(key)
         if hit is not None:
             urls = hit.get("urls", [])
@@ -115,7 +130,7 @@ def main():
         else:
             # Cache miss or expired — run fresh search, cache is written as side effect
             fresh = asyncio.run(search_web_workflow(
-                args.query, args.language, args.time_range, args.engines
+                args.query, args.language, args.time_range, args.engines, class_filter=class_filter
             ))
             hit2 = cache_read(key)
             if hit2:
