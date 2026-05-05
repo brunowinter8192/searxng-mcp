@@ -69,20 +69,37 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 | --language | str | en | ISO language code (e.g. "de") |
 | --time-range | day/month/year | None | Restrict results by recency |
 | --engines | str | None | Comma-separated engine list (e.g. "google,duckduckgo" or "google scholar,openalex,crossref") |
+| --general | flag | off | Restrict output to GENERAL class slots only |
+| --academic | flag | off | Restrict output to ACADEMIC class slots only |
+| --qa | flag | off | Restrict output to QA class slots only |
 
-**Output:** Numbered list 1–20 — title, URL, snippet. 20 results per call, slot-allocated from the full ranked pool (~60–80 candidates). Snippet source per URL follows a priority chain: specialty engines (OpenAlex → StackExchange → CrossRef) when the URL was found by one of them, then DDG, Mojeek, og:description (page-generic preview), Google/Scholar (bloat-stripped fallback). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
+**Output:** Numbered list 1–20 — title, URL, snippet. Hard slot-allocated from the full ranked pool (~60–80 candidates): 12 GENERAL / 6 ACADEMIC / 2 QA. Underflow = fewer than 20 results when a class has insufficient supply. No overflow fill. Snippet source per URL follows a priority chain: specialty engines (OpenAlex → StackExchange → CrossRef) when the URL was found by one of them, then DDG, Mojeek, og:description (page-generic preview), Google/Scholar (bloat-stripped fallback). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
 
 **Engine set (8 active):**
 
 | Class | Engines | Output slots |
 |-------|---------|-------------|
 | GENERAL | Google, DuckDuckGo, Mojeek | 12 |
-| ACADEMIC | Google Scholar, OpenAlex, CrossRef | 4 |
+| ACADEMIC | Google Scholar, OpenAlex, CrossRef | 6 |
 | QA | Stack Exchange, Lobsters | 2 |
 
-2 additional **overflow slots** draw from the highest-ranked non-placed candidates across all classes when any class underflows (e.g. fewer than 4 academic results found for a general query). OVERFLOW is a slot mechanism, not a separate engine class. Total: up to 20 results per call.
-
 Use `--engines` to restrict to specific engines (e.g. `--engines "google scholar,openalex,crossref"` for academic-only searches).
+
+#### Class filter flags
+
+`--general`, `--academic`, `--qa` control which slot classes are allocated. Can be combined:
+
+| Flags | Allocation |
+|-------|-----------|
+| (none) | Hard 12 / 6 / 2 — all classes |
+| `--academic` | 20 slots to ACADEMIC only |
+| `--general` | 20 slots to GENERAL only |
+| `--qa` | 20 slots to QA only |
+| `--general --academic` | 18 slots (12 GENERAL + 6 ACADEMIC), QA=0 |
+| `--general --qa` | 14 slots (12 GENERAL + 2 QA), ACADEMIC=0 |
+| `--academic --qa` | 8 slots (6 ACADEMIC + 2 QA), GENERAL=0 |
+
+Class filter is part of the cache key. `search_more` must use the same flags as the original `search_web` call to get a cache hit.
 
 ### search_batch
 
@@ -92,6 +109,9 @@ Use `--engines` to restrict to specific engines (e.g. `--engines "google scholar
 | --language | str | en | ISO language code (e.g. "de") |
 | --time-range | day/month/year | None | Restrict results by recency |
 | --engines | str | None | Comma-separated engine list |
+| --general | flag | off | Restrict output to GENERAL class slots only |
+| --academic | flag | off | Restrict output to ACADEMIC class slots only |
+| --qa | flag | off | Restrict output to QA class slots only |
 
 **Output:** Results for each query in the same format as `search_web`, separated by `---`.
 
@@ -106,6 +126,9 @@ Use `--engines` to restrict to specific engines (e.g. `--engines "google scholar
 | --language | str | en | Must match the original search_web call |
 | --time-range | day/month/year | None | Must match the original search_web call |
 | --engines | str | None | Must match the original search_web call |
+| --general | flag | off | Must match the original search_web call (part of cache key) |
+| --academic | flag | off | Must match the original search_web call (part of cache key) |
+| --qa | flag | off | Must match the original search_web call (part of cache key) |
 
 **Output:** Next batch of URLs from the cached ranked pool (results 21+), numbered from 21 onward.
 
@@ -117,7 +140,7 @@ Use `--engines` to restrict to specific engines (e.g. `--engines "google scholar
 | Hit + fresh but pool exhausted | Exits with `# search_more: no further URLs in cached pool` |
 | Miss or expired (>1h) | Re-runs search_web, returns first `count` results |
 
-**Key rule:** `--language`, `--engines`, and `--time-range` are part of the cache key — they must match the original `search_web` call exactly. Any mismatch is treated as a cache miss and triggers a fresh search.
+**Key rule:** `--language`, `--engines`, `--time-range`, and all class-filter flags are part of the cache key — they must match the original `search_web` call exactly. Any mismatch triggers a fresh search.
 
 ### scrape_url
 

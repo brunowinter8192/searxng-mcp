@@ -51,18 +51,30 @@ ACADEMIC = {"google_scholar", "openalex", "crossref"}  # "google_scholar" = Scho
 QA       = {"stack_exchange", "lobsters"}
 ```
 
-### B. Slot Allocation (12 / 4 / 2 / 2)
+### B. Slot Allocation (12 / 6 / 2)
 
 | Class | Slots | Sort key |
 |-------|-------|----------|
 | GENERAL | 12 | (-overlap_count, min_position) — overlap = number of GENERAL engines that returned this URL |
-| ACADEMIC | 4 | (min_position, engine_priority) — openalex=1 > google scholar=2 > crossref=3 |
+| ACADEMIC | 6 | (min_position, engine_priority) — openalex=1 > google scholar=2 > crossref=3 |
 | QA | 2 | (min_position, engine_priority) — stack_exchange=1 > lobsters=2 |
-| OVERFLOW | 2 | (-total_engine_count, min_position) — from all non-placed candidates across all classes |
 
-OVERFLOW fills vacancies when any class underflows (e.g. only 2 academic results found). Total output: up to 20 results per `search_web` call; `max_results=10` per engine (constant, `--pages` removed).
+Hard allocation — no OVERFLOW slot. If a class has fewer results than its target (underflow), total output is less than 20. No auto-fill from other classes. Total output: up to 20 results per `search_web` call; `max_results=10` per engine (constant, `--pages` removed).
 
 URL-level merge aggregates: `engines` list (all engines that found this URL), `snippets` dict (snippet text keyed by engine name), `min_position` (best position across engines), best non-empty title.
+
+#### Class filter via CLI flags
+
+`--general`, `--academic`, `--qa` flags on `search_web`, `search_batch`, `search_more` restrict which slot classes are allocated. Hybrid semantics:
+
+| Flags set | Allocation |
+|-----------|-----------|
+| None (default) | Hard 12 / 6 / 2 |
+| Single class (e.g. `--academic`) | 20 slots to that class, 0 to others |
+| Two classes (e.g. `--general --academic`) | Sum of selected defaults: general+academic=18, general+qa=14, academic+qa=8 |
+| All three | Same as none — 12 / 6 / 2 |
+
+Class filter is included in the cache key. `search_more` must use the same flags as the original `search_web` call to produce a cache hit.
 
 ### C. Snippet Selection Priority (per-URL, 7-step)
 
@@ -103,7 +115,7 @@ If `cited_by_count > 50`: append ` (Cited {n}×)` to snippet. Threshold 50 is a 
 ### F. Disk Cache Schema + search_more Pagination
 
 **Cache location:** `~/.cache/searxng/<sha256_16char>.json`  
-**Key:** `sha256(f"{query.lower().strip()}|{language}|{engines or ''}|{time_range or ''}").hexdigest()[:16]`  
+**Key:** `sha256(f"{query.lower().strip()}|{language}|{engines or ''}|{time_range or ''}|{sorted_class_filter}").hexdigest()[:16]`  
 **TTL:** 1 hour (mtime-based). Expired = cache miss.  
 **Write:** atomic via `tempfile.NamedTemporaryFile` + `os.replace`.
 
@@ -112,11 +124,15 @@ If `cited_by_count > 50`: append ` (Cited {n}×)` to snippet. Threshold 50 is a 
 {
   "query": "...", "language": "en", "engines": null, "time_range": null,
   "timestamp": 1746391200, "returned_count": 23,
-  "urls": [{"url": "...", "title": "...", "snippet": "...", "engines": [...], "snippets": {...}}]
+  "slot_counts": {"general": 12, "academic": 5, "qa": 2},
+  "urls": [
+    {"url": "...", "title": "...", "snippet": "...", "engines": [...], "snippets": {...}, "snippet_source": "openalex"},
+    ...
+  ]
 }
 ```
 
-`urls` = full `_merge_and_rank` output (not just top-20). `search_more` slices from index 20.
+`urls` = full `_merge_and_rank` output (not just top-20). `search_more` slices from index 20. `slot_counts` records actual fill per class (may be below target on underflow). `snippet_source` per URL reflects the priority-chain rule applied; null for URLs beyond position 20 (not passed through snippet selection).
 
 **`search_more` semantics:**
 
@@ -130,7 +146,7 @@ If `cited_by_count > 50`: append ` (Cited {n}×)` to snippet. Threshold 50 is a 
 
 - **og vs DDG priority** — og (2% bloat) is marginally cleaner than DDG (1%), but DDG mean clean length (246) > og (196) and DDG is query-relevant. Current order (DDG > og) is theory-correct; confirm with a side-by-side eyeball after D8 demo. Candidate to revisit if og descriptions prove more useful in practice.
 - **Citation threshold tuning** — 50 is first-cut for OpenAlex citation suffix. Adjust after smoke: if most academic results in top slots have >50 citations → lower threshold; if many spurious `(Cited 51×)` annotations appear → raise it.
-- **Slot share tuning** — 12/4/2/2 is an initial allocation. Smoke may reveal underflows (e.g. consistently fewer than 4 academic results for general queries) → adjust ACADEMIC target down, GENERAL up.
+- **Slot share tuning** — 12/6/2 is the current hard allocation. Smoke may reveal consistent underflows (e.g. fewer than 6 academic results for general queries) → adjust ACADEMIC target down, GENERAL up.
 - **Cross-site StackExchange probe** — only `stackoverflow.com` has been seen in smoke results. StackExchange covers 170+ sites (math, serverfault, etc.). Pending: broader query set to confirm coverage.
 - **search_more offset fixed at 20** — `search_more` always slices from index 20. If the user wants a different window (e.g. results 10-20 from a sub-query), a `--offset` flag could be added. Not in current scope.
 
