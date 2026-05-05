@@ -1,6 +1,7 @@
 # INFRASTRUCTURE
 import asyncio
 import dataclasses
+import html
 import logging
 
 import httpx
@@ -63,7 +64,7 @@ async def _fetch_one(
             meta = tree.xpath("string(//meta[@name='description']/@content)") or None
             if not og and not meta:
                 return None
-            return {"og": og, "meta": meta}
+            return {"og": html.unescape(og) if og else None, "meta": html.unescape(meta) if meta else None}
         except Exception as e:
             logger.debug("Preview fetch skipped %s: %s", url, e)
             return None

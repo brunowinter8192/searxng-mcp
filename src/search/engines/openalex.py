@@ -1,4 +1,5 @@
 # INFRASTRUCTURE
+import html
 import logging
 import os
 
@@ -83,7 +84,7 @@ def _reconstruct_abstract(aii: dict | None) -> str:
     for word, positions in aii.items():
         for pos in positions:
             pos_word[pos] = word
-    return " ".join(pos_word[p] for p in sorted(pos_word))
+    return html.unescape(" ".join(pos_word[p] for p in sorted(pos_word)))
 
 
 # Select canonical URL: arXiv > DOI > openalex.org
