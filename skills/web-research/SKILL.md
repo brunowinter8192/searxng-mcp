@@ -1,11 +1,11 @@
 ---
 name: web-research
-description: SearXNG web research — CLI tool reference (search_web, scrape_url, scrape_url_raw, explore_site, download_pdf)
+description: SearXNG web research — CLI tool reference (search_web, search_batch, search_more, scrape_url, scrape_url_raw, explore_site, download_pdf)
 ---
 
 # SearXNG Web Research — Skill
 
-Web research CLI plugin with 4 active search engines (Google, Bing, Google Scholar, CrossRef), Crawl4AI-based scraping, and site exploration. Each invocation is a fresh CLI process — fire calls in parallel for maximum throughput.
+Web research CLI plugin with 8 active search engines (Google, DuckDuckGo, Mojeek, Lobsters, Google Scholar, CrossRef, OpenAlex, Stack Exchange), Crawl4AI-based scraping, and site exploration. Each `search_web` invocation is a fresh CLI process — fire calls in parallel for maximum throughput. Use `search_batch` when running multiple queries in one process to amortize Chrome startup cost.
 
 ## CLI Invocation
 
@@ -15,13 +15,20 @@ All tools are invoked via the `searxng-cli` wrapper (installed at `~/.local/bin/
 searxng-cli <cmd> [args]
 ```
 
-### Quick Reference — All 5 Tools
+### Quick Reference — All 7 Tools
 
 ```bash
-# Search
-searxng-cli search_web "machine learning retrieval" --category general --pages 3
-searxng-cli search_web "SPLADE sparse retrieval" --engines "google scholar,crossref" --pages 3
+# Search (8 engines: Google, DDG, Mojeek, Lobsters, Scholar, CrossRef, OpenAlex, StackExchange)
+searxng-cli search_web "machine learning retrieval"
+searxng-cli search_web "SPLADE sparse retrieval" --engines "google scholar,openalex,crossref"
 searxng-cli search_web "RAG pipeline python" --language de --time-range month
+
+# Search multiple queries in one warm-Chrome session
+searxng-cli search_batch "SPLADE retrieval" "sparse vector search" "learned sparse retrieval"
+
+# Paginate beyond first 20 results (within 1h cache TTL)
+searxng-cli search_more "machine learning retrieval"
+searxng-cli search_more "machine learning retrieval" --count 20
 
 # Scrape
 searxng-cli scrape_url "https://example.com/article"
@@ -44,7 +51,9 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 
 | Tool | Purpose |
 |------|---------|
-| search_web | Search across 4 engines in parallel. Returns deduplicated results with title, URL, full snippet |
+| search_web | Search across 8 engines in parallel. Returns 20 slot-allocated results with title, URL, snippet |
+| search_batch | Search multiple queries in one warm-Chrome session. Same output per query as search_web |
+| search_more | Fetch next batch of URLs from cached search results (results 21+, 1h TTL) |
 | scrape_url | Fetch page content as filtered markdown (PruningContentFilter). For in-conversation reading |
 | scrape_url_raw | Fetch page content as raw markdown and save as .md file. For RAG indexing |
 | explore_site | Discover URLs via sitemap + BFS prefetch. Returns structured URL list |
@@ -57,15 +66,58 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | query | str | required | Search query (2–5 keywords) |
-| --category | general/news/it/science | general | Content category |
 | --language | str | en | ISO language code (e.g. "de") |
 | --time-range | day/month/year | None | Restrict results by recency |
-| --engines | str | None | Comma-separated engine list (e.g. "google,bing" or "google scholar,crossref") |
-| --pages | int | 3 | Result pages to fetch and combine (~50 results/page, deduped) |
+| --engines | str | None | Comma-separated engine list (e.g. "google,duckduckgo" or "google scholar,openalex,crossref") |
 
-**Output:** Plain text numbered list — title, URL, full snippet per result. Up to 50 results per page × pages.
+**Output:** Numbered list 1–20 — title, URL, snippet. 20 results per call, slot-allocated from the full ranked pool (~60–80 candidates). Snippet source per URL follows a priority chain: specialty engines (OpenAlex → StackExchange → CrossRef) when the URL was found by one of them, then DDG, Mojeek, og:description (page-generic preview), Google/Scholar (bloat-stripped fallback). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
 
-**Engine set:** Google, Bing, Google Scholar, CrossRef are always active. Use `--engines` to override and target specific engines.
+**Engine set (8 active):**
+
+| Class | Engines | Output slots |
+|-------|---------|-------------|
+| GENERAL | Google, DuckDuckGo, Mojeek | 12 |
+| ACADEMIC | Google Scholar, OpenAlex, CrossRef | 4 |
+| QA | Stack Exchange, Lobsters | 2 |
+
+2 additional **overflow slots** draw from the highest-ranked non-placed candidates across all classes when any class underflows (e.g. fewer than 4 academic results found for a general query). OVERFLOW is a slot mechanism, not a separate engine class. Total: up to 20 results per call.
+
+Use `--engines` to restrict to specific engines (e.g. `--engines "google scholar,openalex,crossref"` for academic-only searches).
+
+### search_batch
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| queries | str+ | required | One or more search queries (positional — each query as a separate quoted argument) |
+| --language | str | en | ISO language code (e.g. "de") |
+| --time-range | day/month/year | None | Restrict results by recency |
+| --engines | str | None | Comma-separated engine list |
+
+**Output:** Results for each query in the same format as `search_web`, separated by `---`.
+
+**Use case:** Run 3–5 query variations on the same topic in a single process. Chrome starts once (~5s), then each query runs in ~1s — amortized startup cost vs. one ~5s cold-start per separate `search_web` invocation. Prefer `search_batch` over parallel `search_web` calls when queries are topically related and sequential execution is acceptable.
+
+### search_more
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| query | str | required | Must match a prior search_web query exactly |
+| --count | int | 10 | Additional URLs to return |
+| --language | str | en | Must match the original search_web call |
+| --time-range | day/month/year | None | Must match the original search_web call |
+| --engines | str | None | Must match the original search_web call |
+
+**Output:** Next batch of URLs from the cached ranked pool (results 21+), numbered from 21 onward.
+
+**Cache:** `search_web` writes the full ranked pool (~60–80 URLs) to disk after every call (`~/.cache/searxng/<key>.json`, 1h TTL). `search_more` slices from index 20.
+
+| Cache state | Behavior |
+|-------------|----------|
+| Hit + fresh (≤1h) | Returns `urls[20:20+count]`, numbered from 21 |
+| Hit + fresh but pool exhausted | Exits with `# search_more: no further URLs in cached pool` |
+| Miss or expired (>1h) | Re-runs search_web, returns first `count` results |
+
+**Key rule:** `--language`, `--engines`, and `--time-range` are part of the cache key — they must match the original `search_web` call exactly. Any mismatch is treated as a cache miss and triggers a fresh search.
 
 ### scrape_url
 
@@ -110,16 +162,16 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 
 ## Search Strategy
 
-### Parallel 4-queries pattern
+### Parallel queries
 
-Fire 4 `searxng-cli search_web` calls in parallel, each with a query variation. Each call queries all 4 engines (Google, Bing, Scholar, CrossRef) simultaneously → 16 concurrent browser tabs total. Results are deduplicated across calls at report time.
+Fire multiple `searxng-cli search_web` calls in parallel, each with a query variation. Each call already fans out to 8 engines internally — 4 parallel `search_web` calls = 32 engine calls total. Less aggressive parallelization is needed than a single-engine pipeline. 2–4 parallel calls is a good default for deep-research tasks.
 
 ```bash
 # Example: 4 parallel calls for a deep research task
-searxng-cli search_web "SPLADE sparse retrieval" --pages 3
-searxng-cli search_web "sparse vector retrieval benchmark" --pages 3
-searxng-cli search_web "SPLADE vs BM25 performance" --pages 3
-searxng-cli search_web "learned sparse retrieval neural" --pages 3
+searxng-cli search_web "SPLADE sparse retrieval"
+searxng-cli search_web "sparse vector retrieval benchmark"
+searxng-cli search_web "SPLADE vs BM25 performance"
+searxng-cli search_web "learned sparse retrieval neural"
 ```
 
 **Query tips:**
@@ -127,12 +179,22 @@ searxng-cli search_web "learned sparse retrieval neural" --pages 3
 - Try different angles: "X tutorial", "X implementation", "X benchmark", "X vs Y"
 - "X best practices 2025" for recent content
 
-### Academic / paper topics
+### Warm-Chrome batch (search_batch)
 
-For queries containing: benchmark, evaluation, paper, study, performance, NDCG, recall, precision, F1, accuracy, dataset, methodology, experiment, ablation, SOTA — add a dedicated academic query with `--engines "google scholar,crossref"`:
+For 3–5 variations on the same topic in one process, prefer `search_batch` — Chrome boots once and stays warm across all queries:
 
 ```bash
-searxng-cli search_web "SPLADE retrieval NDCG" --engines "google scholar,crossref" --pages 3
+searxng-cli search_batch "SPLADE sparse retrieval" "sparse vector search" "learned sparse retrieval" "SPLADE vs BM25"
+```
+
+Use parallel `search_web` invocations when topics are independent and you want results in parallel processes. Use `search_batch` when queries are topically related and sequential execution is acceptable.
+
+### Academic / paper topics
+
+Academic engines (Google Scholar, OpenAlex, CrossRef) run in every `search_web` call in the ACADEMIC slots. For topics where you want to target academics-only:
+
+```bash
+searxng-cli search_web "SPLADE retrieval NDCG" --engines "google scholar,openalex,crossref"
 ```
 
 ### Language
@@ -141,10 +203,11 @@ For German-language research, add `--language de` to all queries. This filters r
 
 ### Workflow
 
-1. **Search broadly:** Fire 4+ parallel queries with variations
-2. **Filter results:** Categorize as scrape targets vs. plugin-routed (see Plugin Routing below)
-3. **Scrape aggressively:** Call `searxng-cli scrape_url` on all relevant non-plugin URLs
-4. **Report everything:** Return all findings using the Report Format below
+1. **Search broadly:** Fire 2–4 parallel `search_web` queries with variations (or `search_batch` for topically-related queries)
+2. **Paginate if needed:** Call `search_more` with the same query + flags to fetch results 21+ from the cached pool (within 1h)
+3. **Filter results:** Categorize as scrape targets vs. plugin-routed (see Plugin Routing below)
+4. **Scrape aggressively:** Call `searxng-cli scrape_url` on all relevant non-plugin URLs
+5. **Report everything:** Return all findings using the Report Format below
 
 For multi-topic tasks: before moving to the next topic, verify ≥5 unique URLs scraped for the current topic and ≥2 HIGH quality sources. Fire 2–3 additional topic-specific queries if below minimum.
 
@@ -223,7 +286,7 @@ These URLs require dedicated plugins for proper access:
 
 ## Known Limitations
 
-- **Up to ~150 results per query** — CLI fetches 3 pages by default and deduplicates across engines
+- **20 results per search_web call** — slot-allocated from ~60–80 ranked candidates. Use `search_more` for next batch (1h cache TTL)
 - **Scraper optimized for content sites** — articles, docs, wikis work best
 - **scrape_url uses PruningContentFilter** — may damage code blocks. Use `scrape_url_raw` for full fidelity
 - **Login-protected pages** will return login forms, not content
@@ -232,6 +295,7 @@ These URLs require dedicated plugins for proper access:
 ## When to Stop
 
 Stop when ALL of:
-- Exhausted 4+ query variations (per parallel batch)
+- Exhausted 4+ query variations
+- Called `search_more` to check cached pool for additional URLs
 - Scraped all non-plugin URLs from top results
 - Additional queries return mostly duplicates
