@@ -64,7 +64,7 @@ _BLOAT = [
     ("B2_read_more",        re.compile(r'\bRead more\b')),
     ("B3_web_results",      re.compile(r'^Web results')),
     ("B4_featured_snippet", re.compile(r'^Featured snippet from the web')),
-    ("B5_social_proof",     re.compile(r'\d[\d,.]*[Kk+]? *(likes|comments|answers|posts) *·')),
+    ("B5_social_proof",     re.compile(r'\d[\d,.]*[Kk]?\+? *(likes|comments|answers|posts) *·')),
     ("B6_scholar_ellipsis", re.compile(r'^…\s|\s…\s|…$')),
     ("B7_mojeek_nav_dump",  re.compile(r'^\.\.\. .{5,150} \.\.\.$')),
     ("B8_meta_html_entity", re.compile(r'&[a-z]+;|&#\d+;')),
@@ -211,12 +211,32 @@ def detect_bloat(text: str) -> set[str]:
     return {name for name, pat in _BLOAT if pat.search(text)}
 
 
+# Remove Google doubled title+domain prefix (heuristic: maximize cut across all repeated-chunk matches)
+def _strip_doubled_prefix(text: str) -> str:
+    if len(text) < 60:
+        return text
+    head = text[:300]
+    best_cut = 0
+    for L in (100, 70, 50, 30):
+        if len(head) < 2 * L:
+            continue
+        for start in range(0, min(len(head) - 2 * L, 100)):
+            chunk = head[start:start + L]
+            second = head.find(chunk, start + L)
+            if 0 < second and second + L <= len(head):
+                cut = second + L
+                if cut > best_cut:
+                    best_cut = cut
+    return text[best_cut:] if best_cut else text
+
+
 # Strip bloat patterns from text and return cleaned string
 def strip_bloat(text: str) -> str:
+    text = _strip_doubled_prefix(text)
     text = re.sub(r'^Web results', '', text)
     text = re.sub(r'^Featured snippet from the web', '', text)
     text = re.sub(r'\bRead more\b.*', '', text)
-    text = re.sub(r'\d[\d,.]*[Kk+]? *(likes|comments|answers|posts) *·[^\n]*', '', text)
+    text = re.sub(r'\d[\d,.]*[Kk]?\+? *(likes|comments|answers|posts) *·[^\n]*', '', text)
     text = re.sub(r'\S*›\S*', '', text)
     text = re.sub(r'\d{1,2} \w{3,9} \d{4} — ', '', text)
     text = re.sub(r'&[a-z]+;|&#\d+;', '', text)
