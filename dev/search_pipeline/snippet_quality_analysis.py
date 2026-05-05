@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""Snippet quality analysis for search_smoke_20260504_023641.md."""
+"""Snippet quality analysis for pipeline_smoke_20260505_202605.md (dl9-v3 baseline)."""
 
 # INFRASTRUCTURE
+import ast
+import html
 import re
 import sys
 from collections import defaultdict
@@ -12,13 +14,22 @@ from statistics import mean, median as stat_median
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
-REPORT_DIR = SCRIPT_DIR / "01_reports"
-SMOKE_REPORT = REPORT_DIR / "search_smoke_20260504_023641.md"
+REPORT_DIR   = SCRIPT_DIR / "01_reports"
+SMOKE_REPORT = REPORT_DIR / "pipeline_smoke_20260505_202605.md"
 
-ALL_ENGINES = [
+# 8 raw engine sources + scholar_strip (derived) + og + meta
+ALL_SOURCES = [
+    "og", "meta",
     "google", "duckduckgo", "mojeek", "lobsters",
-    "google scholar", "crossref", "openalex", "stack_exchange",
+    "google_scholar", "scholar_strip", "openalex", "crossref", "stack_exchange",
 ]
+
+# Engines that appear in per-engine snippet lines and the overlap matrix
+MATRIX_ENGINES = [
+    "google", "duckduckgo", "mojeek", "lobsters",
+    "google_scholar", "openalex", "crossref", "stack_exchange",
+]
+KNOWN_ENGINES = set(MATRIX_ENGINES)
 
 # Combined EN + DE stopwords — hardcoded, no NLTK dependency
 STOPWORDS = {
@@ -61,17 +72,18 @@ _BLOAT = [
 
 # ORCHESTRATOR
 
-# Parse smoke report, compute metrics, write report
+# Parse smoke report, compute all metrics, write report
 def run_analysis() -> None:
     records = parse_smoke_report(SMOKE_REPORT)
-    n_s = sum(len(r["snippets"]) for r in records)
+    n_s  = sum(len(r["snippets"]) for r in records)
     n_og = sum(1 for r in records if r["og"])
-    n_m = sum(1 for r in records if r["meta"])
+    n_m  = sum(1 for r in records if r["meta"])
     print(f"Parsed {len(records)} records  snippets:{n_s}  og:{n_og}  meta:{n_m}", file=sys.stderr)
-    source_stats = compute_source_stats(records)
-    overlap = compute_overlap_matrix(records)
-    examples = pick_diverse_examples(records, n=5)
-    path = write_report(source_stats, overlap, examples, records)
+    source_stats       = compute_source_stats(records)
+    overlap            = compute_overlap_matrix(records)
+    wins, best_per_url = compute_best_by_usefulness(records)
+    breakdown          = compute_per_class_breakdown(records, best_per_url)
+    path = write_report(source_stats, overlap, records, wins, best_per_url, breakdown)
     print(f"Report: {path}", file=sys.stderr)
     for src, st in source_stats.items():
         print(
@@ -79,84 +91,112 @@ def run_analysis() -> None:
             f" clean={st['mean_clean_len']:.0f} useful={st['usefulness_score']:.0f}",
             file=sys.stderr,
         )
+    total_wins = sum(wins.values())
+    print(f"\nBest-by-usefulness ({total_wins} URLs with content):", file=sys.stderr)
+    for src, w in sorted(wins.items(), key=lambda x: -x[1]):
+        print(f"  {src}: {w} ({100.0 * w / total_wins:.1f}%)", file=sys.stderr)
 
 
 # FUNCTIONS
 
-# Parse markdown smoke report into URL records with snippets and previews
+# Parse Python repr-quoted string; fallback to stripping outer quote chars
+def _repr_unquote(s: str) -> str:
+    s = s.strip()
+    try:
+        return ast.literal_eval(s)
+    except (ValueError, SyntaxError):
+        if len(s) >= 2 and s[0] in ('"', "'") and s[-1] == s[0]:
+            return s[1:-1]
+        return s
+
+
+# Parse new pipeline_smoke MD format into URL records with snippets and previews
 def parse_smoke_report(path: Path) -> list[dict]:
     lines = path.read_text(encoding="utf-8").splitlines()
-    records = []
-    current_query = None
-    current_record = None
-    i = 0
+    records: list[dict]     = []
+    current_query: str | None = None
+    current_record: dict | None = None
+    query_counter   = 0
+    query_seen: dict[str, int] = {}
+    pos_per_query: dict[str, int] = defaultdict(int)
 
-    while i < len(lines):
-        line = lines[i]
-
-        m = re.match(r'^## Query \d+: (.+)$', line)
+    for line in lines:
+        # Query header: ## Q1: python asyncio best practices
+        m = re.match(r'^## Q\d+: (.+)$', line)
         if m:
             current_query = m.group(1).strip()
-            i += 1
+            if current_query not in query_seen:
+                query_counter += 1
+                query_seen[current_query] = query_counter
             continue
 
-        m = re.match(r'^### \[\d+\] (https?://\S+)', line)
+        # URL entry: N. **[CLASS]** Title
+        m = re.match(r'^\d+\. \*\*\[([A-Z]+)\]\*\* (.+)$', line)
         if m:
             if current_record is not None:
                 records.append(current_record)
+            cls   = m.group(1)
+            title = m.group(2).strip()
+            qi    = query_seen.get(current_query, 0)
+            pos_per_query[current_query] += 1
+            pos   = pos_per_query[current_query]
             current_record = {
-                "url": m.group(1),
-                "query": current_query,
-                "engine_sources": [],
+                "query":    current_query,
+                "class":    cls,
+                "title":    title,
+                "url":      None,
+                "engines":  [],
+                "source":   "",
+                "display":  "",
+                "og":       None,
+                "meta":     None,
                 "snippets": {},
-                "og": None,
-                "meta": None,
+                "_qi":      qi,
+                "_pos":     pos,
             }
-            i += 1
             continue
 
         if current_record is None:
-            i += 1
             continue
 
-        m = re.match(r'^\*\*Engines:\*\* (.+)$', line)
+        # URL field
+        m = re.match(r'^\s+URL: (https?://\S+)', line)
         if m:
-            current_record["engine_sources"] = re.findall(r'`([^`]+)`', m.group(1))
-            i += 1
+            current_record["url"] = m.group(1)
             continue
 
-        m = re.match(r'^\*\*Snippet \[([^\]]+)\]:\*\*(.*)', line)
+        # Engines field
+        m = re.match(r'^\s+Engines: (.+)$', line)
         if m:
-            engine = m.group(1)
-            inline = m.group(2).strip()
-            if "*(empty)*" in inline:
-                current_record["snippets"][engine] = ""
-                i += 1
+            current_record["engines"] = [e.strip() for e in m.group(1).split(",")]
+            continue
+
+        # source | display line
+        m = re.match(r'^\s+source: (\S+) \| display: (.+)$', line)
+        if m:
+            current_record["source"]  = m.group(1)
+            current_record["display"] = _repr_unquote(m.group(2))
+            continue
+
+        # og | meta line — checked before generic engine pattern ("og" not in KNOWN_ENGINES)
+        m = re.match(r'^\s+og: (.*)', line)
+        if m:
+            rest = m.group(1)
+            if ' | meta: ' in rest:
+                og_part, meta_part = rest.split(' | meta: ', 1)
             else:
-                i += 1
-                if i < len(lines):
-                    nxt = lines[i].strip()
-                    ok = nxt and "*(empty)*" not in nxt and not nxt.startswith("**") \
-                        and not nxt.startswith("---") and not nxt.startswith("#")
-                    current_record["snippets"][engine] = nxt if ok else ""
-                else:
-                    current_record["snippets"][engine] = ""
-                i += 1
+                og_part, meta_part = rest, "—"
+            current_record["og"]   = None if og_part.strip()   == "—" else og_part.strip()
+            current_record["meta"] = None if meta_part.strip() == "—" else meta_part.strip()
             continue
 
-        m = re.match(r'^\*\*Preview \(og\):\*\* (.+)$', line)
+        # Per-engine snippet line: engine_name: 'repr-quoted text'
+        m = re.match(r'^\s+(\w+): (.+)$', line)
         if m:
-            current_record["og"] = m.group(1).strip()
-            i += 1
+            eng = m.group(1).lower()
+            if eng in KNOWN_ENGINES:
+                current_record["snippets"][eng] = _repr_unquote(m.group(2))
             continue
-
-        m = re.match(r'^\*\*Preview \(meta\):\*\* (.+)$', line)
-        if m:
-            current_record["meta"] = m.group(1).strip()
-            i += 1
-            continue
-
-        i += 1
 
     if current_record is not None:
         records.append(current_record)
@@ -174,11 +214,11 @@ def strip_bloat(text: str) -> str:
     text = re.sub(r'^Featured snippet from the web', '', text)
     text = re.sub(r'\bRead more\b.*', '', text)
     text = re.sub(r'\d[\d,.]*[Kk+]? *(likes|comments|answers|posts) *·[^\n]*', '', text)
-    text = re.sub(r'\S*›\S*', '', text)        # URL breadcrumb tokens
-    text = re.sub(r'\d{1,2} \w{3,9} \d{4} — ', '', text)  # date prefix
+    text = re.sub(r'\S*›\S*', '', text)
+    text = re.sub(r'\d{1,2} \w{3,9} \d{4} — ', '', text)
     text = re.sub(r'&[a-z]+;|&#\d+;', '', text)
     text = re.sub(r'Tagged with [\w, ]+\.?$', '', text)
-    text = re.sub(r'<[^>]+>', ' ', text)   # strip XML/HTML tags (e.g. <jats:p>)
+    text = re.sub(r'<[^>]+>', ' ', text)
     return ' '.join(text.split())
 
 
@@ -191,40 +231,64 @@ def lexical_density(text: str) -> float:
     return len(unique_content) / len(words)
 
 
+# clean_len × lexical_density for one text (matches compute_source_stats formula)
+def _usefulness(text: str) -> float:
+    if not text:
+        return 0.0
+    return len(strip_bloat(text)) * lexical_density(text)
+
+
 # Compute aggregate stats per snippet source across all records
 def compute_source_stats(records: list[dict]) -> dict:
-    texts_by: dict[str, list[str]] = {s: [] for s in ALL_ENGINES + ["preview_og", "preview_meta"]}
-    total_by: dict[str, int] = defaultdict(int)
-    empty_by: dict[str, int] = defaultdict(int)
+    texts_by: dict[str, list[str]] = {s: [] for s in ALL_SOURCES}
+    total_by: dict[str, int]       = defaultdict(int)
+    empty_by: dict[str, int]       = defaultdict(int)
 
     for rec in records:
         for eng, text in rec["snippets"].items():
             k = eng.lower()
-            if k not in texts_by: continue
+            if k not in texts_by:
+                continue
             total_by[k] += 1
-            if text: texts_by[k].append(text)
-            else: empty_by[k] += 1
-        for k, v in (("preview_og", rec["og"]), ("preview_meta", rec["meta"])):
-            if v is None: continue
-            total_by[k] += 1
-            if v: texts_by[k].append(v)
-            else: empty_by[k] += 1
+            if text:
+                texts_by[k].append(text)
+                if k == "google_scholar":
+                    # scholar_strip: unescape HTML entities then strip bloat (mirrors Rule 7)
+                    stripped = strip_bloat(html.unescape(text))
+                    total_by["scholar_strip"] += 1
+                    if stripped:
+                        texts_by["scholar_strip"].append(stripped)
+                    else:
+                        empty_by["scholar_strip"] += 1
+            else:
+                empty_by[k] += 1
+
+        for src, val in (("og", rec["og"]), ("meta", rec["meta"])):
+            if val is None:
+                continue
+            total_by[src] += 1
+            if val:
+                texts_by[src].append(val)
+            else:
+                empty_by[src] += 1
 
     stats = {}
-    for src in ALL_ENGINES + ["preview_og", "preview_meta"]:
+    for src in ALL_SOURCES:
         txts = texts_by[src]
         n_samples = len(txts)
         if not txts:
-            stats[src] = dict(n_total=total_by[src], n_empty=empty_by[src], n_samples=0,
-                              mean_len=0.0, median_len=0.0, pct_bloated=0.0,
-                              mean_clean_len=0.0, lexical_density=0.0, usefulness_score=0.0)
+            stats[src] = dict(
+                n_total=total_by[src], n_empty=empty_by[src], n_samples=0,
+                mean_len=0.0, median_len=0.0, pct_bloated=0.0,
+                mean_clean_len=0.0, lexical_density=0.0, usefulness_score=0.0,
+            )
             continue
-        lengths = [len(t) for t in txts]
-        bloated = [bool(detect_bloat(t)) for t in txts]
+        lengths    = [len(t) for t in txts]
+        bloated    = [bool(detect_bloat(t)) for t in txts]
         clean_lens = [len(strip_bloat(t)) for t in txts]
-        lex = [lexical_density(t) for t in txts]
-        m_clean = mean(clean_lens)
-        m_lex = mean(lex)
+        lex        = [lexical_density(t) for t in txts]
+        m_clean    = mean(clean_lens)
+        m_lex      = mean(lex)
         stats[src] = dict(
             n_total=total_by[src], n_empty=empty_by[src], n_samples=n_samples,
             mean_len=mean(lengths), median_len=stat_median(lengths),
@@ -236,15 +300,16 @@ def compute_source_stats(records: list[dict]) -> dict:
     return stats
 
 
-# 8×8 co-occurrence: count (URL, query) pairs found by both engines
+# 8×8 engine co-occurrence: count (URL, query) pairs found by both engines
 def compute_overlap_matrix(records: list[dict]) -> dict:
     url_engines: dict[tuple, set] = defaultdict(set)
+    matrix_set = set(MATRIX_ENGINES)
     for rec in records:
         key = (rec["url"], rec["query"])
-        for eng in rec["engine_sources"]:
-            if eng.lower() in set(ALL_ENGINES):
-                url_engines[key].add(eng.lower())
-
+        for eng in rec["engines"]:
+            e = eng.strip().lower()
+            if e in matrix_set:
+                url_engines[key].add(e)
     matrix: dict[tuple, int] = defaultdict(int)
     for engines in url_engines.values():
         eng_list = sorted(engines)
@@ -255,74 +320,83 @@ def compute_overlap_matrix(records: list[dict]) -> dict:
     return matrix
 
 
-# Pick n URL records with diverse source families (≥3 distinct source types)
-def pick_diverse_examples(records: list[dict], n: int = 5) -> list[dict]:
-    WEB = {"google", "duckduckgo", "mojeek"}
-    ACAD = {"google scholar", "crossref", "openalex"}
-
-    scored = []
+# Per URL: pick source with highest usefulness (insertion-order tie-break), aggregate wins
+def compute_best_by_usefulness(records: list[dict]) -> tuple[dict, dict]:
+    wins: dict[str, int]           = defaultdict(int)
+    best_per_url: dict[tuple, str] = {}
     for rec in records:
-        snips = {e: t for e, t in rec["snippets"].items() if t}
-        has_og, has_meta = bool(rec["og"]), bool(rec["meta"])
-        n_web = sum(1 for e in snips if e in WEB)
-        n_acad = sum(1 for e in snips if e in ACAD)
-        has_se = bool(snips.get("stack_exchange"))
-        n_prev = int(has_og) + int(has_meta)
-        total_kinds = len(snips) + n_prev
-        if total_kinds < 3:
+        candidates: dict[str, float] = {}
+        for eng, text in rec["snippets"].items():
+            if text:
+                candidates[eng] = _usefulness(text)
+        if rec["og"]:
+            candidates["og"]   = _usefulness(rec["og"])
+        if rec["meta"]:
+            candidates["meta"] = _usefulness(rec["meta"])
+        key = (rec["query"], rec["url"])
+        if not candidates:
+            best_per_url[key] = "empty"
             continue
-        score = (
-            total_kinds
-            + int(n_web > 0 and n_acad > 0) * 4
-            + int(has_se and n_web > 0) * 3
-            + n_prev * 2
-            + int(n_web > 1)
-        )
-        scored.append((score, rec))
-    scored.sort(key=lambda x: x[0], reverse=True)
+        winner = max(candidates, key=candidates.__getitem__)
+        wins[winner] += 1
+        best_per_url[key] = winner
+    return dict(wins), best_per_url
 
-    selected: list[dict] = []
-    seen_queries: set = set()
-    for _, rec in scored:
-        if len(selected) >= n:
-            break
-        if rec["query"] not in seen_queries:
-            selected.append(rec)
-            seen_queries.add(rec["query"])
-    for _, rec in scored:  # fill remaining from any query
-        if len(selected) >= n:
-            break
-        if rec not in selected:
-            selected.append(rec)
-    return selected[:n]
+
+# Win-count split by URL slot class (GENERAL / ACADEMIC / QA)
+def compute_per_class_breakdown(records: list[dict], best_per_url: dict) -> dict:
+    breakdown: dict[str, dict[str, int]] = {
+        "GENERAL":  defaultdict(int),
+        "ACADEMIC": defaultdict(int),
+        "QA":       defaultdict(int),
+    }
+    for rec in records:
+        key    = (rec["query"], rec["url"])
+        winner = best_per_url.get(key, "empty")
+        cls    = rec.get("class", "GENERAL")
+        if cls in breakdown:
+            breakdown[cls][winner] += 1
+    return {k: dict(v) for k, v in breakdown.items()}
 
 
 # Render and write the markdown report
-def write_report(stats: dict, overlap: dict, examples: list[dict], records: list[dict]) -> Path:
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+def write_report(
+    stats: dict, overlap: dict, records: list[dict],
+    wins: dict, best_per_url: dict, breakdown: dict,
+) -> Path:
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = REPORT_DIR / f"snippet_quality_{ts}.md"
     L: list[str] = []
 
+    total_wins = sum(wins.values())
+    n_urls     = len(records)
+
+    # Header
     L += [
         f"# Snippet Quality Analysis — {ts}",
         "",
         f"Source: `{SMOKE_REPORT.name}`  ",
-        f"URL records parsed: {len(records)}",
+        f"URL records parsed: {n_urls}  ",
+        f"URLs with ≥1 non-empty source: {total_wins}",
         "",
+    ]
+
+    # Section 1 — Per-Source Aggregated Stats
+    L += [
         "## 1. Per-Source Aggregated Stats",
         "",
         "Bloat indicators (any one fires → bloated): "
         "B1 URL breadcrumb (›) · B2 Read-more · B3 Web-results prefix · "
         "B4 Featured-snippet prefix · B5 Social-proof (N likes/comments ·) · "
         "B6 Scholar ellipsis (…) · B7 Mojeek nav-dump (…text…) · "
-        "B8 HTML entities · B9 Tag noise (Tagged with …) · B10 JATS/NS XML tags (<jats:p> etc.).  ",
+        "B8 HTML entities · B9 Tag noise · B10 JATS/NS XML tags.  ",
         "Usefulness = mean_clean_len × lexical_density.  ",
-        "Lexical density = unique non-stopword words (≥3 chars) / all words (EN+DE combined stoplist).",
+        "scholar_strip = google_scholar text after html.unescape + strip_bloat (mirrors _select_snippet Rule 7).",
         "",
         "| Source | N total | N empty | N samples | Mean len | Median len | % bloated | Mean clean len | Lex density | Usefulness |",
         "|--------|---------|---------|-----------|----------|------------|-----------|----------------|-------------|------------|",
     ]
-    for src in ALL_ENGINES + ["preview_og", "preview_meta"]:
+    for src in ALL_SOURCES:
         st = stats[src]
         L.append(
             f"| {src} | {st['n_total']} | {st['n_empty']} | {st['n_samples']}"
@@ -331,63 +405,120 @@ def write_report(stats: dict, overlap: dict, examples: list[dict], records: list
             f" | {st['lexical_density']:.2f} | {st['usefulness_score']:.0f} |"
         )
 
+    # Section 2 — Engine Overlap Matrix
     L += [
-        "",
-        "> **CrossRef — critical finding:** 49/300 entries have non-empty snippet text, but it is "
-        "raw JATS XML (`<jats:p>…</jats:p>`, `<ns4:p>…</ns4:p>`) — unstripped. The other 251 are "
-        "empty. **Consequence for SearchResult format:** CrossRef snippets need XML stripping when "
-        "present, and metadata-field synthesis (title + journal + year) when absent. Neither is "
-        "currently done — both cases return broken or empty snippet text to the model.",
         "",
         "## 2. Engine Overlap Matrix",
         "",
         "Cell (i, j) = count of (URL, query) pairs where both engines returned the URL.  ",
-        "Same URL across different queries is counted separately.",
+        "Same URL across different queries counted separately.",
         "",
     ]
     short = {
         "google": "google", "duckduckgo": "ddg", "mojeek": "mojeek",
-        "lobsters": "lobsters", "google scholar": "scholar", "crossref": "crossref",
+        "lobsters": "lobsters", "google_scholar": "scholar", "crossref": "crossref",
         "openalex": "openalex", "stack_exchange": "stack_ex",
     }
-    L.append("| — | " + " | ".join(short[e] for e in ALL_ENGINES) + " |")
-    L.append("|---|" + "---|" * len(ALL_ENGINES))
-    for e1 in ALL_ENGINES:
+    L.append("| — | " + " | ".join(short[e] for e in MATRIX_ENGINES) + " |")
+    L.append("|---|" + "---|" * len(MATRIX_ENGINES))
+    for e1 in MATRIX_ENGINES:
         row = [short[e1]] + [
             "—" if e1 == e2 else str(overlap.get((e1, e2), 0))
-            for e2 in ALL_ENGINES
+            for e2 in MATRIX_ENGINES
         ]
         L.append("| " + " | ".join(row) + " |")
 
+    # Section 3 — Best-by-Usefulness Winners
     L += [
         "",
-        "## 3. Side-by-Side Examples (≥3 distinct source kinds)",
+        "## 3. Best-by-Usefulness Winners",
         "",
-        "Each example: one URL, all its non-empty snippet sources shown in full. "
-        "Enables visual comparison of how different source families represent the same page.",
+        "Per URL: gather all non-empty sources, compute clean_len × lex_density, pick winner.  ",
+        f"Total URLs with ≥1 non-empty source: **{total_wins}** / {n_urls}.  ",
+        "This is the empirical answer to: which source produces the best snippet quality?",
+        "",
+        "| Source | Wins | Win Rate |",
+        "|--------|------|----------|",
+    ]
+    for src, w in sorted(wins.items(), key=lambda x: -x[1]):
+        rate = 100.0 * w / total_wins if total_wins else 0.0
+        L.append(f"| {src} | {w} | {rate:.1f}% |")
+
+    # Section 4 — Per-Class Breakdown
+    n_gen = sum(breakdown.get("GENERAL",  {}).values())
+    n_ac  = sum(breakdown.get("ACADEMIC", {}).values())
+    n_qa  = sum(breakdown.get("QA",       {}).values())
+    all_cls_winners = sorted(
+        {s for cls_d in breakdown.values() for s in cls_d},
+        key=lambda s: -(breakdown.get("GENERAL", {}).get(s, 0)),
+    )
+    L += [
+        "",
+        "## 4. Per-Class Breakdown",
+        "",
+        "Win-count from Section 3 split by URL slot class.  ",
+        f"GENERAL: {n_gen} URLs · ACADEMIC: {n_ac} URLs · QA: {n_qa} URLs",
+        "",
+        "| Source | GENERAL | GENERAL% | ACADEMIC | ACADEMIC% | QA | QA% |",
+        "|--------|---------|----------|----------|-----------|----|-----|",
+    ]
+    for src in all_cls_winners:
+        g  = breakdown.get("GENERAL",  {}).get(src, 0)
+        a  = breakdown.get("ACADEMIC", {}).get(src, 0)
+        q  = breakdown.get("QA",       {}).get(src, 0)
+        gp = 100.0 * g / n_gen if n_gen else 0.0
+        ap = 100.0 * a / n_ac  if n_ac  else 0.0
+        qp = 100.0 * q / n_qa  if n_qa  else 0.0
+        L.append(f"| {src} | {g} | {gp:.1f}% | {a} | {ap:.1f}% | {q} | {qp:.1f}% |")
+
+    # Section 5 — All URLs Side-by-Side
+    L += [
+        "",
+        "## 5. All URLs — Side-by-Side Snippet Scores",
+        "",
+        "One block per URL. ⭐ = winner (highest clean_len × lex_density).  ",
+        "Only non-empty sources shown. Sorted by usefulness descending within each block.",
         "",
     ]
-    for idx, rec in enumerate(examples, 1):
-        snips = {e: t for e, t in rec["snippets"].items() if t}
-        all_src = list(snips.keys()) + (["og"] if rec["og"] else []) + (["meta"] if rec["meta"] else [])
-        L += [
-            f"### Example {idx} — {len(snips)} engine snippet(s) + "
-            f"{'og' if rec['og'] else ''}{'+ meta' if rec['meta'] else ''}",
-            "",
-            f"**URL:** {rec['url']}  ",
-            f"**Query:** `{rec['query']}`  ",
-            f"**Engine-sources line:** {', '.join(rec['engine_sources'])}  ",
-            f"**Source kinds present:** {', '.join(all_src)}",
-            "",
-            "| Source | Full text |",
-            "|--------|-----------|",
-        ]
-        for eng, text in snips.items():
-            L.append(f"| snippet [{eng}] | {text.replace('|', chr(92) + '|')} |")
+    prev_qi = None
+    for rec in records:
+        # Query sub-header when query changes
+        if rec["_qi"] != prev_qi:
+            prev_qi = rec["_qi"]
+            L += [f"### Q{rec['_qi']}: {rec['query']}", ""]
+
+        key    = (rec["query"], rec["url"])
+        winner = best_per_url.get(key, "empty")
+        title_s = (rec.get("title") or "")[:70]
+
+        candidates: dict[str, tuple] = {}
+        for eng, text in rec["snippets"].items():
+            if text:
+                cl = len(strip_bloat(text))
+                ld = lexical_density(text)
+                candidates[eng] = (cl * ld, cl, ld)
         if rec["og"]:
-            L.append(f"| preview (og) | {rec['og'].replace('|', chr(92) + '|')} |")
+            cl = len(strip_bloat(rec["og"]))
+            ld = lexical_density(rec["og"])
+            candidates["og"] = (cl * ld, cl, ld)
         if rec["meta"]:
-            L.append(f"| preview (meta) | {rec['meta'].replace('|', chr(92) + '|')} |")
+            cl = len(strip_bloat(rec["meta"]))
+            ld = lexical_density(rec["meta"])
+            candidates["meta"] = (cl * ld, cl, ld)
+
+        cls = rec.get("class", "?")
+        L.append(f"**[Q{rec['_qi']}.{rec['_pos']} · {cls}]** {title_s}")
+        L.append(f"URL: {rec.get('url', '')}  ")
+        if winner != "empty" and candidates:
+            L += [
+                "| source | clean_len | lex | useful |",
+                "|--------|-----------|-----|--------|",
+            ]
+            for src, (useful, cl, ld) in sorted(candidates.items(), key=lambda x: -x[1][0]):
+                star = " ⭐" if src == winner else ""
+                L.append(f"| **{src}**{star} | {cl} | {ld:.2f} | {useful:.0f} |")
+        else:
+            L.append("*no content*")
         L.append("")
 
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
