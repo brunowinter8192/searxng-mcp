@@ -11,10 +11,22 @@ pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXN
 - `search_batch_workflow(queries, ...)` — N queries sequentially through `search_web_workflow` in the SAME process (Chrome stays warm via shared singleton in `browser.py`), `close_browser()` in finally clause keeps teardown inside the active event loop. Used by `cli.py search_batch` subcommand to amortize Chrome cold-start across multiple queries (~5s boot + ~1s/query vs ~5s boot per query in subprocess-per-call mode).
 - `fetch_search_results()` — sync wrapper for dev scripts.
 
-**Bloat-strip patterns** for the Google/Scholar fallback in `_select_snippet` are imported from `dev/search_pipeline/snippet_quality_analysis.py` (single source of truth, do not redefine). 9 patterns: URL breadcrumb (`›`), Read-more, `^Web results`, `^Featured snippet from the web`, social-proof, Scholar ellipsis, Mojeek nav-dump, HTML entities, `Tagged with` suffix.
-
 **Input:** Query string (or list), category, language, time range, engine filter.
 **Output:** `list[TextContent]` (single workflow), `list[list[TextContent]]` (batch workflow), or `list[dict]` (sync wrapper). Side effect: writes disk cache under `~/.cache/searxng/<key>.json`.
+
+## snippet.py
+
+**Purpose:** Snippet selection logic. `_select_snippet(r: SearchResult) -> tuple[str, str]` picks the best snippet over all candidates (engine snippets + og + meta) using a score of `clean_len × lexical_density`; `MIN_FLOOR=40` char floor, best-of-worst fallback when all candidates are below floor. Strip pipeline: `_strip_bloat` (HTML unescape + 9 bloat patterns including `^Web results`, `^Featured snippet from the web`, URL breadcrumbs, `Read more`, social proof, HTML entities, `Tagged with` suffix) calls `_strip_doubled_prefix` (maximizes cut across repeated-chunk matches in the first 300 chars — Google de-dupe heuristic). `lexical_density` computes ratio of unique content words (≥3 chars, non-stopword) to all word tokens via a combined EN + DE `STOPWORDS` set (no NLTK dependency).
+**Public interface:** `_select_snippet`, `_strip_bloat`, `lexical_density`, `MIN_FLOOR`, `STOPWORDS`.
+**Input:** `SearchResult` with `preview` and `snippets` fields populated (by `preview.py` and `_merge_and_rank` respectively).
+**Output:** `(display_text, source_label)` — strip-bloat-cleaned winner text and winning candidate key (`"og"`, `"meta"`, or engine name). Called from `search_web._format_results`.
+
+## merge.py
+
+**Purpose:** URL-merge and slot allocation. `_merge_and_rank(results, target_count=20, class_filter=None)` merges duplicate URLs across engines (aggregate engine list, snippets dict, min position), classifies into `GENERAL = {google, duckduckgo, mojeek}` / `ACADEMIC = {google_scholar, openalex, crossref}` / `QA = {stack_exchange, lobsters}` pools, sorts per-class (general by overlap-count desc then position; academic/QA by position then priority), resolves slot targets from `class_filter` (single class → 20, two classes → sum of defaults, all/none → 12/6/2), fills slots via `_fill_slots` (shared `placed_urls` set dedupes across all three pool fills), returns ordered results + leftover for cache pagination. Extracted module-level helpers: `_n_general`, `_n_academic`, `_n_qa`, `_best_academic_pri`, `_best_qa_pri`, `_fill_slots`.
+**Public interface:** `_merge_and_rank`, `GENERAL`, `ACADEMIC`, `QA`, `TARGET_GENERAL`, `TARGET_ACADEMIC`, `TARGET_QA`.
+**Input:** `list[SearchResult]` from engine fan-out (may contain duplicate URLs), optional `class_filter: frozenset[str]`.
+**Output:** `(list[SearchResult], dict)` — ordered results (top slots + leftover for cache pagination), `slot_counts: {general, academic, qa}`. Called from `search_web.search_web_workflow`.
 
 ## browser.py
 
