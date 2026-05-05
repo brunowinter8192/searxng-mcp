@@ -132,7 +132,7 @@ If `cited_by_count > 50`: append ` (Cited {n}×)` to snippet. Threshold 50 is a 
 }
 ```
 
-`urls` = full `_merge_and_rank` output (not just top-20). `search_more` slices from index 20. `slot_counts` records actual fill per class (may be below target on underflow). `snippet_source` per URL reflects the priority-chain rule applied; null for URLs beyond position 20 (not passed through snippet selection).
+`urls` = full `_merge_and_rank` output (not just top-20). `search_more` slices from index 20. `slot_counts` records actual fill per class (may be below target on underflow). `snippet_source` per URL reflects the score-based selection applied (highest `clean_len × lexical_density`); null for URLs beyond position 20 (not passed through snippet selection).
 
 **`search_more` semantics:**
 
