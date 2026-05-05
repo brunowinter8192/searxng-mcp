@@ -71,6 +71,7 @@ async def search_web_workflow(
     engines: str | None = None,
     _with_timings: bool = False,
     class_filter: frozenset[str] | None = None,
+    engine_timeout: float | None = None,
 ) -> list[TextContent] | tuple[list[TextContent], dict]:
     t_total = time.perf_counter()
     logger.info("Searching: %s (language=%s)", query, language)
@@ -82,11 +83,14 @@ async def search_web_workflow(
     t_fanout = time.perf_counter()
     if _with_timings:
         names_and_engines = list(selected.items())
-        tasks = [_engine_with_timing(eng, query, language, 10) for _, eng in names_and_engines]
+        tasks = [_engine_with_timing(eng, query, language, 10, engine_timeout) for _, eng in names_and_engines]
         timed = await asyncio.gather(*tasks)
-        for (name, _), (eng_results, ms) in zip(names_and_engines, timed):
+        engine_details: dict[str, dict] = {}
+        for (name, _), (eng_results, ms, status) in zip(names_and_engines, timed):
             raw_results.extend(eng_results)
-            engine_ms[f"engine_{name.replace(' ', '_')}_ms"] = ms
+            key = name.replace(' ', '_')
+            engine_ms[f"engine_{key}_ms"] = ms
+            engine_details[key] = {"status": status, "ms": ms}
     else:
         raw_results = await _query_engines_concurrent(query, language, 10, selected)
     engine_fanout_ms = round((time.perf_counter() - t_fanout) * 1000)
@@ -125,6 +129,7 @@ async def search_web_workflow(
     timings = {
         "engine_fanout_ms": engine_fanout_ms,
         **engine_ms,
+        "engine_details": engine_details,
         "merge_rank_ms": merge_rank_ms,
         "preview_ms": preview_ms,
         "select_snippet_ms": select_snippet_ms,
@@ -196,15 +201,21 @@ async def _query_engines_concurrent(query: str, language: str, max_results: int,
     return combined
 
 
-# Wrap a single engine search call and return (results, elapsed_ms) for per-engine timing
-async def _engine_with_timing(engine, query: str, language: str, max_results: int) -> tuple[list, int]:
+# Wrap a single engine search call; return (results, elapsed_ms, status) — status: OK/EMPTY/TIMEOUT/ERROR
+async def _engine_with_timing(engine, query: str, language: str, max_results: int, timeout: float | None = None) -> tuple[list, int, str]:
     t0 = time.perf_counter()
     try:
-        results = await engine.search(query, language, max_results)
-        return results, round((time.perf_counter() - t0) * 1000)
+        if timeout is not None:
+            results = await asyncio.wait_for(engine.search(query, language, max_results), timeout=timeout)
+        else:
+            results = await engine.search(query, language, max_results)
+        ms = round((time.perf_counter() - t0) * 1000)
+        return results, ms, "OK" if results else "EMPTY"
+    except asyncio.TimeoutError:
+        return [], round((time.perf_counter() - t0) * 1000), "TIMEOUT"
     except Exception as e:
         logger.warning("Engine error: %s", e)
-        return [], round((time.perf_counter() - t0) * 1000)
+        return [], round((time.perf_counter() - t0) * 1000), "ERROR"
 
 
 # Merge by URL, classify engines into slots, return overlap-ranked results + slot fill counts
