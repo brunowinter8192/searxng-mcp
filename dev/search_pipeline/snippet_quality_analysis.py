@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Snippet quality analysis for pipeline_smoke_20260505_202605.md (dl9-v3 baseline)."""
+"""Snippet quality analysis — auto-discovers newest pipeline_smoke_*.md baseline."""
 
 # INFRASTRUCTURE
 import ast
@@ -15,7 +15,10 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
 REPORT_DIR   = SCRIPT_DIR / "01_reports"
-SMOKE_REPORT = REPORT_DIR / "pipeline_smoke_20260505_202605.md"
+_smoke_candidates = sorted(REPORT_DIR.glob("pipeline_smoke_*.md"), reverse=True)
+if not _smoke_candidates:
+    raise FileNotFoundError(f"No pipeline_smoke_*.md found in {REPORT_DIR}")
+SMOKE_REPORT = _smoke_candidates[0]
 
 # 8 raw engine sources + scholar_strip (derived) + og + meta
 ALL_SOURCES = [
