@@ -282,11 +282,29 @@ def _merge_and_rank(results: list[SearchResult], target_count: int = 20, class_f
     else:
         tg, ta, tq = TARGET_GENERAL, TARGET_ACADEMIC, TARGET_QA
 
-    general_slots  = general_pool[:tg]
-    academic_slots = academic_pool[:ta]
-    qa_slots       = qa_pool[:tq]
+    placed_urls = set()
 
-    placed_urls = {m["url"] for m in general_slots + academic_slots + qa_slots}
+    general_slots = []
+    for m in general_pool:
+        if len(general_slots) == tg: break
+        if m["url"] in placed_urls: continue
+        general_slots.append(m)
+        placed_urls.add(m["url"])
+
+    academic_slots = []
+    for m in academic_pool:
+        if len(academic_slots) == ta: break
+        if m["url"] in placed_urls: continue
+        academic_slots.append(m)
+        placed_urls.add(m["url"])
+
+    qa_slots = []
+    for m in qa_pool:
+        if len(qa_slots) == tq: break
+        if m["url"] in placed_urls: continue
+        qa_slots.append(m)
+        placed_urls.add(m["url"])
+
     leftover = [m for m in pool if m["url"] not in placed_urls]
     leftover.sort(key=lambda m: (-len(m["engines"]), m["min_position"]))
 
