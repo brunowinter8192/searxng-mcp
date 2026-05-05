@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Full pipeline smoke -- search_web_workflow per query, slot deduction from cache, markdown report."""
+"""Full pipeline smoke -- search_web_workflow per query, timings + snippet source + slot-position labels."""
 
 # INFRASTRUCTURE
 import argparse
 import asyncio
+import statistics
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -18,35 +19,33 @@ SCRIPT_DIR   = Path(__file__).parent
 QUERIES_FILE = SCRIPT_DIR / "queries.txt"
 REPORT_DIR   = SCRIPT_DIR / "01_reports"
 
-GENERAL_NAMES  = {"google", "duckduckgo", "mojeek"}
-ACADEMIC_NAMES = {"google_scholar", "openalex", "crossref"}
-QA_NAMES       = {"stack_exchange", "lobsters"}
-
 TARGET_GENERAL  = 12
-TARGET_ACADEMIC = 4
+TARGET_ACADEMIC = 6
 TARGET_QA       = 2
 TARGET_TOTAL    = 20
 
 
 # ORCHESTRATOR
 
-# Run search_web_workflow per query, read structured cache data, write report
+# Run search_web_workflow per query (with timings), read structured cache data, write report
 async def run_pipeline_smoke(max_queries: int | None, language: str) -> None:
     queries = _load_queries(QUERIES_FILE, max_queries)
     print(f"Pipeline smoke | Queries: {len(queries)} | Language: {language}", file=sys.stderr)
     records = []
     try:
         for qi, query in enumerate(queries, 1):
-            await search_web_workflow(query, language, None, None)
+            _, timings = await search_web_workflow(query, language, None, None, _with_timings=True)
             key  = cache_key(query, language, None, None)
             hit  = cache_read(key)
             urls = hit.get("urls", []) if hit else []
-            record = _build_record(query, urls)
+            slot_counts = (hit.get("slot_counts") or {}) if hit else {}
+            record = _build_record(query, urls, slot_counts, timings)
             records.append(record)
             s = record["slots"]
             print(
                 f"[{qi}/{len(queries)}] {query!r} -> urls={len(urls)} "
-                f"G={s['GENERAL']} A={s['ACADEMIC']} Q={s['QA']}",
+                f"G={s['GENERAL']} A={s['ACADEMIC']} Q={s['QA']} "
+                f"total_ms={timings['total_ms']}",
                 file=sys.stderr,
             )
     finally:
@@ -67,35 +66,50 @@ def _load_queries(path: Path, max_queries: int | None) -> list[str]:
     return qs[:max_queries] if max_queries else qs
 
 
-# Deduce slot class from engines list: GENERAL > ACADEMIC > QA > OVERFLOW?
-def _deduce_class(engines: list[str]) -> str:
-    s = set(engines)
-    if s & GENERAL_NAMES:   return "GENERAL"
-    if s & ACADEMIC_NAMES:  return "ACADEMIC"
-    if s & QA_NAMES:        return "QA"
-    return "OVERFLOW?"
+# Assign slot-position label from slot_counts boundaries (position-based, not engine-deduced)
+def _slot_label(idx: int, slot_counts: dict) -> str:
+    n_gen = slot_counts.get("general", 0)
+    n_ac  = slot_counts.get("academic", 0)
+    n_qa  = slot_counts.get("qa", 0)
+    if idx < n_gen:
+        return "GENERAL"
+    if idx < n_gen + n_ac:
+        return "ACADEMIC"
+    if idx < n_gen + n_ac + n_qa:
+        return "QA"
+    return "OVERFLOW"  # should not occur in v3; kept as safety label for cache-paginated entries
 
 
-# Annotate top-20 cache urls with deduced class, count slots per class
-def _build_record(query: str, urls: list[dict]) -> dict:
-    top20 = urls[:TARGET_TOTAL]
+# Build per-query record: annotated top-20 urls, slot counts, timings
+def _build_record(query: str, urls: list[dict], slot_counts: dict, timings: dict) -> dict:
+    allocated = slot_counts.get("general", 0) + slot_counts.get("academic", 0) + slot_counts.get("qa", 0)
+    top20 = urls[:min(TARGET_TOTAL, allocated)]
     annotated = []
-    for entry in top20:
+    for idx, entry in enumerate(top20):
         annotated.append({
-            "url":     entry["url"],
-            "title":   entry.get("title", ""),
-            "engines": entry.get("engines", []),
-            "snippet": entry.get("snippet", ""),
-            "class":   _deduce_class(entry.get("engines", [])),
+            "url":             entry["url"],
+            "title":           entry.get("title", ""),
+            "engines":         entry.get("engines", []),
+            "snippet":         entry.get("snippet", ""),
+            "snippet_source":  entry.get("snippet_source") or "",
+            "snippet_display": entry.get("snippet_display") or "",
+            "og":              entry.get("og") or "",
+            "meta":            entry.get("meta") or "",
+            "snippets":        entry.get("snippets") or {},
+            "class":           _slot_label(idx, slot_counts),
         })
-    slots: dict[str, int] = {"GENERAL": 0, "ACADEMIC": 0, "QA": 0, "OVERFLOW?": 0}
+    slots: dict[str, int] = {"GENERAL": 0, "ACADEMIC": 0, "QA": 0}
     for a in annotated:
-        slots[a["class"]] += 1
+        label = a["class"]
+        if label in slots:
+            slots[label] += 1
     return {
-        "query":      query,
-        "urls":       annotated,
-        "total_urls": len(annotated),
-        "slots":      slots,
+        "query":       query,
+        "urls":        annotated,
+        "total_urls":  len(annotated),
+        "slots":       slots,
+        "slot_counts": slot_counts,
+        "timings":     timings,
     }
 
 
@@ -103,6 +117,8 @@ def _build_record(query: str, urls: list[dict]) -> dict:
 def _write_report(records: list[dict], language: str) -> Path:
     ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
     path = REPORT_DIR / f"pipeline_smoke_{ts}.md"
+
+    all_total_ms = [r["timings"]["total_ms"] for r in records if r["timings"]]
 
     lines: list[str] = [
         f"# Pipeline Smoke Report -- {ts}",
@@ -116,21 +132,19 @@ def _write_report(records: list[dict], language: str) -> Path:
         "| Class    | Engines                               | Output slots |",
         "|----------|---------------------------------------|-------------|",
         "| GENERAL  | google, duckduckgo, mojeek            | 12 |",
-        "| ACADEMIC | google_scholar, openalex, crossref     |  4 |",
-        "| QA       | stack_exchange, lobsters               |  2 |",
-        "| OVERFLOW | non-placed candidates (any class)      |  2 |",
+        "| ACADEMIC | google_scholar, openalex, crossref    |  6 |",
+        "| QA       | stack_exchange, lobsters              |  2 |",
         "",
-        "> Slot class per URL is deduced from the `engines` field in cache -- heuristic for review,",
-        "> not a replay of internal slot allocation. OVERFLOW is an allocation mechanism, not an",
-        "> engine class; OVERFLOW? label means no engine from GENERAL/ACADEMIC/QA returned this",
-        "> URL (should not occur in practice since all 8 active engines belong to one of the 3 classes).",
+        "> Slot position labels are derived from `slot_counts` in the cache entry (position-based),",
+        "> not deduced from the `engines` field. Total target: 20. Underflow = output < 20 when",
+        "> a class has insufficient supply. No overflow slots — v3 hard allocation.",
         "",
         "---",
         "",
         "## Summary",
         "",
-        "| # | Query | Total | GENERAL | ACADEMIC | QA | OVERFLOW? |",
-        "|---|-------|-------|---------|----------|----|-----------|",
+        "| # | Query | Total | GENERAL | ACADEMIC | QA |",
+        "|---|-------|-------|---------|----------|----|",
     ]
 
     for i, r in enumerate(records, 1):
@@ -138,13 +152,15 @@ def _write_report(records: list[dict], language: str) -> Path:
         s = r["slots"]
         lines.append(
             f"| {i} | {q} | {r['total_urls']} "
-            f"| {s['GENERAL']} | {s['ACADEMIC']} | {s['QA']} | {s['OVERFLOW?']} |"
+            f"| {s['GENERAL']} | {s['ACADEMIC']} | {s['QA']} |"
         )
 
     lines += ["", "---", ""]
 
     for qi, r in enumerate(records, 1):
-        s = r["slots"]
+        s      = r["slots"]
+        sc     = r["slot_counts"]
+        t      = r["timings"]
         lines += [f"## Q{qi}: {r['query']}", ""]
         if not r["urls"]:
             lines += ["*No results returned.*", "", "---", ""]
@@ -152,30 +168,76 @@ def _write_report(records: list[dict], language: str) -> Path:
         for idx, a in enumerate(r["urls"], 1):
             title       = a["title"] if a["title"] else "(no title)"
             engines_str = ", ".join(a["engines"])
-            snippet     = (a["snippet"] or "")[:400].replace("\n", " ")
+            src         = a["snippet_source"] or "—"
+            display     = (a["snippet_display"] or "")[:400].replace("\n", " ")
+            og_val      = (a["og"]   or "—")[:300].replace("\n", " ")
+            meta_val    = (a["meta"] or "—")[:300].replace("\n", " ")
             lines += [
                 f"{idx}. **[{a['class']}]** {title}",
                 f"   URL: {a['url']}",
                 f"   Engines: {engines_str}",
+                f"   source: {src} | display: {display!r}",
+                f"   og: {og_val} | meta: {meta_val}",
             ]
-            if snippet:
-                lines.append(f"   Snippet: {snippet}")
+            for eng, snip in sorted(a["snippets"].items()):
+                lines.append(f"   {eng}: {snip[:300].replace(chr(10), ' ')!r}")
             lines.append("")
+        gen_target = sc.get("general", TARGET_GENERAL)
+        ac_target  = sc.get("academic", TARGET_ACADEMIC)
+        qa_target  = sc.get("qa", TARGET_QA)
         lines.append(
-            f"Slots filled: GENERAL {s['GENERAL']}/{TARGET_GENERAL}, "
-            f"ACADEMIC {s['ACADEMIC']}/{TARGET_ACADEMIC}, "
-            f"QA {s['QA']}/{TARGET_QA}, "
+            f"Slot fill: GENERAL {gen_target}/{TARGET_GENERAL}, "
+            f"ACADEMIC {ac_target}/{TARGET_ACADEMIC}, "
+            f"QA {qa_target}/{TARGET_QA}, "
             f"total {r['total_urls']}/{TARGET_TOTAL}"
         )
-        lines += ["", "---", ""]
+        lines += [
+            "",
+            f"Timing: total={t.get('total_ms')}ms  fanout={t.get('engine_fanout_ms')}ms  "
+            f"merge={t.get('merge_rank_ms')}ms  preview={t.get('preview_ms')}ms  "
+            f"snippet_select={t.get('select_snippet_ms')}ms  cache_write={t.get('cache_write_ms')}ms",
+            "",
+            "---",
+            "",
+        ]
 
+    # Timing summary
+    lines += [
+        "## Timing",
+        "",
+        "### Per-Query",
+        "",
+        "| # | Query | total_ms | fanout_ms | merge_ms | preview_ms | snippet_ms | cache_ms |",
+        "|---|-------|----------|-----------|----------|------------|------------|----------|",
+    ]
+    for i, r in enumerate(records, 1):
+        t = r["timings"]
+        q = r["query"][:40].replace("|", "\\|")
+        lines.append(
+            f"| {i} | {q} | {t.get('total_ms', '—')} | {t.get('engine_fanout_ms', '—')} "
+            f"| {t.get('merge_rank_ms', '—')} | {t.get('preview_ms', '—')} "
+            f"| {t.get('select_snippet_ms', '—')} | {t.get('cache_write_ms', '—')} |"
+        )
+
+    if all_total_ms:
+        lines += [
+            "",
+            "### Aggregate (total_ms across all queries)",
+            "",
+            f"| min | median | mean | max |",
+            f"|-----|--------|------|-----|",
+            f"| {min(all_total_ms)} | {round(statistics.median(all_total_ms))} "
+            f"| {round(statistics.mean(all_total_ms))} | {max(all_total_ms)} |",
+        ]
+
+    lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Full pipeline smoke: search_web_workflow per query, slot deduction from cache."
+        description="Full pipeline smoke: search_web_workflow per query, timings + snippet source + slot labels."
     )
     parser.add_argument(
         "--max-queries",
