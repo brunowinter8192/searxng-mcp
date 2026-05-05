@@ -12,7 +12,7 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
-from snippet_quality_analysis import parse_smoke_report
+from _lib.parse import KNOWN_ENGINES, parse_smoke_report
 
 REPORT_DIR = SCRIPT_DIR / "01_reports"
 _smoke_candidates = sorted(REPORT_DIR.glob("pipeline_smoke_*.md"), reverse=True)
@@ -20,13 +20,12 @@ if not _smoke_candidates:
     raise FileNotFoundError(f"No pipeline_smoke_*.md found in {REPORT_DIR}")
 SMOKE_REPORT = _smoke_candidates[0]
 
-# Ordered: GENERAL engines first, then ACADEMIC, then QA
-KNOWN_ENGINES = [
+# Ordered: GENERAL engines first, then ACADEMIC, then QA (display column order)
+ENGINE_COLUMN_ORDER = [
     "google", "duckduckgo", "mojeek",
     "google_scholar", "openalex", "crossref",
     "stack_exchange", "lobsters",
 ]
-KNOWN_ENGINES_SET = set(KNOWN_ENGINES)
 
 ENGINE_CLASS = {
     "google":         "GENERAL",
@@ -82,7 +81,7 @@ def compute_slot_counts(records: list[dict]) -> dict:
     }
     for rec in records:
         cls   = rec.get("class", "GENERAL")
-        known = [e for e in rec["engines"] if e in KNOWN_ENGINES_SET]
+        known = [e for e in rec["engines"] if e in KNOWN_ENGINES]
         is_solo = len(known) == 1
         for eng in known:
             counts[eng]["total"] += 1
@@ -154,44 +153,33 @@ def compute_per_query_distribution(records: list[dict]) -> list[tuple]:
         qi = rec["_qi"]
         qi_query[qi] = rec["query"]
         for eng in rec["engines"]:
-            if eng in KNOWN_ENGINES_SET:
+            if eng in KNOWN_ENGINES:
                 qi_counts[qi][eng] += 1
     return [(qi, qi_query[qi], dict(qi_counts[qi])) for qi in sorted(qi_query)]
 
 
-# Render and write the markdown report
-def write_report(
-    records:    list[dict],
-    slot_counts: dict,
-    status_agg: dict,
-    baselines:  dict,
-    per_query:  list[tuple],
-) -> Path:
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = REPORT_DIR / f"engine_distribution_{ts}.md"
-    L:   list[str] = []
-
-    n_queries = len(per_query)
-
-    # Header
-    L += [
+# Render header metadata block
+def _render_header(ts: str, records: list[dict], per_query: list[tuple]) -> list[str]:
+    return [
         f"# Engine Distribution Analysis — {ts}",
         "",
         f"Source: `{SMOKE_REPORT.name}`  ",
         f"URL records parsed: {len(records)}  ",
-        f"Queries: {n_queries}",
+        f"Queries: {len(per_query)}",
         "",
     ]
 
-    # Section 1 — Per-Engine Slot-Count Total
-    gen_sum = sum(slot_counts[e]["GENERAL"]  for e in KNOWN_ENGINES)
-    aca_sum = sum(slot_counts[e]["ACADEMIC"] for e in KNOWN_ENGINES)
-    qa_sum  = sum(slot_counts[e]["QA"]       for e in KNOWN_ENGINES)
+
+# Render Section 1 — per-engine slot-count total table with column-sum footer
+def _render_slot_counts(slot_counts: dict, records: list[dict], per_query: list[tuple]) -> list[str]:
+    n_queries = len(per_query)
+    gen_sum  = sum(slot_counts[e]["GENERAL"]  for e in ENGINE_COLUMN_ORDER)
+    aca_sum  = sum(slot_counts[e]["ACADEMIC"] for e in ENGINE_COLUMN_ORDER)
+    qa_sum   = sum(slot_counts[e]["QA"]       for e in ENGINE_COLUMN_ORDER)
     gen_urls = sum(1 for r in records if r.get("class") == "GENERAL")
     aca_urls = sum(1 for r in records if r.get("class") == "ACADEMIC")
     qa_urls  = sum(1 for r in records if r.get("class") == "QA")
-
-    L += [
+    L: list[str] = [
         "## 1. Per-Engine Slot-Count Total",
         "",
         "Each URL record contributes +1 to every engine listed in its `Engines:` field.  ",
@@ -201,7 +189,7 @@ def write_report(
         "| Engine | Class | Total | GENERAL | ACADEMIC | QA | Solo | Overlap |",
         "|--------|-------|------:|--------:|---------:|---:|-----:|--------:|",
     ]
-    for eng in KNOWN_ENGINES:
+    for eng in ENGINE_COLUMN_ORDER:
         c   = slot_counts[eng]
         cls = ENGINE_CLASS[eng]
         L.append(
@@ -216,9 +204,12 @@ def write_report(
         f"QA: **{qa_sum}** (URL count {qa_urls})",
         "",
     ]
+    return L
 
-    # Section 2 — Per-Engine Status Aggregate (verbatim)
-    L += [
+
+# Render Section 2 — per-engine status aggregate (verbatim pass-through from smoke tail)
+def _render_status_aggregate(status_agg: dict) -> list[str]:
+    L: list[str] = [
         "## 2. Per-Engine Status Aggregate",
         "",
         f"Quoted through from `{SMOKE_REPORT.name}` — no recomputation.",
@@ -226,13 +217,16 @@ def write_report(
         "| Engine | OK | EMPTY | TIMEOUT | ERROR |",
         "|--------|---:|------:|--------:|------:|",
     ]
-    for eng in KNOWN_ENGINES:
+    for eng in ENGINE_COLUMN_ORDER:
         s = status_agg.get(eng, {"OK": 0, "EMPTY": 0, "TIMEOUT": 0, "ERROR": 0})
         L.append(f"| {eng} | {s['OK']} | {s['EMPTY']} | {s['TIMEOUT']} | {s['ERROR']} |")
     L.append("")
+    return L
 
-    # Section 3 — Slot-Share + Baselines (three sub-tables by class)
-    L += [
+
+# Render Section 3 — slot-share and baselines (three sub-tables by class)
+def _render_slot_share(baselines: dict) -> list[str]:
+    L: list[str] = [
         "## 3. Slot-Share + Baselines",
         "",
         "actual% = engine slot-count in class / total slot-count in class × 100  ",
@@ -257,12 +251,14 @@ def write_report(
                 f" | {ok_s} | {b['d_uniform']:+.1f} | {dok_s} |"
             )
         L.append("")
+    return L
 
-    # Section 4 — Per-Query Distribution
-    eng_cols = KNOWN_ENGINES
-    hdrs     = " | ".join(SHORT[e] for e in eng_cols)
-    seps     = "|".join("---:" for _ in eng_cols)
-    L += [
+
+# Render Section 4 — per-query engine slot-count distribution matrix
+def _render_per_query_distribution(per_query: list[tuple]) -> list[str]:
+    hdrs = " | ".join(SHORT[e] for e in ENGINE_COLUMN_ORDER)
+    seps = "|".join("---:" for _ in ENGINE_COLUMN_ORDER)
+    L: list[str] = [
         "## 4. Per-Query Distribution",
         "",
         "Cell = slot-count contributed by that engine in that query.  ",
@@ -273,11 +269,30 @@ def write_report(
     ]
     for qi, query, eng_counts in per_query:
         q_short = query[:40]
-        cells   = " | ".join(str(eng_counts.get(e, 0)) for e in eng_cols)
-        row_sum = sum(eng_counts.get(e, 0) for e in eng_cols)
+        cells   = " | ".join(str(eng_counts.get(e, 0)) for e in ENGINE_COLUMN_ORDER)
+        row_sum = sum(eng_counts.get(e, 0) for e in ENGINE_COLUMN_ORDER)
         L.append(f"| {qi} | {q_short} | {cells} | {row_sum} |")
     L.append("")
+    return L
 
+
+# Render and write the markdown report
+def write_report(
+    records:     list[dict],
+    slot_counts: dict,
+    status_agg:  dict,
+    baselines:   dict,
+    per_query:   list[tuple],
+) -> Path:
+    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = REPORT_DIR / f"engine_distribution_{ts}.md"
+    L = (
+        _render_header(ts, records, per_query)
+        + _render_slot_counts(slot_counts, records, per_query)
+        + _render_status_aggregate(status_agg)
+        + _render_slot_share(baselines)
+        + _render_per_query_distribution(per_query)
+    )
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
     return path
 

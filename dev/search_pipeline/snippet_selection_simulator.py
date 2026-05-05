@@ -11,7 +11,8 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
-from snippet_quality_analysis import parse_smoke_report, strip_bloat, lexical_density
+from _lib.parse import parse_smoke_report
+from _lib.text  import strip_bloat, lexical_density
 
 REPORT_DIR = SCRIPT_DIR / "01_reports"
 _smoke_candidates = sorted(REPORT_DIR.glob("pipeline_smoke_*.md"), reverse=True)
@@ -61,21 +62,14 @@ def _select_new(record: dict):
     return winner, strip_bloat(candidates[winner]), score, clean_len, floor_triggered
 
 
-# Render and write the markdown report
-def write_report(records: list[dict], results: list) -> Path:
-    ts   = datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = REPORT_DIR / f"snippet_selection_{ts}.md"
-    L: list[str] = []
-
-    no_content = sum(1 for r in results if r is None)
-    analyzed   = len(records) - no_content
-
-    # Aggregate stats
+# Extract aggregation totals from records × results pairs
+def _compute_aggregates(records: list[dict], results: list) -> tuple:
+    no_content     = sum(1 for r in results if r is None)
+    analyzed       = len(records) - no_content
     floor_records: list[tuple]               = []
     new_dist:      dict[str, int]            = defaultdict(int)
     class_dist:    dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     per_class_total: dict[str, int]          = defaultdict(int)
-
     for rec, res in zip(records, results):
         if res is None:
             continue
@@ -86,11 +80,13 @@ def write_report(records: list[dict], results: list) -> Path:
         per_class_total[cls] += 1
         if floor_trig:
             floor_records.append((rec, res))
-
     floor_n = len(floor_records)
+    return no_content, analyzed, floor_records, new_dist, class_dist, per_class_total, floor_n
 
-    # Header
-    L += [
+
+# Render report header metadata block
+def _render_header(ts: str) -> list[str]:
+    return [
         f"# Snippet Selection Simulator — {ts}",
         "",
         f"Source: `{SMOKE_REPORT.name}`  ",
@@ -98,8 +94,11 @@ def write_report(records: list[dict], results: list) -> Path:
         "",
     ]
 
-    # Section 1 — Summary
-    L += [
+
+# Render Section 1 — summary counts and NEW source distribution tables
+def _render_summary(new_dist: dict, analyzed: int, no_content: int, floor_n: int,
+                    per_class_total: dict, class_dist: dict) -> list[str]:
+    L: list[str] = [
         "## 1. Summary",
         "",
         f"- Total URLs analyzed: **{analyzed}** (records with ≥1 non-empty source)  ",
@@ -115,8 +114,6 @@ def write_report(records: list[dict], results: list) -> Path:
     ]
     for src, cnt in sorted(new_dist.items(), key=lambda x: -x[1]):
         L.append(f"| {src} | {cnt} | {100*cnt/analyzed:.1f}% |")
-
-    # Per-class breakdown table
     all_sources = [s for s, _ in sorted(new_dist.items(), key=lambda x: -x[1])]
     L += [
         "",
@@ -131,17 +128,18 @@ def write_report(records: list[dict], results: list) -> Path:
         q = class_dist[src].get("QA", 0)
         L.append(f"| {src} | {g} | {a} | {q} |")
     L.append("")
+    return L
 
-    # Section 2 — Per-Query Picks
-    L += ["## 2. Per-Query Picks", ""]
 
+# Render Section 2 — per-query pick blocks (source, score, snippet preview)
+def _render_per_query_picks(records: list[dict], results: list) -> list[str]:
+    L: list[str] = ["## 2. Per-Query Picks", ""]
     prev_qi = None
     for rec, res in zip(records, results):
         qi = rec["_qi"]
         if qi != prev_qi:
             prev_qi = qi
             L += [f"### Q{qi}: {rec['query']}", ""]
-
         if res is None:
             title_s = (rec.get("title") or "")[:70]
             L += [
@@ -151,9 +149,8 @@ def write_report(records: list[dict], results: list) -> Path:
                 "",
             ]
             continue
-
         new_src, new_text, new_score, new_cl, floor_trig = res
-        title_s  = (rec.get("title") or "")[:70]
+        title_s   = (rec.get("title") or "")[:70]
         floor_tag = "  ⚠ floor-trigger" if floor_trig else ""
         L += [
             f"**[Pos {rec['_pos']} · {rec['class']}]** {title_s}",
@@ -162,21 +159,37 @@ def write_report(records: list[dict], results: list) -> Path:
             f"snippet: `{new_text[:200]}`",
             "",
         ]
+    return L
 
-    # Section 3 — Floor-Triggered Cases
+
+# Render Section 3 — floor-triggered cases (all-below-MIN_FLOOR best-of-worst fallbacks)
+def _render_floor_cases(floor_records: list, floor_n: int) -> list[str]:
     if floor_n == 0:
-        L += ["## 3. Floor-Triggered Cases", "", "No floor-triggers in dataset.", ""]
-    else:
-        L += [f"## 3. Floor-Triggered Cases ({floor_n} URLs — best-of-worst fallback)", ""]
-        for rec, res in floor_records:
-            new_src, new_text, new_score, new_cl, _ = res
-            L += [
-                f"URL: {rec['url']}",
-                f"winner={new_src}  score={new_score:.1f}  clean_len={new_cl}"
-                f"  snippet=`{new_text[:120]}`",
-                "",
-            ]
+        return ["## 3. Floor-Triggered Cases", "", "No floor-triggers in dataset.", ""]
+    L: list[str] = [f"## 3. Floor-Triggered Cases ({floor_n} URLs — best-of-worst fallback)", ""]
+    for rec, res in floor_records:
+        new_src, new_text, new_score, new_cl, _ = res
+        L += [
+            f"URL: {rec['url']}",
+            f"winner={new_src}  score={new_score:.1f}  clean_len={new_cl}"
+            f"  snippet=`{new_text[:120]}`",
+            "",
+        ]
+    return L
 
+
+# Render and write the markdown report
+def write_report(records: list[dict], results: list) -> Path:
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = REPORT_DIR / f"snippet_selection_{ts}.md"
+    no_content, analyzed, floor_records, new_dist, class_dist, per_class_total, floor_n = \
+        _compute_aggregates(records, results)
+    L = (
+        _render_header(ts)
+        + _render_summary(new_dist, analyzed, no_content, floor_n, per_class_total, class_dist)
+        + _render_per_query_picks(records, results)
+        + _render_floor_cases(floor_records, floor_n)
+    )
     path.write_text("\n".join(L) + "\n", encoding="utf-8")
     return path
 
