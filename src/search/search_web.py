@@ -5,7 +5,6 @@ import logging
 import re
 import time
 from mcp.types import TextContent
-from urllib.parse import urlparse
 
 from src.search.browser import close_browser
 from src.search.cache import cache_key, cache_write
@@ -47,13 +46,69 @@ TARGET_GENERAL  = 12
 TARGET_ACADEMIC = 6
 TARGET_QA       = 2
 
-# Bloat-strip function — copied verbatim from dev/search_pipeline/snippet_quality_analysis.py
-# (do not redefine: source of truth lives there)
+MIN_FLOOR = 40  # minimum clean_len for a non-floor snippet
+
+# Combined EN + DE stopwords — no NLTK dependency
+STOPWORDS = {
+    "a","about","above","after","again","all","also","although","among","an","and","any",
+    "are","as","at","be","because","been","before","being","between","both","but","by",
+    "can","could","did","do","does","doing","during","each","even","ever","for","from",
+    "get","got","had","has","have","having","he","her","here","him","his","how","if",
+    "in","into","is","it","its","itself","just","like","may","me","might","more","most",
+    "much","my","nor","not","now","of","off","on","or","other","our","out","own","per",
+    "s","shall","she","should","since","so","some","such","t","than","that","the","their",
+    "them","then","there","these","they","this","those","through","to","too","under","up",
+    "us","very","was","we","were","what","when","where","which","while","who","will",
+    "with","would","you","your","re","ve","ll","d","m","no","use",
+    "aber","alle","allem","allen","aller","alles","als","also","am","an","ander","andere",
+    "anderen","anderer","anderes","auf","aus","bei","bin","bis","bist","da","damit","dann",
+    "das","dass","dem","den","denn","der","des","dessen","die","dies","diese","diesem",
+    "diesen","dieser","dieses","doch","dort","du","durch","ein","eine","einem","einen",
+    "einer","eines","er","es","etwas","fur","gegen","gibt","hat","hatte","haben","hier",
+    "hin","hinter","ich","im","in","ist","ja","jede","jedem","jeden","jeder","jedes",
+    "jetzt","kann","kein","keine","konnte","mal","man","mehr","mein","mit","nach","nicht",
+    "noch","nun","nur","ob","oder","ohne","schon","sehr","seit","sich","sie","sind","so",
+    "soll","sondern","uber","um","und","uns","unter","viel","vom","von","vor","war","was",
+    "weil","wenn","werden","wie","will","wir","wird","wo","wurde","zum","zur","zu",
+}
+
+
+# Ratio of unique non-stopword content words (≥3 chars) to all word tokens
+def lexical_density(text: str) -> float:
+    words = re.findall(r'\b[a-zA-ZäöüÄÖÜßé]{3,}\b', text.lower())
+    if not words:
+        return 0.0
+    unique_content = {w for w in words if w not in STOPWORDS}
+    return len(unique_content) / len(words)
+
+
+# Remove Google doubled title+domain prefix (heuristic: maximize cut across all repeated-chunk matches)
+def _strip_doubled_prefix(text: str) -> str:
+    if len(text) < 60:
+        return text
+    head = text[:300]
+    best_cut = 0
+    for L in (100, 70, 50, 30):
+        if len(head) < 2 * L:
+            continue
+        for start in range(0, min(len(head) - 2 * L, 100)):
+            chunk = head[start:start + L]
+            second = head.find(chunk, start + L)
+            if 0 < second and second + L <= len(head):
+                cut = second + L
+                if cut > best_cut:
+                    best_cut = cut
+    return text[best_cut:] if best_cut else text
+
+
+# Decode HTML entities, strip doubled prefix, and remove bloat patterns; return normalized whitespace
 def _strip_bloat(text: str) -> str:
+    text = html.unescape(text)
+    text = _strip_doubled_prefix(text)
     text = re.sub(r'^Web results', '', text)
     text = re.sub(r'^Featured snippet from the web', '', text)
     text = re.sub(r'\bRead more\b.*', '', text)
-    text = re.sub(r'\d[\d,.]*[Kk+]? *(likes|comments|answers|posts) *·[^\n]*', '', text)
+    text = re.sub(r'\d[\d,.]*[Kk]?\+? *(likes|comments|answers|posts) *·[^\n]*', '', text)
     text = re.sub(r'\S*›\S*', '', text)
     text = re.sub(r'\d{1,2} \w{3,9} \d{4} — ', '', text)
     text = re.sub(r'&[a-z]+;|&#\d+;', '', text)
@@ -282,11 +337,29 @@ def _merge_and_rank(results: list[SearchResult], target_count: int = 20, class_f
     else:
         tg, ta, tq = TARGET_GENERAL, TARGET_ACADEMIC, TARGET_QA
 
-    general_slots  = general_pool[:tg]
-    academic_slots = academic_pool[:ta]
-    qa_slots       = qa_pool[:tq]
+    placed_urls = set()
 
-    placed_urls = {m["url"] for m in general_slots + academic_slots + qa_slots}
+    general_slots = []
+    for m in general_pool:
+        if len(general_slots) == tg: break
+        if m["url"] in placed_urls: continue
+        general_slots.append(m)
+        placed_urls.add(m["url"])
+
+    academic_slots = []
+    for m in academic_pool:
+        if len(academic_slots) == ta: break
+        if m["url"] in placed_urls: continue
+        academic_slots.append(m)
+        placed_urls.add(m["url"])
+
+    qa_slots = []
+    for m in qa_pool:
+        if len(qa_slots) == tq: break
+        if m["url"] in placed_urls: continue
+        qa_slots.append(m)
+        placed_urls.add(m["url"])
+
     leftover = [m for m in pool if m["url"] not in placed_urls]
     leftover.sort(key=lambda m: (-len(m["engines"]), m["min_position"]))
 
@@ -313,48 +386,36 @@ def _merge_and_rank(results: list[SearchResult], target_count: int = 20, class_f
     ], slot_counts
 
 
-# Select best snippet for a merged SearchResult per 7-rule priority chain; returns (snippet, source)
+# Select best snippet for a merged SearchResult by score (clean_len × lexical_density); returns (snippet, source)
 def _select_snippet(r: SearchResult) -> tuple[str, str]:
-    engines  = set(r.engines)
-    snippets = r.snippets
-    og       = (r.preview or {}).get("og") or ""
+    preview = r.preview or {}
+    og   = preview.get("og") or ""
+    meta = preview.get("meta") or ""
 
-    # Rule 1: OpenAlex or StackExchange — native structured, cleanest specialty source
-    if "openalex" in engines and snippets.get("openalex"):
-        return snippets["openalex"], "openalex"
-    if "stack_exchange" in engines and snippets.get("stack_exchange"):
-        return snippets["stack_exchange"], "stack_exchange"
+    # Build candidate pool: source_name -> raw_text
+    candidates: dict[str, str] = {}
+    if og:   candidates["og"]   = og
+    if meta: candidates["meta"] = meta
+    for eng, text in (r.snippets or {}).items():
+        if text: candidates[eng] = text
 
-    # Rule 2: CrossRef — already JATS-stripped or synthesized at parse time
-    if "crossref" in engines and snippets.get("crossref"):
-        return snippets["crossref"], "crossref"
+    if not candidates:
+        return "", ""
 
-    # Rule 3: Lobsters-only with no og preview — domain is the only clean fallback
-    if engines == {"lobsters"} and not og:
-        return urlparse(r.url).netloc, "lobsters_domain"
+    # Score every candidate (clean_len from strip_bloat, lex_density from raw)
+    scored = {}
+    for src, text in candidates.items():
+        clean_len = len(_strip_bloat(text))
+        score     = clean_len * lexical_density(text)
+        scored[src] = (score, clean_len)
 
-    # Rule 4: DDG snippet — query-relevant extract, 1% bloat
-    ddg = snippets.get("duckduckgo", "")
-    if ddg:
-        return ddg, "duckduckgo"
+    # Floor check; fall back to best-of-worst if everything below floor
+    above_floor = {s: v for s, v in scored.items() if v[1] >= MIN_FLOOR}
+    pool = above_floor if above_floor else scored
 
-    # Rule 5: Mojeek snippet — query-relevant extract, 7% bloat
-    mojeek = snippets.get("mojeek", "")
-    if mojeek:
-        return mojeek, "mojeek"
-
-    # Rule 6: og preview — page-generic meta description, 2% bloat
-    if og:
-        return og, "og"
-
-    # Rule 7: Google or Scholar fallback — unescape HTML entities then strip bloat patterns
-    raw = snippets.get("google", "") or snippets.get("google_scholar", "")
-    if raw:
-        stripped = _strip_bloat(html.unescape(raw))
-        source = "google_strip" if "google" in snippets else "scholar_strip"
-        return stripped, source
-
-    return "", ""
+    winner       = max(pool, key=lambda s: pool[s][0])
+    display_text = _strip_bloat(candidates[winner])
+    return display_text, winner
 
 
 # Format merged SearchResult list as plain text numbered list; returns (text, {url: source}, {url: display_text})

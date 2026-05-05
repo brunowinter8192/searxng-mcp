@@ -73,7 +73,7 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
 
-**Output:** Numbered list 1–20 — title, URL, snippet. Hard slot-allocated from the full ranked pool (~60–80 candidates): 12 GENERAL / 6 ACADEMIC / 2 QA. Underflow = fewer than 20 results when a class has insufficient supply. No overflow fill. Snippet source per URL follows a priority chain: specialty engines (OpenAlex → StackExchange → CrossRef) when the URL was found by one of them, then DDG, Mojeek, og:description (page-generic preview), Google/Scholar (bloat-stripped fallback). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
+**Output:** Numbered list 1–20 — title, URL, snippet. Hard slot-allocated from the full ranked pool (~60–80 candidates): 12 GENERAL / 6 ACADEMIC / 2 QA. Underflow = fewer than 20 results when a class has insufficient supply. No overflow fill. Snippet source per URL is the highest-scoring candidate by `clean_len × lexical_density` across all engine snippets, og:description, and meta description (MIN_FLOOR=40 chars; best-of-worst fallback when all candidates are short). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
 
 **Engine set (8 active):**
 
