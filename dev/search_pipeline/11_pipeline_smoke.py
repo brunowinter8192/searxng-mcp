@@ -28,13 +28,13 @@ TARGET_TOTAL    = 20
 # ORCHESTRATOR
 
 # Run search_web_workflow per query (with timings), read structured cache data, write report
-async def run_pipeline_smoke(max_queries: int | None, language: str) -> None:
+async def run_pipeline_smoke(max_queries: int | None, language: str, engine_timeout: float | None = None) -> None:
     queries = _load_queries(QUERIES_FILE, max_queries)
     print(f"Pipeline smoke | Queries: {len(queries)} | Language: {language}", file=sys.stderr)
     records = []
     try:
         for qi, query in enumerate(queries, 1):
-            _, timings = await search_web_workflow(query, language, None, None, _with_timings=True)
+            _, timings = await search_web_workflow(query, language, None, None, _with_timings=True, engine_timeout=engine_timeout)
             key  = cache_key(query, language, None, None)
             hit  = cache_read(key)
             urls = hit.get("urls", []) if hit else []
@@ -191,6 +191,10 @@ def _write_report(records: list[dict], language: str) -> Path:
             f"QA {qa_target}/{TARGET_QA}, "
             f"total {r['total_urls']}/{TARGET_TOTAL}"
         )
+        engine_details = t.get("engine_details", {})
+        if engine_details:
+            parts = [f"{name}={d['status']}/{d['ms']}ms" for name, d in engine_details.items()]
+            lines.append(f"Engines: {' '.join(parts)}")
         lines += [
             "",
             f"Timing: total={t.get('total_ms')}ms  fanout={t.get('engine_fanout_ms')}ms  "
@@ -230,6 +234,28 @@ def _write_report(records: list[dict], language: str) -> Path:
             f"| {round(statistics.mean(all_total_ms))} | {max(all_total_ms)} |",
         ]
 
+    # Per-engine status aggregate across all queries
+    status_counts: dict[str, dict[str, int]] = {}
+    for r in records:
+        det = (r["timings"] or {}).get("engine_details", {})
+        for eng, info in det.items():
+            if eng not in status_counts:
+                status_counts[eng] = {"OK": 0, "EMPTY": 0, "TIMEOUT": 0, "ERROR": 0}
+            status_counts[eng][info["status"]] = status_counts[eng].get(info["status"], 0) + 1
+    if status_counts:
+        lines += [
+            "",
+            "## Per-Engine Status Aggregate",
+            "",
+            "| Engine | OK | EMPTY | TIMEOUT | ERROR |",
+            "|--------|----|-------|---------|-------|",
+        ]
+        for eng in sorted(status_counts):
+            c = status_counts[eng]
+            lines.append(
+                f"| {eng} | {c.get('OK', 0)} | {c.get('EMPTY', 0)} | {c.get('TIMEOUT', 0)} | {c.get('ERROR', 0)} |"
+            )
+
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
     return path
@@ -251,5 +277,12 @@ if __name__ == "__main__":
         default="en",
         help="ISO language code (default: en)",
     )
+    parser.add_argument(
+        "--engine-timeout",
+        dest="engine_timeout",
+        type=float,
+        default=None,
+        help="Hard timeout per engine call in seconds, e.g. 8.0 (default: None = no timeout)",
+    )
     args = parser.parse_args()
-    asyncio.run(run_pipeline_smoke(args.max_queries, args.language))
+    asyncio.run(run_pipeline_smoke(args.max_queries, args.language, args.engine_timeout))
