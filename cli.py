@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
+from pathlib import Path
 
 # Ensure src.* imports resolve regardless of working directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -91,8 +92,8 @@ def main():
     # ── download_pdf ──────────────────────────────────────────────────────────
     p = sub.add_parser("download_pdf", help="Download PDF file from URL.")
     p.add_argument("url", help="URL of the PDF to download")
-    p.add_argument("--output-dir", dest="output_dir", default="/tmp",
-                   help="Directory to save the PDF (default: /tmp)")
+    p.add_argument("--output-dir", dest="output_dir", default=str(Path.home() / "Downloads"),
+                   help="Directory to save the PDF (default: ~/Downloads)")
 
     # ── Dispatch ──────────────────────────────────────────────────────────────
     args = parser.parse_args()
@@ -144,13 +145,17 @@ def main():
             return
 
     elif args.cmd == "scrape_url":
-        if blocked := check_plugin_routed(args.url):
+        if args.url.endswith(".pdf"):
+            result = download_pdf_workflow(args.url, str(Path.home() / "Downloads"))
+        elif blocked := check_plugin_routed(args.url):
             result = blocked
         else:
             result = asyncio.run(scrape_url_workflow(args.url, args.max_content_length))
 
     elif args.cmd == "scrape_url_raw":
-        if blocked := check_plugin_routed(args.url):
+        if args.url.endswith(".pdf"):
+            result = download_pdf_workflow(args.url, str(Path.home() / "Downloads"))
+        elif blocked := check_plugin_routed(args.url):
             result = blocked
         else:
             result = asyncio.run(scrape_url_raw_workflow(args.url, args.output_dir))

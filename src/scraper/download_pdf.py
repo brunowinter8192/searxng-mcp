@@ -3,6 +3,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 
 import requests
 from mcp.types import TextContent
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 # ORCHESTRATOR
-def download_pdf_workflow(url: str, output_dir: str = "/tmp") -> list[TextContent]:
+def download_pdf_workflow(url: str, output_dir: str = str(Path.home() / "Downloads")) -> list[TextContent]:
     logger.info("Downloading PDF: %s", url)
     try:
         response = requests.get(url, stream=True, timeout=30)
