@@ -6,6 +6,6 @@
     "name": "Bruno Winter"
   },
   "keywords": ["searxng", "search", "scraper", "cli", "web"],
-  "skills": ["./skills/web-research/", "./skills/scrape-cleanup/", "./skills/cleanup-and-index/"],
-  "commands": ["./commands/crawl-site.md"]
+  "skills": ["./skills/web-research/", "./skills/cleanup-and-index/"],
+  "commands": []
 }
