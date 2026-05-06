@@ -96,6 +96,5 @@ searxng/
 │   │   ├── filter_eval/            → scrape02_filtering
 │   │   └── garbage_eval/           → scrape03_garbage
 │   ├── explore_pipeline/           → [DOCS.md](dev/explore_pipeline/DOCS.md)
-│   ├── agent_pipeline/             → [DOCS.md](dev/agent_pipeline/DOCS.md)
 │   └── cleanup/                    → [DOCS.md](dev/cleanup/DOCS.md)
 ```
