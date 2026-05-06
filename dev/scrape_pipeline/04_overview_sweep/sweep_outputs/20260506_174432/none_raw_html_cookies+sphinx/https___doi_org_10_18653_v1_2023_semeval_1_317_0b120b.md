@@ -1,0 +1,287 @@
+<!-- source: https://doi.org/10.18653/v1/2023.semeval-1.317 -->
+
+[![ACL Logo](https://aclanthology.org/images/acl-logo.svg) ACL Anthology ](https://aclanthology.org/)
+  * [News(current)](https://aclanthology.org/posts/)
+  * [FAQ(current)](https://aclanthology.org/faq/)
+  * [Corrections(current)](https://aclanthology.org/info/corrections/)
+  * [Submissions(current)](https://aclanthology.org/info/contrib/)
+  * [__GitHub](https://github.com/acl-org/acl-anthology/)
+
+__
+__
+## [S emEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup](https://aclanthology.org/2023.semeval-1.317.pdf)
+[Jakub Piskorski](https://aclanthology.org/people/jakub-piskorski/unverified/), [Nicolas Stefanovitch](https://aclanthology.org/people/nicolas-stefanovitch/unverified/), [Giovanni Da San Martino](https://aclanthology.org/people/giovanni-da-san-martino/), [Preslav Nakov](https://aclanthology.org/people/preslav-nakov/)
+##### Correct Metadata for 
+Use this form to create a GitHub issue with structured data describing the correction. You will need a GitHub account. Once you create that issue, the correction will be reviewed by a staff member.
+⚠️ Mobile Users: Submitting this form to create a new issue will only work with github.com, not the GitHub Mobile app.
+**Important** : The Anthology treat PDFs as authoritative. Please use this form only to correct data that is out of line with the PDF. See [our corrections guidelines](https://aclanthology.org/info/corrections/) if you need to change the PDF.
+Title Adjust the title. Retain tags such as <fixed-case>.
+Authors Adjust author names and order to match the PDF.
+Add Author
+Abstract Correct abstract if needed. Retain XML formatting tags such as <tex-math>. You may use <b>...</b> for **bold** , <i>...</i> for _italic_ , and <url>...</url> for URLs.
+Verification against PDF Ensure that the new title/authors match the snapshot below. (If there is no snapshot or it is too small, consult [the PDF](https://aclanthology.org/2023.semeval-1.317/#).)
+[![](https://aclanthology.org/2023.semeval-1.317/)](https://aclanthology.org/2023.semeval-1.317/#)
+Authors concatenated from the text boxes above:
+ALL author names match the snapshot above—including middle initials, hyphens, and accents.
+Create GitHub issue for staff review
+* * *
+##### Abstract
+We describe SemEval-2023 task 3 on Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multilingual Setup: the dataset, the task organization process, the evaluation setup, the results, and the participating systems. The task focused on news articles in nine languages (six known to the participants upfront: English, French, German, Italian, Polish, and Russian), and three additional ones revealed to the participants at the testing phase: Spanish, Greek, and Georgian). The task featured three subtasks: (1) determining the genre of the article (opinion, reporting, or satire), (2) identifying one or more frames used in an article from a pool of 14 generic frames, and (3) identify the persuasion techniques used in each paragraph of the article, using a taxonomy of 23 persuasion techniques. This was a very popular task: a total of 181 teams registered to participate, and 41 eventually made an official submission on the test set.
+
+Anthology ID:
+    2023.semeval-1.317
+
+Original:
+    [2023.semeval-1.317v1](https://aclanthology.org/2023.semeval-1.317v1.pdf)
+
+Version 2:
+    [2023.semeval-1.317v2](https://aclanthology.org/2023.semeval-1.317v2.pdf)
+
+Volume:
+    [Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)](https://aclanthology.org/volumes/2023.semeval-1/)
+
+Month:
+    July
+
+Year:
+    2023
+
+Address:
+    Toronto, Canada
+
+Editors:
+    [Atul Kr. Ojha](https://aclanthology.org/people/atul-kr-ojha/), [A. Seza Doğruöz](https://aclanthology.org/people/a-seza-dogruoz/unverified/), [Giovanni Da San Martino](https://aclanthology.org/people/giovanni-da-san-martino/), [Harish Tayyar Madabushi](https://aclanthology.org/people/harish-tayyar-madabushi/), [Ritesh Kumar](https://aclanthology.org/people/ritesh-kumar/), [Elisa Sartori](https://aclanthology.org/people/elisa-sartori/)
+
+Venue:
+    [SemEval](https://aclanthology.org/venues/semeval/ "Lexical and Computational Semantics and Semantic Evaluation \(formerly Workshop on Sense Evaluation\)")
+
+SIG:
+    [SIGLEX](https://aclanthology.org/sigs/siglex/ "Special Interest Group on the Lexicon \(SIGLEX\)")
+
+Publisher:
+    Association for Computational Linguistics
+
+Note:
+    
+
+Pages:
+    2343–2361
+
+Language:
+    
+
+URL:
+    <https://aclanthology.org/2023.semeval-1.317/>
+
+DOI:
+    [10.18653/v1/2023.semeval-1.317](https://doi.org/10.18653/v1/2023.semeval-1.317 "To the current version of the paper by DOI")
+
+Bibkey:
+    __piskorski-etal-2023-semeval
+
+Cite (ACL):
+    Jakub Piskorski, Nicolas Stefanovitch, Giovanni Da San Martino, and Preslav Nakov. 2023. [SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup](https://aclanthology.org/2023.semeval-1.317/). In _Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)_ , pages 2343–2361, Toronto, Canada. Association for Computational Linguistics.__
+
+Cite (Informal):
+    [SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup](https://aclanthology.org/2023.semeval-1.317/) (Piskorski et al., SemEval 2023)__
+
+Copy Citation:
+    __BibTeX __Markdown __MODS XML __Endnote More options…
+
+PDF:
+    <https://aclanthology.org/2023.semeval-1.317.pdf>
+
+Video:
+    [__  https://aclanthology.org/2023.semeval-1.317.mp4](https://aclanthology.org/2023.semeval-1.317.mp4)
+[ __PDF  (v2) ](https://aclanthology.org/2023.semeval-1.317v2.pdf "Open latest revision PDF of 'SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup'")[__PDF  (v1) ](https://aclanthology.org/2023.semeval-1.317v1.pdf "Open original PDF of 'SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup'")[__Cite ](https://aclanthology.org/2023.semeval-1.317/# "Open dialog for exporting citations")[__Search ](https://www.semanticscholar.org/search?+q=SemEval-2023+Task+3%3A+Detecting+the+Category%2C+the+Framing%2C+and+the+Persuasion+Techniques+in+Online+News+in+a+Multi-lingual+Setup "Search for 'SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup' on Semantic Scholar")[__ Video ](https://aclanthology.org/2023.semeval-1.317.mp4 "Open video for 'SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup'")[__ Fix data](https://aclanthology.org/2023.semeval-1.317/# "Correct problems with title, author list, and abstract")
+* * *
+##### Export citation
+  * [BibTeX](https://aclanthology.org/2023.semeval-1.317/#citeBibtex)
+  * [MODS XML](https://aclanthology.org/2023.semeval-1.317/#citeMods)
+  * [Endnote](https://aclanthology.org/2023.semeval-1.317/#citeEndnote)
+  * [Preformatted](https://aclanthology.org/2023.semeval-1.317/#citeMarkdown)
+
+
+
+```
+@inproceedings{piskorski-etal-2023-semeval,
+    title = "{S}em{E}val-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup",
+    author = "Piskorski, Jakub  and
+      Stefanovitch, Nicolas  and
+      Da San Martino, Giovanni  and
+      Nakov, Preslav",
+    editor = {Ojha, Atul Kr.  and
+      Do{\u{g}}ru{\"o}z, A. Seza  and
+      Da San Martino, Giovanni  and
+      Tayyar Madabushi, Harish  and
+      Kumar, Ritesh  and
+      Sartori, Elisa},
+    booktitle = "Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)",
+    month = jul,
+    year = "2023",
+    address = "Toronto, Canada",
+    publisher = "Association for Computational Linguistics",
+    url = "https://aclanthology.org/2023.semeval-1.317/",
+    doi = "10.18653/v1/2023.semeval-1.317",
+    pages = "2343--2361",
+    abstract = "We describe SemEval-2023 task 3 on Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multilingual Setup: the dataset, the task organization process, the evaluation setup, the results, and the participating systems. The task focused on news articles in nine languages (six known to the participants upfront: English, French, German, Italian, Polish, and Russian), and three additional ones revealed to the participants at the testing phase: Spanish, Greek, and Georgian). The task featured three subtasks: (1) determining the genre of the article (opinion, reporting, or satire), (2) identifying one or more frames used in an article from a pool of 14 generic frames, and (3) identify the persuasion techniques used in each paragraph of the article, using a taxonomy of 23 persuasion techniques. This was a very popular task: a total of 181 teams registered to participate, and 41 eventually made an official submission on the test set."
+}
+```
+
+ __Download as File __Copy to Clipboard
+
+```
+<?xml version="1.0" encoding="UTF-8"?>
+<modsCollection xmlns="http://www.loc.gov/mods/v3">
+<mods ID="piskorski-etal-2023-semeval">
+    <titleInfo>
+        <title>SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup</title>
+    </titleInfo>
+    <name type="personal">
+        <namePart type="given">Jakub</namePart>
+        <namePart type="family">Piskorski</namePart>
+        <role>
+            <roleTerm authority="marcrelator" type="text">author</roleTerm>
+        </role>
+    </name>
+    <name type="personal">
+        <namePart type="given">Nicolas</namePart>
+        <namePart type="family">Stefanovitch</namePart>
+        <role>
+            <roleTerm authority="marcrelator" type="text">author</roleTerm>
+        </role>
+    </name>
+    <name type="personal">
+        <namePart type="given">Giovanni</namePart>
+        <namePart type="family">Da San Martino</namePart>
+        <role>
+            <roleTerm authority="marcrelator" type="text">author</roleTerm>
+        </role>
+    </name>
+    <name type="personal">
+        <namePart type="given">Preslav</namePart>
+        <namePart type="family">Nakov</namePart>
+        <role>
+            <roleTerm authority="marcrelator" type="text">author</roleTerm>
+        </role>
+    </name>
+    <originInfo>
+        <dateIssued>2023-07</dateIssued>
+    </originInfo>
+    <typeOfResource>text</typeOfResource>
+    <relatedItem type="host">
+        <titleInfo>
+            <title>Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)</title>
+        </titleInfo>
+        <name type="personal">
+            <namePart type="given">Atul</namePart>
+            <namePart type="given">Kr.</namePart>
+            <namePart type="family">Ojha</namePart>
+            <role>
+                <roleTerm authority="marcrelator" type="text">editor</roleTerm>
+            </role>
+        </name>
+        <name type="personal">
+            <namePart type="given">A</namePart>
+            <namePart type="given">Seza</namePart>
+            <namePart type="family">Doğruöz</namePart>
+            <role>
+                <roleTerm authority="marcrelator" type="text">editor</roleTerm>
+            </role>
+        </name>
+        <name type="personal">
+            <namePart type="given">Giovanni</namePart>
+            <namePart type="family">Da San Martino</namePart>
+            <role>
+                <roleTerm authority="marcrelator" type="text">editor</roleTerm>
+            </role>
+        </name>
+        <name type="personal">
+            <namePart type="given">Harish</namePart>
+            <namePart type="family">Tayyar Madabushi</namePart>
+            <role>
+                <roleTerm authority="marcrelator" type="text">editor</roleTerm>
+            </role>
+        </name>
+        <name type="personal">
+            <namePart type="given">Ritesh</namePart>
+            <namePart type="family">Kumar</namePart>
+            <role>
+                <roleTerm authority="marcrelator" type="text">editor</roleTerm>
+            </role>
+        </name>
+        <name type="personal">
+            <namePart type="given">Elisa</namePart>
+            <namePart type="family">Sartori</namePart>
+            <role>
+                <roleTerm authority="marcrelator" type="text">editor</roleTerm>
+            </role>
+        </name>
+        <originInfo>
+            <publisher>Association for Computational Linguistics</publisher>
+            <place>
+                <placeTerm type="text">Toronto, Canada</placeTerm>
+            </place>
+        </originInfo>
+        <genre authority="marcgt">conference publication</genre>
+    </relatedItem>
+    <abstract>We describe SemEval-2023 task 3 on Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multilingual Setup: the dataset, the task organization process, the evaluation setup, the results, and the participating systems. The task focused on news articles in nine languages (six known to the participants upfront: English, French, German, Italian, Polish, and Russian), and three additional ones revealed to the participants at the testing phase: Spanish, Greek, and Georgian). The task featured three subtasks: (1) determining the genre of the article (opinion, reporting, or satire), (2) identifying one or more frames used in an article from a pool of 14 generic frames, and (3) identify the persuasion techniques used in each paragraph of the article, using a taxonomy of 23 persuasion techniques. This was a very popular task: a total of 181 teams registered to participate, and 41 eventually made an official submission on the test set.</abstract>
+    <identifier type="citekey">piskorski-etal-2023-semeval</identifier>
+    <identifier type="doi">10.18653/v1/2023.semeval-1.317</identifier>
+    <location>
+        <url>https://aclanthology.org/2023.semeval-1.317/</url>
+    </location>
+    <part>
+        <date>2023-07</date>
+        <extent unit="page">
+            <start>2343</start>
+            <end>2361</end>
+        </extent>
+    </part>
+</mods>
+</modsCollection>
+
+```
+
+ __Download as File __Copy to Clipboard
+
+```
+%0 Conference Proceedings
+%T SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup
+%A Piskorski, Jakub
+%A Stefanovitch, Nicolas
+%A Da San Martino, Giovanni
+%A Nakov, Preslav
+%Y Ojha, Atul Kr.
+%Y Doğruöz, A. Seza
+%Y Da San Martino, Giovanni
+%Y Tayyar Madabushi, Harish
+%Y Kumar, Ritesh
+%Y Sartori, Elisa
+%S Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)
+%D 2023
+%8 July
+%I Association for Computational Linguistics
+%C Toronto, Canada
+%F piskorski-etal-2023-semeval
+%X We describe SemEval-2023 task 3 on Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multilingual Setup: the dataset, the task organization process, the evaluation setup, the results, and the participating systems. The task focused on news articles in nine languages (six known to the participants upfront: English, French, German, Italian, Polish, and Russian), and three additional ones revealed to the participants at the testing phase: Spanish, Greek, and Georgian). The task featured three subtasks: (1) determining the genre of the article (opinion, reporting, or satire), (2) identifying one or more frames used in an article from a pool of 14 generic frames, and (3) identify the persuasion techniques used in each paragraph of the article, using a taxonomy of 23 persuasion techniques. This was a very popular task: a total of 181 teams registered to participate, and 41 eventually made an official submission on the test set.
+%R 10.18653/v1/2023.semeval-1.317
+%U https://aclanthology.org/2023.semeval-1.317/
+%U https://doi.org/10.18653/v1/2023.semeval-1.317
+%P 2343-2361
+```
+
+ __Download as File __Copy to Clipboard
+##### Markdown (Informal)
+[SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup](https://aclanthology.org/2023.semeval-1.317/) (Piskorski et al., SemEval 2023)
+  * [SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup](https://aclanthology.org/2023.semeval-1.317/) (Piskorski et al., SemEval 2023)
+
+
+##### ACL
+  * Jakub Piskorski, Nicolas Stefanovitch, Giovanni Da San Martino, and Preslav Nakov. 2023. [SemEval-2023 Task 3: Detecting the Category, the Framing, and the Persuasion Techniques in Online News in a Multi-lingual Setup](https://aclanthology.org/2023.semeval-1.317/). In _Proceedings of the 17th International Workshop on Semantic Evaluation (SemEval-2023)_ , pages 2343–2361, Toronto, Canada. Association for Computational Linguistics.
+
+
+__Copy Markdown to Clipboard __Copy ACL to Clipboard
+[![Creative Commons License](https://i.creativecommons.org/l/by/4.0/88x31.png)](http://creativecommons.org/licenses/by/4.0/) ACL materials are Copyright © 1963–2026 ACL; other materials are copyrighted by their respective copyright holders. Materials prior to 2016 here are licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 3.0 International License](https://creativecommons.org/licenses/by-nc-sa/3.0/). Permission is granted to make copies for the purposes of teaching and research. Materials published in or after 2016 are licensed on a [Creative Commons Attribution 4.0 International License](https://creativecommons.org/licenses/by/4.0/).
+The ACL Anthology is managed and built by the [ACL Anthology team](https://aclanthology.org/info/credits/) of volunteers.
+_Site last built on 05 May 2026 at 16:11 UTC with[commit 20aaf94](https://github.com/acl-org/acl-anthology/tree/20aaf9469e9454d641bd75bbc291a9f7ee1e3a3e)._

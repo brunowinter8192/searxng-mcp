@@ -1,0 +1,38 @@
+# Overview Mode Filter Sweep — Config Matrix
+#
+# Sweeps Crawl4AI's built-in filter dimensions against the Q24 URL set.
+# Output: sweep_outputs/<ts>/<filter>_<content_source>_<selector>/<slug>.md per URL,
+# plus _run_metadata.json (timing + sizes).
+# Analyzer (analyze.py) consumes these against clean-raw baseline.
+
+input:
+  smoke_report: dev/search_pipeline/01_reports/pipeline_smoke_20260506_003915.md
+  query_id: 24
+
+# Filter strategies. user_query passed only for BM25.
+filters:
+  - { name: "none",       type: "none" }
+  - { name: "prune_030",  type: "pruning", threshold: 0.30 }
+  - { name: "prune_048",  type: "pruning", threshold: 0.48 }   # current prod default
+  - { name: "prune_060",  type: "pruning", threshold: 0.60 }
+  - { name: "prune_075",  type: "pruning", threshold: 0.75 }
+  - { name: "bm25",       type: "bm25",    user_query: "trafilatura vs readability content extraction" }
+
+# DefaultMarkdownGenerator content_source param
+content_sources:
+  - "cleaned_html"   # Crawl4AI default — pre-cleaned by Crawl4AI's own DOM cleaning
+  - "fit_html"       # alternative — gets the "fit" version from PruningFilter
+  - "raw_html"       # raw — least preprocessed
+
+# DOM-level pre-strip via excluded_selector (CSS list)
+excluded_selectors:
+  - name: "cookies"
+    # Same as prod COOKIE_CONSENT_SELECTOR in src/scraper/scrape_url.py
+    value: '[class*="cookie-banner"], [id*="cookie-banner"], [class*="cookie-consent"], [id*="cookie-consent"], [class*="cookie-notice"], [id*="cookie-notice"], [class*="cookie-law"], [id*="cookie-law"], [class*="cky-consent"], [class*="cky-banner"], [class*="cky-modal"], [class*="onetrust"], [id*="onetrust"], [id*="CookiebotDialog"], [class*="CookiebotWidget"], [class*="cc-banner"], [class*="cc-window"], [class*="gdpr"], [id*="gdpr"]'
+
+  - name: "cookies+sphinx"
+    # Cookies + Sphinx/Furo theme chrome (oft Finding 2: readthedocs nav, theme-toggle, ethical-ad)
+    value: '[class*="cookie-banner"], [id*="cookie-banner"], [class*="cookie-consent"], [id*="cookie-consent"], [class*="cookie-notice"], [id*="cookie-notice"], [class*="cookie-law"], [id*="cookie-law"], [class*="cky-consent"], [class*="cky-banner"], [class*="cky-modal"], [class*="onetrust"], [id*="onetrust"], [id*="CookiebotDialog"], [class*="CookiebotWidget"], [class*="cc-banner"], [class*="cc-window"], [class*="gdpr"], [id*="gdpr"], [role="navigation"], .theme-toggle, .ethical-ad, [id^="ethical-ad"], .ethical-rtd'
+
+# Total combos: 6 filters × 3 sources × 2 selectors = 36 configs × 20 URLs = 720 outputs.
+# CacheMode.BYPASS means each config does fresh fetch — ~7min total wallclock with arun_many.

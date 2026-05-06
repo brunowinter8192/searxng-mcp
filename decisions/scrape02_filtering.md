@@ -39,6 +39,33 @@
 - 15000 chars entspricht ~3750 Wörtern — ausreichend für die meisten Artikel, vermeidet Context-Window-Overflow im MCP
 - Absatzgrenze-Truncation (`\n\n` wenn > 80% der Grenze) verhindert mid-sentence cuts
 
+### Empirical Sweep (2026-05)
+
+`dev/scrape_pipeline/04_overview_sweep/` — 36 configs × 20 URLs (Q24 search-result set across 5 page shapes: Blog / Paper-Landing / Forum-Thread / Repo-Heavy-Chrome / Index-Aggregator). Diff against clean-raw baseline (raw scrape + dev-only cleanup script).
+
+Asymmetric preference frame: chrome retention is much worse than content loss. Quality > quantity. Filter must strip noise even at cost of some content detail, as long as title + general message preserved.
+
+Per-config median F1 across 17 analyzed URLs (PDF stubs + scrape-failures excluded):
+
+| Filter / source | F1 | Note |
+|---|---|---|
+| `none + cleaned_html` | 0.98 | quasi identical to clean-raw, no size reduction |
+| `prune_030 + cleaned_html` | 0.89 | lenient, residual chrome (Skip-link visible on some sites) |
+| **`prune_048 + cleaned_html`** (current prod) | **0.75** | **empirically optimal for asymmetric preference** |
+| `prune_060 + cleaned_html` | 0.60 | aggressive, drops title text on short-title pages (e.g. webscraping.fyi shows `# ` empty header) |
+| `prune_075 + cleaned_html` | 0.47 | title text gone, only body prose remains |
+| `bm25 + *` | 0.05 | unusable for general overview — query-snippet extractor only |
+| `* + fit_html` | 0.44 (constant) | anomaly: `fit_html` source is always-pre-filtered regardless of additional filter, not a useful tuning knob |
+
+Per-shape break: `none + cleaned_html` wins on Blog/Forum/Index, `prune_030+` wins on Paper-Landing + Repo-Heavy-Chrome. Single-config trade-off: prune_048 most consistent across shapes for the noise-removal preference.
+
+Cookies vs cookies+sphinx selectors: no measurable difference on this URL set (≤ 0.01 F1 delta).
+
+**Closes 3 of 5 open questions:**
+- threshold validation: prune_048 confirmed empirically optimal (asymmetric metric: precision over recall)
+- content_source="fit_html": NOT useful (always-pre-filtered anomaly)
+- 0.48 vs alternatives: 0.30 retains chrome, 0.60+ damages titles → 0.48 is sweetspot
+
 ## Entscheidung
 
 `PruningContentFilter(threshold=0.48)` als Standard: reduziert Boilerplate erheblich und hält Context klein. Threshold 0.48 ist empirisch — niedrig genug, um echten Content zu behalten, hoch genug, um Navigation/Footer zu entfernen.
@@ -51,11 +78,13 @@
 
 ## Offene Fragen
 
-- Threshold 0.48 nicht durch systematische Tests belegt — könnte per Domain konfigurierbar sein
-- Code-Seiten (GitHub, Docs): PruningFilter destruktiv für Code-Blöcke — `scrape_url_raw` oder separater Code-Pfad wäre besser
-- `content_source="fit_html"` als Alternative: strukturierter als Markdown, könnte besser für Code-heavy Sites sein
+- ~~Threshold 0.48 nicht durch systematische Tests belegt~~ → DONE 2026-05: Sweep bestätigt empirisch optimal für asymmetrische Noise-Removal-Präferenz
+- ~~`content_source="fit_html"` als Alternative~~ → RULED OUT 2026-05: always-pre-filtered Anomalie, nicht als tuning-knob nutzbar
+- Code-Seiten (GitHub, Docs): PruningFilter destruktiv für Code-Blöcke — `scrape_url_raw` (Mode 1) als Alternative für Code-heavy Sites bestätigt; Mode 1 + cleanup-Skill ist der Indexing-Pfad
 - Cookie-Consent via `excluded_selector` entfernt den DOM-Node, aber manchmal bleibt ein Overlay-Backdrop — JS-basierte Dismissal wäre robuster
 - `MIN_CONTENT_THRESHOLD` (200 chars) ggf. zu niedrig — 200 chars kann auch ein valider Error-Text sein
+- **15K cap removal pending (2026-05-06 user direction)** — `DEFAULT_MAX_CONTENT_LENGTH = 15000` strippt 95% von long-form articles (seirdy.one 226K → 14K), verzerrt empirische Vergleiche. Removal via Prod-Migration-Bead nach pfk (Paper Mode) sequenziert.
+- **Per-shape filter dispatch?** — Sweep zeigte: Blog/Forum/Index profitieren von less filtering (none/prune_030), Paper-Landing/Repo profitieren von prune_048+. Single-config = Trade-off. Per-shape dispatch wäre konsistenter, würde aber eigene Shape-Detection-Logik vor dem Filter brauchen (Komplexität vs Crawl4AI's eingebauter Filter alone)
 
 ## Quellen
 

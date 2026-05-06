@@ -18,6 +18,18 @@ Quality monitoring and configuration testing for the URL scraper module.
 ./venv/bin/python3 dev/scrape_pipeline/01_dual_mode_smoke.py --input dev/search_pipeline/01_reports/pipeline_smoke_<ts>.md --query 24
 ```
 
+### 02_raw_smoke.py
+
+**Purpose:** Dev-only Mode 1 raw scrape — Crawl4AI direct via `arun_many`, no prod imports, no `cli.py` subprocess. Parses Q24 URLs from a search smoke report, scrapes all in parallel, writes `<slug>_<6-char-md5>.md` per URL plus `02_raw_report.md` triage table. Slug includes full-URL md5 hash to prevent query-string collisions (HN `?id=N` URLs both preserved).
+
+**Output:** `02_raw_outputs/<ts>/` — 20 .md files + report. Status `empty` includes optional annotation `(PDF)` or `(plugin-domain: github)`. NO fallback chain (single Crawl4AI config), NO garbage detection, NO cookie strip — fail fast, see what's actually there.
+
+**Use case:** clean baseline for downstream cleanup work + comparison against filter outputs.
+
+```bash
+./venv/bin/python dev/scrape_pipeline/02_raw_smoke.py --input dev/search_pipeline/01_reports/pipeline_smoke_<ts>.md --query 24
+```
+
 ## Shared Config (pipeline root)
 
 ### domains.txt
@@ -56,6 +68,35 @@ tail -20 dev/scrape_pipeline/failures.jsonl | jq .
 ```
 
 The file is gitignored — it accumulates across production MCP tool calls and is for local analysis only.
+
+## 03_cleanup/ → skills/scrape-cleanup
+
+### clean.py
+
+**Purpose:** URL-spanning cleanup of raw scraped markdown for RAG indexing. Reads files from `02_raw_outputs/<ts>/`, applies pattern set (pre-h1 chrome strip, skip-link strip, sphinx anchor strip, tail chrome strip, blank-line collapse) plus site-specific handlers (GitHub issue title anchor, HN top-nav strip), writes cleaned files to `cleaned_outputs/<ts>/`.
+
+**Note:** This script is the **iterative-discovery artifact** from the session that produced the `scrape-cleanup` skill — kept as reference for which patterns work on which shapes. Do NOT copy to prod. Future cleanup work follows the diagnose-first workflow defined in `skills/scrape-cleanup/SKILL.md` (5-shape classification, per-shape cleaner, isolated tests).
+
+**Output:** `cleaned_outputs/<ts>/<slug>_<hash>.md` per URL + `_summary.md` with byte deltas.
+
+```bash
+./venv/bin/python dev/scrape_pipeline/03_cleanup/clean.py
+```
+
+## 04_overview_sweep/ → decisions/scrape02_filtering
+
+### sweep.py + analyze.py + sweep_config.yml
+
+**Purpose:** Empirical sweep of Crawl4AI filter dimensions (PruningContentFilter at thresholds 0.30/0.48/0.60/0.75 + BM25ContentFilter, content_source ∈ {cleaned_html, fit_html, raw_html}, excluded_selector ∈ {cookies, cookies+sphinx}) against the Q24 URL set. Total: 36 configs × 20 URLs = 720 outputs.
+
+`sweep.py` writes `sweep_outputs/<ts>/<config_name>/<slug>_<hash>.md` per URL + `_run_metadata.json` with timing/sizes. `analyze.py` diffs each candidate against the clean-raw baseline (latest `cleaned_outputs/`), computes line-set recall/precision/F1 per (config, URL), aggregates per config (median + per-shape), generates `_analysis.md` with cross-config ranking + per-shape breakdown + unified_diff drill-down for top-3 configs.
+
+**Caveat:** F1 is symmetric — chrome retention and content loss reduce it equally. For asymmetric preferences (e.g. "strip more chrome at cost of detail"), look at `precision` column separately and read the actual diffs in the drill-down section. See SESSION 2026-05-06 finding documented in `decisions/scrape02_filtering.md`.
+
+```bash
+./venv/bin/python dev/scrape_pipeline/04_overview_sweep/sweep.py
+./venv/bin/python dev/scrape_pipeline/04_overview_sweep/analyze.py
+```
 
 ## browser_eval/ → decisions/scrape01_browser
 
