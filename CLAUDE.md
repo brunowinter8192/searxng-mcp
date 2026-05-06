@@ -38,7 +38,7 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 7 tools (search_web, search_batch, search_more, scrape_url, scrape_url_raw, explore_site, download_pdf) |
+| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 7 tools (search_web, search_batch, search_more, scrape_url, scrape_url_raw, explore_site, download_pdf). `scrape_url` and `scrape_url_raw` auto-route `.pdf` URLs to `download_pdf` (default `~/Downloads/`). |
 
 ### Key Files
 
