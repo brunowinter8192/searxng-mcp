@@ -15,6 +15,21 @@ All tools are invoked via the `searxng-cli` wrapper (installed at `~/.local/bin/
 searxng-cli <cmd> [args]
 ```
 
+### Output Handling (CRITICAL)
+
+`search_web` / `search_batch` / `search_more` / `explore_site` produce **signal output** — every result is data you have to evaluate as a whole. Run them in the **foreground**, no `&`, no `> /tmp/...` redirect. The full result lands in the tool result and is immediately available in context.
+
+```bash
+# RIGHT — direct foreground call
+searxng-cli search_batch "query 1" "query 2" "query 3"
+```
+
+Up to 4 queries × 20 URLs = 80 results, ~20 KB / ~5K tokens. Comfortably fits in one tool result. Wall time is bounded by engine roundtrips + preview fetches (~5–10s steady-state, longer on first call due to pydoll cold-engine warmup).
+
+**Do NOT redirect to /tmp + chunk-read.** That's the pattern for noisy outputs (build, test, dev scripts) where you grep for one signal. Search output IS the signal — chunking it just spends N tool calls to reconstruct what one direct call would have given you in a single result.
+
+`scrape_url_raw` is the exception: it writes to a `.md` file by design (for RAG indexing). The other scrape/explore commands print to stdout for direct context use.
+
 ### Quick Reference — All 7 Tools
 
 ```bash
