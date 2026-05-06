@@ -98,6 +98,29 @@ The file is gitignored — it accumulates across production MCP tool calls and i
 ./venv/bin/python dev/scrape_pipeline/04_overview_sweep/analyze.py
 ```
 
+## 05_paper_mode/ → direct PDF download prototype
+
+### download.py
+
+**Purpose:** Standalone PDF downloader — no prod imports, no Crawl4AI. Takes `.pdf` URLs via positional args or `--input <smoke.md>` (parses all `.pdf` URLs across all queries). Downloads each via `requests.get(stream=True)` with Content-Type check, writes to `~/Downloads/`. Filename: Content-Disposition → URL basename → `download_<ts>.pdf`. Per-URL status table printed to stdout.
+
+**Failures observed (12-URL test run 2026-05-06):** Springer (paywall → HTML redirect, not PDF); Academia.edu (HTTP 403). 10/12 ok.
+
+```bash
+# From a smoke report (all queries, .pdf filter)
+./venv/bin/python dev/scrape_pipeline/05_paper_mode/download.py --input dev/search_pipeline/01_reports/pipeline_smoke_<ts>.md
+
+# Direct URLs
+./venv/bin/python dev/scrape_pipeline/05_paper_mode/download.py https://example.com/paper.pdf
+
+# Re-download existing files
+./venv/bin/python dev/scrape_pipeline/05_paper_mode/download.py --overwrite --input <smoke.md>
+```
+
+### pdf_test_urls.md
+
+12-URL test inventory extracted from `pipeline_smoke_20260506_003915.md`. Columns: Q-Nr, URL, Status (filled after test run).
+
 ## browser_eval/ → decisions/scrape01_browser
 
 ### 01_baseline.py
