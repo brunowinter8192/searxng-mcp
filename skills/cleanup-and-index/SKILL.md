@@ -221,6 +221,14 @@ cd ~/Documents/ai/Meta/ClaudeCode/MCP/RAG && \
 # → "  $COLLECTION (N chunks)"
 ```
 
+### Failure check (after indexing done)
+
+```bash
+tail -20 /tmp/${COLLECTION}_index.log
+```
+
+Confirm `M chunks chunked, M chunks indexed` — numbers must match. If a `⚠️  WARNING: ... chunks skipped due to NULL embeddings` block is present, investigate via the indexer log before treating the collection as complete.
+
 ### Verify
 
 ```bash
