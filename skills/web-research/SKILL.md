@@ -205,25 +205,41 @@ Class filter is part of the cache key. `search_more` must use the same flags as 
 Fire multiple `searxng-cli search_web` calls in parallel, each with a query variation. Each call already fans out to 8 engines internally — 4 parallel `search_web` calls = 32 engine calls total. Less aggressive parallelization is needed than a single-engine pipeline. 2–4 parallel calls is a good default for deep-research tasks.
 
 ```bash
-# Example: 4 parallel calls for a deep research task
-searxng-cli search_web "SPLADE sparse retrieval"
-searxng-cli search_web "sparse vector retrieval benchmark"
-searxng-cli search_web "SPLADE vs BM25 performance"
-searxng-cli search_web "learned sparse retrieval neural"
+# Example: 4 parallel calls — ONE brand-anchored, three orthogonal angles
+searxng-cli search_web "SPLADE retrieval"
+searxng-cli search_web "learned sparse retrieval BM25 benchmark"
+searxng-cli search_web "neural information retrieval embeddings 2025"
+searxng-cli search_web "ColBERT TILDE Snowflake retrieval comparison"
 ```
 
-**Query tips:**
-- Keep queries short and keyword-focused (2–5 words)
-- Try different angles: "X tutorial", "X implementation", "X benchmark", "X vs Y"
-- "X best practices 2025" for recent content
+### Query Diversity (CRITICAL)
+
+When 2+ queries share the same anchor keyword (brand, library, named entity), engine ranking puts the same canonical sources at the top of every query → 15–25% of the slot pool is near-duplicate. The slot allocator dedups by exact URL only, not by content — same paper at different DOIs / homepage at `/` vs `/docs` slip through and burn slots.
+
+**Pattern when investigating a known entity X (library, framework, paper, company):**
+
+- **One** query with X as primary anchor → captures canonical sources (docs, github, homepage)
+- **One** query about the broader category WITHOUT mentioning X → captures the landscape
+- **One** query about alternatives / competitors → captures comparisons, "best of N" lists
+- **One** query about the underlying technique or use case → captures concepts X is built on
+
+Bad: `"crawl4ai"`, `"crawl4ai documentation"`, `"crawl4ai vs scrapy"`, `"crawl4ai agentic AI"`
+→ all 4 X-anchored, docs/github/pypi appear 3× each, ~20% of pool wasted on duplicates
+
+Good: `"crawl4ai"`, `"agentic web scraping LLM markdown 2026"`, `"firecrawl scrapegraphai browser-use comparison"`, `"playwright python stealth scraping"`
+→ 1 brand-anchored, 3 orthogonal angles, minimal overlap
+
+**Query length:** 2–5 keyword tokens. No filler words. Add a year token (`"2025"`, `"2026"`) only when recency matters — otherwise it filters out evergreen authoritative sources.
 
 ### Warm-Chrome batch (search_batch)
 
 For 3–5 variations on the same topic in one process, prefer `search_batch` — Chrome boots once and stays warm across all queries:
 
 ```bash
-searxng-cli search_batch "SPLADE sparse retrieval" "sparse vector search" "learned sparse retrieval" "SPLADE vs BM25"
+searxng-cli search_batch "SPLADE retrieval" "learned sparse retrieval BM25 benchmark" "neural information retrieval embeddings" "ColBERT TILDE Snowflake retrieval comparison"
 ```
+
+Same Query Diversity rule applies — `search_batch` does not change keyword overlap behavior, it only amortizes Chrome startup.
 
 Use parallel `search_web` invocations when topics are independent and you want results in parallel processes. Use `search_batch` when queries are topically related and sequential execution is acceptable.
 
