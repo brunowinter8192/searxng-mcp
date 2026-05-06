@@ -5,7 +5,8 @@ import re
 # From result.py: SearchResult dataclass
 from src.search.result import SearchResult
 
-MIN_FLOOR = 40  # minimum clean_len for a non-floor snippet
+MIN_FLOOR = 40        # minimum clean_len for a non-floor snippet
+MAX_SNIPPET_LEN = 500  # hard cap on displayed snippet length (scoring uses full text)
 
 # Combined EN + DE stopwords — no NLTK dependency
 STOPWORDS = {
@@ -79,6 +80,24 @@ def _strip_bloat(text: str) -> str:
     return ' '.join(text.split())
 
 
+# Sentence-aware truncation: period boundary, then word boundary, then hard cut
+def _truncate(text: str, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    sub  = text[:max_len]
+    half = max_len // 2
+    # Last ". " boundary within [half, max_len-1]
+    idx = sub.rfind(". ")
+    if idx >= half:
+        return text[:idx + 1]
+    # Last word boundary
+    idx = sub.rfind(" ")
+    if idx >= 0:
+        return text[:idx] + "…"
+    # Hard cut
+    return text[:max_len] + "…"
+
+
 # Select best snippet for a merged SearchResult by score (clean_len × lexical_density); returns (snippet, source)
 def _select_snippet(r: SearchResult) -> tuple[str, str]:
     preview = r.preview or {}
@@ -108,4 +127,4 @@ def _select_snippet(r: SearchResult) -> tuple[str, str]:
 
     winner       = max(pool, key=lambda s: pool[s][0])
     display_text = _strip_bloat(candidates[winner])
-    return display_text, winner
+    return _truncate(display_text, MAX_SNIPPET_LEN), winner
