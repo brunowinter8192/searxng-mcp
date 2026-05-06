@@ -11,7 +11,7 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from mcp.types import TextContent
 
 # From scrape_url.py: Shared scraping utilities
-from src.scraper.scrape_url import is_garbage_content, COOKIE_CONSENT_SELECTOR, MIN_CONTENT_THRESHOLD, get_plugin_hint
+from src.scraper.scrape_url import is_garbage_content, COOKIE_CONSENT_SELECTOR, MIN_CONTENT_THRESHOLD, get_plugin_hint, fetch_markdown_fastpath
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,16 @@ async def scrape_url_raw_workflow(url: str, output_dir: str) -> list[TextContent
     logger.info("Scraping raw: %s", url)
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    md = await fetch_markdown_fastpath(url)
+    if md:
+        logger.info("Markdown fast-path hit: %s (%d chars)", url, len(md))
+        parsed = urlparse(url)
+        path = parsed.netloc + parsed.path
+        safe_name = re.sub(r'[^\w\-.]', '_', path).strip('_')[:120] + ".md"
+        filepath = output_path / safe_name
+        filepath.write_text(f"<!-- source: {url} -->\n\n{md}")
+        return [TextContent(type="text", text=f"Saved: {filepath} ({len(md):,} chars)")]
 
     markdown_generator = DefaultMarkdownGenerator()
 
