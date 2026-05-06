@@ -10,14 +10,23 @@ URL scraping and site exploration tools powered by Crawl4AI for SearXNG MCP serv
 
 ### scrape_url_workflow()
 
-Main orchestrator. Two-phase approach:
+Main orchestrator. Three-phase approach:
 
-1. **Phase 1: Normal browser** — Standard Crawl4AI without stealth patches. Works for most sites (Wikipedia, docs, blogs). Tries `networkidle` first, falls back to `domcontentloaded`.
-2. **Phase 2: Stealth browser** — Only if Phase 1 returns empty. Uses `enable_stealth=True` + `UndetectedAdapter` + `AsyncPlaywrightCrawlerStrategy` (Level 3 anti-bot evasion). For sites with bot detection (e.g. TDS, some news sites).
+1. **Phase 0: HTTP markdown fast-path** — `fetch_markdown_fastpath()` probes the URL with `Accept: text/markdown, text/html` via httpx. If the host serves text/markdown directly (Cloudflare-fronted zones with Markdown-for-Agents enabled, Vercel's own edge implementation, others), the markdown body is returned and Crawl4AI is skipped entirely. See `decisions/scrape04_cloudflare_fastpath.md`.
+2. **Phase 1: Normal browser** — Standard Crawl4AI without stealth patches. Works for most sites (Wikipedia, docs, blogs). Tries `networkidle` first, falls back to `domcontentloaded`.
+3. **Phase 2: Stealth browser** — Only if Phase 1 returns empty. Uses `enable_stealth=True` + `UndetectedAdapter` + `AsyncPlaywrightCrawlerStrategy` (Level 3 anti-bot evasion). For sites with bot detection (e.g. TDS, some news sites).
 
 Noise removal via `excluded_selector=COOKIE_CONSENT_SELECTOR` — CSS selectors matching common cookie consent frameworks. `remove_overlay_elements` is NOT used (destroys Wikipedia content by misclassifying DOM elements as overlays).
 
 On empty result, returns error message with plugin hint if URL matches a known domain with dedicated MCP plugin (Reddit, arxiv).
+
+### fetch_markdown_fastpath()
+
+HTTP probe for server-side markdown availability (Phase 0). Sends `Accept: text/markdown, text/html` via `httpx.AsyncClient` with `follow_redirects=True` and `MD_FASTPATH_TIMEOUT` (5.0s). Returns the markdown body string when ALL conditions hold: HTTP 200, Content-Type contains `text/markdown`, body length ≥ `MD_FASTPATH_MIN_BYTES` (200). Returns `None` on any miss (non-200, wrong content-type, sub-threshold body, network exception). Logs at info-level on hit; debug-level on miss/error so the production log isn't flooded by non-supporting hosts.
+
+The 200-byte threshold guards against redirect-stub responses (anomaly observed at docs.anthropic.com returning 12 bytes during the 2026-05-07 adoption probe). The 5s timeout is generous enough for cold-edge CDN routing while still being tighter than the typical Crawl4AI browser-launch path, so the probe never delays the fallback meaningfully.
+
+Imported from `scrape_url_raw.py` for reuse across both scraper entry points.
 
 ### try_scrape()
 
@@ -59,6 +68,8 @@ Returns plugin hint only for domains with dedicated MCP plugins (uses `PLUGIN_RO
 - `COOKIE_CONSENT_SELECTOR` — CSS selector string matching common cookie consent frameworks: CookieYes (cky-consent, cky-banner, cky-modal), OneTrust, Cookiebot, cc-banner, GDPR, cookie-banner, cookie-consent, cookie-notice, cookie-law. Note: `cky-modal` is critical — CookieYes stores the full Consent Preferences dialog (12K+ chars of cookie descriptions) in this container. Without it, only the small banner (236 chars) is removed.
 - `DEFAULT_MAX_CONTENT_LENGTH` — 15000 chars
 - `MIN_CONTENT_THRESHOLD` — 200 chars. fit_markdown below this triggers raw_markdown fallback.
+- `MD_FASTPATH_MIN_BYTES` — 200 bytes. Phase 0 markdown response below this is treated as stub/redirect noise and rejected (fall through to Crawl4AI).
+- `MD_FASTPATH_TIMEOUT` — 5.0s. Phase 0 httpx timeout — generous for cold-edge routing, tight against fallback delay.
 - `CONSENT_WORDS` — keyword list for consent density scoring: cookie, consent, einwilligung, tracking, akzeptieren, datenschutz, zweck
 - `CONSENT_DENSITY_THRESHOLD` — 5. Sum of CONSENT_WORDS occurrences in first 3000 chars must exceed this to trigger stripping.
 - `CONSENT_SKIP_OFFSET` — 300 chars. Heading search starts at this offset to skip banner fragments before the actual content starts.

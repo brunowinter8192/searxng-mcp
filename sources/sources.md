@@ -19,9 +19,20 @@
 | api.search.brave.com | Web Domain | search01 | Not indexed |
 | huggingface.co | Web Domain | agent02 | Not indexed |
 | info.arxiv.org | Web Domain | agent02 | Not indexed |
-| lobste.rs | Web Domain | search05 | Not indexed |
-| api.openalex.org | Web Domain | search05 | Not indexed |
-| api.stackexchange.com | Web Domain | search05 | Not indexed |
+| lobste.rs | Web Domain | search05 | Indexed |
+| developers.openalex.org | Web Domain | search05 | Indexed |
+| api.stackexchange.com | Web Domain | search05 | Indexed |
+| www.crossref.org | Web Domain | search05 | Indexed |
+| www.mojeek.com | Web Domain | search05 | Indexed |
+| blog.mojeek.com | Web Domain | search05 | Indexed |
+| duckduckgo.com (help-pages) | Web Domain | search05 | Indexed |
+| scholar.google.com | Web Domain | search05 | Indexed |
+| support.google.com (websearch operators) | Web Domain | search05 | Indexed |
+| blog.cloudflare.com (markdown-for-agents) | Web Domain | scrape04 | Indexed |
+| seirdy.one (search-engines-with-own-indexes) | Web Domain | search05 | Referenced |
+| morphllm.com (ai-web-scraping benchmarks) | Web Domain | scrape00 | Referenced |
+| chuniversiteit.nl (extraction-comparison) | Web Domain | scrape02 | Referenced |
+| vercel.com/docs (independent markdown-edge) | Web Domain | scrape04 | Referenced |
 
 | GitHub Issue #5286 | github.com | Issue | search02_routing | Referenced |
 | GitHub Issue #5922 | github.com | Issue | search02_routing | Referenced |

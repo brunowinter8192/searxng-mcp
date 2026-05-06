@@ -121,6 +121,23 @@ The file is gitignored — it accumulates across production MCP tool calls and i
 
 12-URL test inventory extracted from `pipeline_smoke_20260506_003915.md`. Columns: Q-Nr, URL, Status (filled after test run).
 
+## 06_cloudflare_md_adoption/ → decisions/scrape04_cloudflare_fastpath
+
+### 06_cloudflare_md_adoption.py
+
+**Purpose:** Adoption probe for the `Accept: text/markdown` server-side markdown convention (Cloudflare Markdown-for-Agents, Vercel edge, others). Probes a curated 29-URL set across three categories (Cloudflare-owned positive controls, likely-CF-fronted candidate sites, non-CF negative controls) with the markdown Accept header via httpx async (Semaphore concurrency 10, 15s timeout). For URLs that respond with `text/markdown`, fetches a baseline HTML GET to compute byte-reduction. Outputs a tabular markdown report.
+
+**Use case:** baseline measurement of Phase-0-fast-path adoption (`fetch_markdown_fastpath` in production). Re-run periodically to track adoption growth — the script is the artifact, each run produces a separate timestamped report.
+
+**Output:** `06_reports/cf_md_adoption_<YYYYMMDD_HHMMSS>.md` — per-URL table (URL, CF-fronted, MD-served, status, content-type, x-md-tokens, HTML-bytes, MD-bytes, byte-reduction, response-ms) plus summary section (counts, mean/median byte-reduction on positives, positive-case URL list for run-to-run comparison, server header distribution among CF-fronted hits).
+
+```bash
+./venv/bin/python dev/scrape_pipeline/06_cloudflare_md_adoption.py
+./venv/bin/python dev/scrape_pipeline/06_cloudflare_md_adoption.py --output-dir /tmp/cf_probe/
+```
+
+**Initial measurement (2026-05-07, 29 URLs):** 16/29 CF-fronted by cf-ray header, 7/29 actually serve markdown (5/5 Cloudflare-owned positive controls + 1 false-positive Anthropic stub of 12 bytes + Vercel via own edge). Mean byte-reduction 92.3%, median 97.0%. Adoption among non-Cloudflare-owned CF-customers: ≈0% in May 2026, 3 months after Beta launch.
+
 ## browser_eval/ → decisions/scrape01_browser
 
 ### 01_baseline.py
