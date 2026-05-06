@@ -35,9 +35,9 @@ python -m src.crawler.crawl_site --url "https://playwright.dev" --url-file urls_
 
 ## explore_site.py
 
-**Purpose:** URL discovery CLI for the `/crawl-site` command pipeline. Discovers all URLs of a website and saves to a text file. Wraps `crawl_site.discover_urls()` and `crawl_site.discover_urls_sitemap()` with auto-strategy cascade, redirect detection, and shallow sitemap fallback.
+**Purpose:** URL discovery — backend for both `searxng-cli explore_site` and the `/crawl-site` pipeline. Discovers all URLs of a website and saves to a text file. Wraps `crawl_site.discover_urls()` and `crawl_site.discover_urls_sitemap()` with auto-strategy cascade, redirect detection, and shallow sitemap fallback. Returns `(urls, strategy_used, output_path)` tuple so CLI callers can build their own summary output.
 **Input:** URL, strategy (auto/sitemap/prefetch), optional max-pages/depth/include-patterns/exclude-patterns/output/append.
-**Output:** Text file with one URL per line plus console summary with URL samples.
+**Output:** Text file with one URL per line; returns `(list[str], str, str)` — discovered URLs, strategy used, resolved output path.
 
 ### CLI
 

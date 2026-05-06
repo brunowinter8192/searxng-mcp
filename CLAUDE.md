@@ -53,10 +53,9 @@ See [sources/sources.md](sources/sources.md).
 | `src/scraper/scrape_url.py` | URL scraping (filtered) |
 | `src/scraper/scrape_url_raw.py` | Raw URL scraping (for RAG indexing) |
 | `src/scraper/download_pdf.py` | PDF file download |
-| `src/scraper/explore_site.py` | Site discovery (sitemap + BFS) |
 | `src/routing.py` | Plugin domain routing |
 | `src/crawler/crawl_site.py` | Full website crawl with markdown export |
-| `src/crawler/explore_site.py` | URL discovery CLI for /crawl-site pipeline |
+| `src/crawler/explore_site.py` | URL discovery — backend for `searxng-cli explore_site` + /crawl-site pipeline |
 | `cli.py` | CLI dispatch |
 
 ## Project Structure
