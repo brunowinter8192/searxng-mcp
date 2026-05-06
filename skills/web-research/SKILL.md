@@ -359,13 +359,8 @@ Web domain (e.g. `docs.crawl4ai.com`) OR a list of PDFs (paths or URLs).
 #### 2a. For Web Domains: Explore + Filter URLs
 
 ```bash
-# Discovery: ad-hoc summary
-searxng-cli explore_site https://docs.example.com
-
-# Pipeline mode: writes URL list to /tmp
-./venv/bin/python -m src.crawler.explore_site https://docs.example.com \
-    --strategy sitemap \
-    --output /tmp/example_urls.txt
+# Discovers URLs via sitemap → BFS cascade, writes list to /tmp/explore_<domain>_urls.txt, prints stdout summary
+searxng-cli explore_site https://docs.example.com --strategy sitemap --output /tmp/example_urls.txt
 ```
 
 Review the URL list with the user. Kill noise: login pages, archive indexes, search-result pages, irrelevant subpaths. Save the filtered list as `/tmp/<collection>_urls.txt`.

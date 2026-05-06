@@ -74,36 +74,6 @@ Returns plugin hint only for domains with dedicated MCP plugins (uses `PLUGIN_RO
 **Input:** URL string and optional output directory (default "/tmp").
 **Output:** TextContent with file path and human-readable file size on success, or error message on failure.
 
-## explore_site.py
-
-**Purpose:** Site structure reconnaissance. Fast URL discovery via prefetch mode (~200-500ms per page instead of 2-5s). Returns page counts, depth distribution, and URL samples for noise pattern identification. No file export — analysis only.
-**Input:** URL string, optional max_pages limit (default 50), optional url_pattern wildcard filter.
-**Output:** TextContent with formatted Markdown summary (page count, total chars, depth distribution, 5 URL samples per depth, recommended strategy). Partial results on timeout (120s) with warning.
-
-### explore_site_workflow()
-
-Main orchestrator. Checks sitemap first, then runs BFS discovery. Recommends strategy based on results: sitemap (if found), prefetch (if >1 page discovered), or bfs (JS-heavy/SPA, only 1 page found).
-
-### check_sitemap()
-
-Checks if site has a sitemap via AsyncUrlSeeder. Returns list of discovered URLs (empty list if no sitemap found).
-
-### crawl_for_discovery()
-
-BFS crawl with DomainFilter + ContentTypeFilter (text/html) + optional URLPatternFilter. Uses `prefetch=True` — skips markdown generation and content extraction, only fetches HTML and extracts links. Wrapped in `asyncio.wait_for()` with 120s timeout. Returns tuple `(timed_out: bool, results: list)`. max_depth=10 internally.
-
-### build_site_map()
-
-Aggregates crawl results into summary dict. Deduplicates URLs (trailing slash normalization), extracts depth from metadata, computes per-depth statistics, picks URL samples via `pick_url_samples()`. When `sitemap_urls` provided: integrates sitemap URLs with depth estimated from URL path segments (chars=0 since not fetched), deduplicates against BFS results.
-
-### pick_url_samples()
-
-Selects 5 evenly-spaced URLs per depth level for noise pattern identification.
-
-### format_site_map()
-
-Formats site map dict as readable Markdown with recommended strategy.
-
 ## Architecture
 
 Content extraction is delegated entirely to Crawl4AI (v0.8.0):

@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import argparse
 import asyncio
 import atexit
+from urllib.parse import urlparse
 
 from src.routing import check_plugin_routed
 from src.search.search_web import search_web_workflow, search_batch_workflow
@@ -16,7 +17,7 @@ from src.search.browser import close_browser, kill_stale_chrome
 from src.search.cache import cache_key, cache_read, format_cached_slice
 from src.scraper.scrape_url import scrape_url_workflow
 from src.scraper.scrape_url_raw import scrape_url_raw_workflow
-from src.scraper.explore_site import explore_site_workflow
+from src.crawler.explore_site import explore_site_workflow
 from src.scraper.download_pdf import download_pdf_workflow
 from mcp.types import TextContent
 
@@ -83,11 +84,16 @@ def main():
     p.add_argument("output_dir", help="Directory to save the .md file (created if not exists)")
 
     # ── explore_site ──────────────────────────────────────────────────────────
-    p = sub.add_parser("explore_site", help="Explore website structure via sitemap + BFS.")
+    p = sub.add_parser("explore_site", help="Discover URLs via sitemap + BFS, write to file + print summary.")
     p.add_argument("url", help="Root URL to explore")
+    p.add_argument("--strategy", choices=["auto", "sitemap", "prefetch"], default="auto")
     p.add_argument("--max-pages", dest="max_pages", type=int, default=200)
-    p.add_argument("--url-pattern", dest="url_pattern", default=None,
-                   help="Regex pattern to filter discovered URLs")
+    p.add_argument("--output", type=str, default=None,
+                   help="Output file path (default: /tmp/explore_<domain>_urls.txt)")
+    p.add_argument("--depth", type=int, default=10)
+    p.add_argument("--include-patterns", dest="include_patterns", type=str, default=None)
+    p.add_argument("--exclude-patterns", dest="exclude_patterns", type=str, default=None)
+    p.add_argument("--append", action="store_true")
 
     # ── download_pdf ──────────────────────────────────────────────────────────
     p = sub.add_parser("download_pdf", help="Download PDF file from URL.")
@@ -161,7 +167,16 @@ def main():
             result = asyncio.run(scrape_url_raw_workflow(args.url, args.output_dir))
 
     elif args.cmd == "explore_site":
-        result = asyncio.run(explore_site_workflow(args.url, args.max_pages, args.url_pattern))
+        urls, strategy_used, output_path = asyncio.run(explore_site_workflow(
+            args.url, args.strategy, args.max_pages, args.output,
+            args.depth, args.include_patterns, args.exclude_patterns, args.append
+        ))
+        domain = urlparse(args.url).netloc
+        sample_lines = "\n".join(f"  {u}" for u in urls[:5])
+        summary = f"✓ Discovered {len(urls)} URLs for {domain} (strategy: {strategy_used})\nFile: {output_path}"
+        if sample_lines:
+            summary += f"\nSample:\n{sample_lines}"
+        result = [TextContent(type="text", text=summary)]
 
     elif args.cmd == "download_pdf":
         result = download_pdf_workflow(args.url, args.output_dir)
