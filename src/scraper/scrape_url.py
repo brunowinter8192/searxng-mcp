@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+import httpx
 from crawl4ai import AsyncWebCrawler, BrowserConfig, CrawlerRunConfig, CacheMode, UndetectedAdapter
 from crawl4ai.async_crawler_strategy import AsyncPlaywrightCrawlerStrategy
 from crawl4ai.content_filter_strategy import PruningContentFilter
@@ -19,6 +20,8 @@ _LINK_LINE_RE = re.compile(r'^\[.+\]\(.+\)$')
 
 DEFAULT_MAX_CONTENT_LENGTH = 15000
 MIN_CONTENT_THRESHOLD = 200
+MD_FASTPATH_MIN_BYTES = 200
+MD_FASTPATH_TIMEOUT = 5.0
 
 CONSENT_WORDS = ["cookie", "consent", "einwilligung", "tracking", "akzeptieren", "datenschutz", "zweck"]
 CONSENT_DENSITY_THRESHOLD = 5
@@ -50,6 +53,11 @@ _GARBAGE_MESSAGES = {
 # ORCHESTRATOR
 async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CONTENT_LENGTH) -> list[TextContent]:
     logger.info("Scraping: %s", url)
+    md = await fetch_markdown_fastpath(url)
+    if md:
+        logger.info("Markdown fast-path hit: %s (%d chars)", url, len(md))
+        truncated = truncate_content(md, max_content_length)
+        return [TextContent(type="text", text=f"# Content from: {url}\n\n{truncated}")]
     markdown_generator = DefaultMarkdownGenerator(
         content_filter=PruningContentFilter(threshold=0.48)
     )
@@ -94,6 +102,28 @@ async def scrape_url_workflow(url: str, max_content_length: int = DEFAULT_MAX_CO
 
 
 # FUNCTIONS
+
+# Try Accept: text/markdown fast-path; return markdown string or None on miss/error
+async def fetch_markdown_fastpath(url: str) -> str | None:
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=MD_FASTPATH_TIMEOUT) as client:
+            resp = await client.get(url, headers={"Accept": "text/markdown, text/html"})
+        if resp.status_code != 200:
+            logger.debug("Markdown fast-path miss (HTTP %d): %s", resp.status_code, url)
+            return None
+        ct = resp.headers.get("content-type", "")
+        if "text/markdown" not in ct:
+            logger.debug("Markdown fast-path miss (ct=%s): %s", ct.split(";")[0].strip(), url)
+            return None
+        body = resp.text
+        if len(body) < MD_FASTPATH_MIN_BYTES:
+            logger.debug("Markdown fast-path sub-threshold (%d bytes): %s", len(body), url)
+            return None
+        return body
+    except Exception as exc:
+        logger.debug("Markdown fast-path error for %s: %s", url, exc)
+        return None
+
 
 # Attempt scrape with given wait strategy, return (content, garbage_type, status_code) tuple
 async def try_scrape(browser_config, crawler_strategy, markdown_generator, url: str, wait_until: str) -> tuple[str, str | None, int | None]:
