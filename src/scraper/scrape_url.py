@@ -37,6 +37,7 @@ COOKIE_CONSENT_SELECTOR = ", ".join([
 ])
 
 _GARBAGE_MESSAGES = {
+    "minimal_content": "Page returned only whitespace or near-empty content",
     "cookie_wall": "Cookie/consent wall detected — page returns only GDPR consent text, not actual content",
     "login_wall": "Login/paywall detected — page requires authentication",
     "cloudflare": "Cloudflare protection — page requires browser verification",
@@ -154,6 +155,8 @@ def log_scrape_failure(url: str, garbage_type: str | None, status_code: int | No
 
 # Detect garbage content: error pages, cookie walls, login walls, navigation dumps
 def is_garbage_content(content: str) -> str | None:
+    if not content or len(content.strip()) < 50:
+        return "minimal_content"
     lower = content.lower()
 
     crawl4ai_errors = ["crawl4ai error:", "document is empty", "page is not fully supported"]
