@@ -44,8 +44,8 @@ Every worker spawn provides:
 |---|---|---|
 | `MODE` | `web-md` or `pdf` | `web-md` |
 | `INPUT` | Source path | `/tmp/searxng_urls.txt` or `/path/to/paper.pdf` |
-| `COLLECTION` | RAG collection name (PascalCase) | `SearXNG_Docs` |
-| `OUTPUT_DIR` | Where cleaned `.md` files land | `~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/SearXNG_Docs/` |
+| `COLLECTION` | RAG collection name — `<project>_reference` (lowercase, underscore). One reference collection per project, all indexed material lands here. | `searxng_reference` |
+| `OUTPUT_DIR` | Where cleaned `.md` files land — folder name MUST match `COLLECTION` exactly | `~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/searxng_reference/` |
 
 ---
 
@@ -200,16 +200,26 @@ Stop when:
 
 ## Phase 2 — Index
 
-Identical for both modes.
+Identical for both modes. Run as background job with `PYTHONUNBUFFERED=1` so the worker stays responsive (foreground would block on the long-running embed phase) and the log fills line-by-line for post-mortem if needed.
 
 ```bash
 cd ~/Documents/ai/Meta/ClaudeCode/MCP/RAG && \
-./venv/bin/python workflow.py index-dir \
-    --input "$OUTPUT_DIR" \
-    --collection "$COLLECTION"
+PYTHONUNBUFFERED=1 ./venv/bin/python workflow.py index-dir \
+    --input "$OUTPUT_DIR" --collection "$COLLECTION" \
+    > /tmp/${COLLECTION}_index.log 2>&1 &
 ```
 
 This handles: server health check → start if needed → chunk → index → summary.
+
+### Status check (during indexing)
+
+Single signal — chunk count in the DB. Grows during indexing, stable when done.
+
+```bash
+cd ~/Documents/ai/Meta/ClaudeCode/MCP/RAG && \
+./venv/bin/python cli.py list_collections | grep "$COLLECTION"
+# → "  $COLLECTION (N chunks)"
+```
 
 ### Verify
 
