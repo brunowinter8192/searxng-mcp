@@ -337,3 +337,83 @@ Stop when ALL of:
 - Called `search_more` to check cached pool for additional URLs
 - Scraped all non-plugin URLs from top results
 - Additional queries return mostly duplicates
+
+---
+
+## Permanent Capture Workflow
+
+For when ad-hoc lookup isn't enough — the user wants to permanently capture a domain (docs, blog, repo) or a set of PDFs into RAG for later semantic search. The decisions stay in main session; the mechanical pipeline runs in a worker that activates the `cleanup-and-index` skill.
+
+### When to use this workflow
+
+- "Crawl X and index it" / "permanent erhalten" / "RAG-fähig machen"
+- After search surfaces multiple URLs from one domain that warrant indexing
+- A folder of PDFs (research papers, books, conference proceedings) needs to be indexed
+
+### Steps
+
+#### 1. Identify Source
+
+Web domain (e.g. `docs.crawl4ai.com`) OR a list of PDFs (paths or URLs).
+
+#### 2a. For Web Domains: Explore + Filter URLs
+
+```bash
+# Discovery: ad-hoc summary
+searxng-cli explore_site https://docs.example.com
+
+# Pipeline mode: writes URL list to /tmp
+./venv/bin/python -m src.crawler.explore_site https://docs.example.com \
+    --strategy sitemap \
+    --output /tmp/example_urls.txt
+```
+
+Review the URL list with the user. Kill noise: login pages, archive indexes, search-result pages, irrelevant subpaths. Save the filtered list as `/tmp/<collection>_urls.txt`.
+
+#### 2b. For PDFs: Decide Which to Convert
+
+Review PDF candidates with the user. Skip paywalls, redundant copies, off-topic PDFs. Build a list of paths (or URLs to download first via `searxng-cli download_pdf`).
+
+#### 3. Decide Collection Name
+
+PascalCase, descriptive: `SearXNG_Docs`, `Crawl4AI_Reference`, `RAG_Survey_2024`. Becomes the RAG collection name. Never cryptic IDs.
+
+#### 4. Spawn Worker
+
+The worker activates the `cleanup-and-index` skill itself; the spawn prompt is short.
+
+Write to `/tmp/spawn-<worker_name>.md`:
+
+```markdown
+# Worker Task: Cleanup-and-Index <COLLECTION_NAME>
+
+You are a WORKER.
+
+FIRST: activate the cleanup-and-index skill via Skill(skill="cleanup-and-index").
+
+Then follow its protocol with these inputs:
+
+- MODE: <web-md | pdf>
+- INPUT: <absolute path to URL list .txt OR PDF file/dir>
+- COLLECTION: <COLLECTION_NAME>
+- OUTPUT_DIR: ~/Documents/ai/Meta/ClaudeCode/MCP/RAG/data/documents/<COLLECTION_NAME>/
+
+Report when done. No commit needed (output is data files, not code).
+```
+
+Spawn:
+
+```bash
+worker-cli spawn cleanup-<collection_lower> /tmp/spawn-<worker_name>.md \
+    /Users/brunowinter2000/Documents/ai/Meta/ClaudeCode/MCP/searxng sonnet
+```
+
+#### 5. Wait for Worker, Verify
+
+Worker reports back when pipeline complete (crawl/convert + cleanup + index). Verify with one search:
+
+```bash
+rag-cli search --query "<topic from indexed content>" --top-k 3
+```
+
+If results look right → done. If empty/wrong → check worker's report for failures, decide whether to re-crawl or fix manually.
