@@ -77,11 +77,11 @@ class GoogleEngine(BaseEngine):
         await _inject_socs_cookie(tab)
         search_url = _build_url(query, language, max_results)
         try:
-            await tab.go_to(search_url, timeout=20)
+            await tab.go_to(search_url, timeout=3.0)
             current = await tab.current_url
             if CONSENT_DOMAIN in current or await _has_inline_consent(tab):
                 await _handle_consent(tab)
-                await tab.go_to(search_url, timeout=20)
+                await tab.go_to(search_url, timeout=3.0)
                 current = await tab.current_url
             if CAPTCHA_PATH in current:
                 logger.warning("Google CAPTCHA detected for: %s", query)
@@ -140,7 +140,6 @@ async def _has_inline_consent(tab) -> bool:
 async def _handle_consent(tab) -> None:
     logger.info("Google consent page detected — clicking accept")
     await tab.execute_script(_JS_CONSENT)
-    await asyncio.sleep(2.0)
 
 
 # Poll for result containers up to MAX_WAIT_CYCLES × WAIT_INTERVAL seconds, return True when found

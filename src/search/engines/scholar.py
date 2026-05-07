@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 SEARCH_URL = "https://scholar.google.com/scholar?q={}&hl={}&num={}"
 CONSENT_DOMAIN = "consent.google.com"
 CAPTCHA_PATH = "/sorry/"
-MAX_WAIT_CYCLES = 15
+MAX_WAIT_CYCLES = 1
 WAIT_INTERVAL = 1.0
 
 _JS_WAIT = "return document.querySelectorAll('div.gs_r.gs_or.gs_scl').length"
@@ -55,11 +55,11 @@ class ScholarEngine(BaseEngine):
         tab = await new_tab()
         search_url = _build_url(query, language, max_results)
         try:
-            await tab.go_to(search_url, timeout=20)
+            await tab.go_to(search_url, timeout=3.0)
             current = await tab.current_url
             if CONSENT_DOMAIN in current:
                 await _handle_consent(tab)
-                await tab.go_to(search_url, timeout=20)
+                await tab.go_to(search_url, timeout=3.0)
                 current = await tab.current_url
             if CAPTCHA_PATH in current:
                 logger.warning("Scholar CAPTCHA detected for: %s", query)
@@ -98,7 +98,6 @@ def _build_url(query: str, language: str, max_results: int) -> str:
 async def _handle_consent(tab) -> None:
     logger.info("Scholar consent page detected — clicking accept")
     await tab.execute_script(_JS_CONSENT)
-    await asyncio.sleep(2.0)
 
 
 # Poll for result containers up to MAX_WAIT_CYCLES seconds, return True when found

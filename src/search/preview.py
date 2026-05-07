@@ -4,6 +4,7 @@ import dataclasses
 import html
 import logging
 import re
+import time
 
 import httpx
 from lxml import html as lxml_html
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 PREVIEW_TOP_N = 20
 PREVIEW_CONCURRENCY = 8
-PREVIEW_TIMEOUT = 3.0
+PREVIEW_TIMEOUT = 3.6
 PREVIEW_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -26,8 +27,9 @@ PREVIEW_HEADERS = {
 
 # ORCHESTRATOR
 
-# Fetch og:description / meta:description for top-N results, attach preview field, skip rest
-async def fetch_previews(results: list[SearchResult], top_n: int = PREVIEW_TOP_N) -> list[SearchResult]:
+# Fetch og:description / meta:description for top-N results, attach preview field, skip rest; return (results, stats)
+async def fetch_previews(results: list[SearchResult], top_n: int = PREVIEW_TOP_N) -> tuple[list[SearchResult], dict]:
+    t0 = time.perf_counter()
     targets = results[:top_n]
     rest = results[top_n:]
     sem = asyncio.Semaphore(PREVIEW_CONCURRENCY)
@@ -37,16 +39,25 @@ async def fetch_previews(results: list[SearchResult], top_n: int = PREVIEW_TOP_N
         headers=PREVIEW_HEADERS,
     ) as client:
         raw = await asyncio.gather(
-            *[_fetch_one(client, sem, r.url) for r in targets],
+            *[asyncio.wait_for(_fetch_one(client, sem, r.url), timeout=PREVIEW_TIMEOUT) for r in targets],
             return_exceptions=True,
         )
+    urls_succeeded = sum(1 for p in raw if isinstance(p, dict))
+    url_timeouts = sum(1 for p in raw if isinstance(p, asyncio.TimeoutError))
+    total_ms = round((time.perf_counter() - t0) * 1000)
     out = []
     for r, p in zip(targets, raw):
         if isinstance(p, Exception) or p is None:
             out.append(r)
         else:
             out.append(dataclasses.replace(r, preview=p))
-    return out + rest
+    stats = {
+        "urls_attempted": len(targets),
+        "urls_succeeded": urls_succeeded,
+        "url_timeouts": url_timeouts,
+        "total_ms": total_ms,
+    }
+    return out + rest, stats
 
 
 # FUNCTIONS
@@ -80,6 +91,8 @@ async def _fetch_one(
             if not og and not meta:
                 return None
             return {"og": _deep_unescape(og), "meta": _deep_unescape(meta)}
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             logger.debug("Preview fetch skipped %s: %s", url, e)
             return None

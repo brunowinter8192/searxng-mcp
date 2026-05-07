@@ -47,7 +47,7 @@ class MojeekEngine(BaseEngine):
         tab = await new_tab()
         search_url = _build_url(query)
         try:
-            await tab.go_to(search_url, timeout=20)
+            await tab.go_to(search_url, timeout=3.0)
             if not await _wait_for_results(tab):
                 logger.warning("No Mojeek results loaded for: %s", query)
                 return []

@@ -56,7 +56,7 @@ async def _fetch_results(query: str, max_results: int) -> list[dict] | None:
     elif not _KEY_WARNED:
         logger.warning("STACK_EXCHANGE_API_KEY not set — anonymous quota (300 req/day)")
         _KEY_WARNED = True
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=3.6) as client:
         response = await client.get(API_URL, params=params)
     if response.status_code in (429, 403):
         logger.warning("Stack Exchange rate limited: %d", response.status_code)
