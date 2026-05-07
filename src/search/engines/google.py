@@ -23,19 +23,30 @@ SOCS_NAME = "SOCS"
 SOCS_VALUE = "CAISHAgCEhJnd3NfMjAyNjA0MDctMCAgIBgEIAEaBgiA_fC8Bg"
 SOCS_DOMAIN = ".google.com"
 
-_JS_WAIT = "return document.querySelectorAll('#rso h3').length"
+_JS_WAIT = "return document.querySelectorAll('div.MjjYud').length"
 
 _JS_PARSE = """
-var _h3s = document.querySelectorAll('#rso h3');
+var _cs = document.querySelectorAll('div.MjjYud');
 var _out = [];
-for (var _i = 0; _i < _h3s.length; _i++) {
-    var _h3 = _h3s[_i];
-    var _a = _h3.closest('a[href^="http"]') || _h3.closest('a[href]');
-    var _block = _h3.closest('.MjjYud') || _h3.closest('#rso > div') || _h3.parentElement;
-    if (!_a && _block) { _a = _block.querySelector('a[href^="http"]'); }
-    if (!_a) continue;
-    var _snip = _block ? (_block.querySelector('.wHYlTd') || _block.querySelector('.VwiC3b') || _block.querySelector('[data-sncf]') || _block.querySelector('.lEBKkf')) : null;
-    _out.push({url: _a.href, title: _h3.textContent.trim(), snippet: _snip ? _snip.textContent.trim() : ''});
+for (var _i = 0; _i < _cs.length; _i++) {
+    var _c = _cs[_i];
+    var _a = null;
+    var _title = '';
+    var _h3 = _c.querySelector('h3');
+    var _lc = _c.querySelector('.LC20lb');
+    if (_h3) {
+        _title = _h3.textContent.trim();
+        _a = _h3.closest('a[href^="http"]') || _h3.parentElement.querySelector('a[href^="http"]');
+    }
+    if (!_a && _lc) {
+        if (!_title) { _title = _lc.textContent.trim(); }
+        _a = _lc.closest('a[href^="http"]') || _lc.parentElement.querySelector('a[href^="http"]');
+    }
+    if (!_a) { _a = _c.querySelector('a[href^="http"]'); }
+    if (!_title && _a) { _title = _a.textContent.trim(); }
+    if (!_a || !_title) continue;
+    var _snip = _c.querySelector('.wHYlTd') || _c.querySelector('.VwiC3b') || _c.querySelector('[data-sncf]') || _c.querySelector('.lEBKkf');
+    _out.push({url: _a.href, title: _title, snippet: _snip ? _snip.textContent.trim() : ''});
 }
 return JSON.stringify(_out);
 """
