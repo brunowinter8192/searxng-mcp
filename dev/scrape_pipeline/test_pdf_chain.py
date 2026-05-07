@@ -1,4 +1,12 @@
-"""Pytest unit tests for src/scraper/pdf_chain.py — no network calls."""
+"""
+Unit tests (no network) and integration tests (--network) for pdf_chain.py and download_pdf_workflow.
+
+Run unit tests only (default):
+  pytest dev/scrape_pipeline/test_pdf_chain.py
+
+Run all including network integration tests:
+  pytest dev/scrape_pipeline/test_pdf_chain.py --network
+"""
 
 import sys
 from pathlib import Path
@@ -215,3 +223,73 @@ class TestParseCitationPdfUrl:
         )
         result = parse_citation_pdf_url(html)
         assert result == "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0000001&type=printable"
+
+
+# ── Integration tests — require real network (run with --network) ──────────────
+#
+# These tests exercise download_pdf_workflow end-to-end with real URLs verified in
+# dev/search_pipeline/14_download_classify_probe.py (PDF_OK confirmed).
+# They specifically guard against regression of the TIER1 transform bug where
+# arxiv /pdf/<id> (no .pdf suffix) was incorrectly routed to citation_pdf_url extraction.
+#
+# URLs used:
+#   arxiv:       https://arxiv.org/abs/2603.13277     (bead verification URL)
+#   aclanthology: https://aclanthology.org/2020.emnlp-main.400/  (probe 14 PDF_OK)
+#   openreview:  https://openreview.net/forum?id=TuFjICawSc      (probe 14 PDF_OK)
+
+@pytest.mark.network
+class TestDownloadPdfWorkflowIntegration:
+
+    def _assert_downloaded(self, result, tmp_path):
+        assert len(result) == 1
+        text = result[0].text
+        assert text.startswith("Downloaded:"), (
+            f"Expected 'Downloaded: ...' but got: {text!r}\n"
+            "This may indicate a TIER1 transform bug (URL routed to wrong chain step)."
+        )
+        pdfs = list(tmp_path.glob("*.pdf"))
+        assert len(pdfs) >= 1, "No .pdf file written to output directory"
+        assert pdfs[0].read_bytes()[:4] == b"%PDF", "File does not start with %PDF magic bytes"
+
+    def test_arxiv_abs_tier1_transform(self, tmp_path):
+        """arxiv /abs/ → TIER1 transform → /pdf/ → direct download (not citation_pdf_url branch).
+        This is the exact bug case: /pdf/2603.13277 has no .pdf suffix, which previously
+        triggered citation_pdf_url extraction, received application/pdf, returned None, and
+        reported 'no PDF path found'."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://arxiv.org/abs/2603.13277", str(tmp_path))
+        self._assert_downloaded(result, tmp_path)
+
+    def test_arxiv_html_tier1_transform(self, tmp_path):
+        """arxiv /html/ variant → same TIER1 transform path."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://arxiv.org/html/2603.13277", str(tmp_path))
+        self._assert_downloaded(result, tmp_path)
+
+    def test_aclanthology_trailing_slash_tier1(self, tmp_path):
+        """aclanthology URL with trailing slash → TIER1 strips slash + appends .pdf → download.
+        Verified PDF_OK in probe 14."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://aclanthology.org/2020.emnlp-main.400/", str(tmp_path))
+        self._assert_downloaded(result, tmp_path)
+
+    def test_openreview_forum_tier1(self, tmp_path):
+        """openreview /forum?id= → TIER1 transforms to /pdf?id= → download.
+        Verified PDF_OK in probe 14."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://openreview.net/forum?id=TuFjICawSc", str(tmp_path))
+        self._assert_downloaded(result, tmp_path)
+
+    def test_blacklisted_domain_returns_error(self, tmp_path):
+        """Blacklisted domain returns blocked error, not download."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://books.google.com/books?id=xyz", str(tmp_path))
+        assert len(result) == 1
+        assert "blocked-domain list" in result[0].text
+
+    def test_github_blob_returns_error(self, tmp_path):
+        """GitHub blob URL returns clear error, not download."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://github.com/user/repo/blob/main/paper.pdf", str(tmp_path))
+        assert len(result) == 1
+        assert "GitHub blob" in result[0].text

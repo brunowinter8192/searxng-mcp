@@ -11,6 +11,7 @@ from mcp.types import TextContent
 
 # From pdf_chain.py: URL chain resolution (blacklist, TIER1 transforms, multi-step citation_pdf_url)
 from src.scraper.pdf_chain import (
+    _base_domain,
     apply_tier1_transform,
     extract_citation_pdf_url,
     is_blacklisted,
@@ -26,7 +27,6 @@ def download_pdf_workflow(url: str, output_dir: str = str(Path.home() / "Downloa
 
     # Step 1: Hard blacklist — domains that never yield PDFs
     if is_blacklisted(url):
-        from src.scraper.pdf_chain import _base_domain
         domain = _base_domain(url)
         logger.info("PDF download blocked (blacklist): %s", domain)
         return [TextContent(type="text", text=f"Cannot download PDF from {url}: {domain} is on the blocked-domain list (no accessible PDF path).")]
@@ -37,19 +37,24 @@ def download_pdf_workflow(url: str, output_dir: str = str(Path.home() / "Downloa
         return [TextContent(type="text", text=f"Cannot download PDF from {url}: GitHub blob URLs serve HTML viewers. Use the raw URL (github.com/.../raw/...) instead.")]
 
     # Step 3: TIER1 transform (arxiv /abs/ → /pdf/, aclanthology + .pdf, openreview /forum → /pdf)
-    fetch_url = apply_tier1_transform(url) or url
-    if fetch_url != url:
+    # When a transform is applied, the resulting URL is a known PDF target — skip citation_pdf_url lookup.
+    # (arxiv /pdf/<id> has no .pdf suffix but is a direct PDF; checking .endswith('.pdf') would
+    # incorrectly trigger the multi-step branch and fail when extract_citation_pdf_url sees application/pdf.)
+    transformed = apply_tier1_transform(url)
+    if transformed:
+        fetch_url = transformed
         logger.info("TIER1 transform: %s → %s", url, fetch_url)
-
-    # Step 4: If still not a direct PDF path, try multi-step citation_pdf_url extraction
-    if not urlparse(fetch_url).path.lower().endswith(".pdf"):
-        citation_url = extract_citation_pdf_url(fetch_url)
-        if citation_url:
-            logger.info("Multi-step citation_pdf_url: %s → %s", fetch_url, citation_url)
-            fetch_url = citation_url
-        else:
-            logger.info("No PDF path found for: %s", url)
-            return [TextContent(type="text", text=f"Cannot download PDF from {url}: no direct PDF path or citation_pdf_url meta tag found.")]
+    else:
+        fetch_url = url
+        # Step 4: If not a direct .pdf path, try multi-step citation_pdf_url extraction
+        if not urlparse(fetch_url).path.lower().endswith(".pdf"):
+            citation_url = extract_citation_pdf_url(fetch_url)
+            if citation_url:
+                logger.info("Multi-step citation_pdf_url: %s → %s", fetch_url, citation_url)
+                fetch_url = citation_url
+            else:
+                logger.info("No PDF path found for: %s", url)
+                return [TextContent(type="text", text=f"Cannot download PDF from {url}: no direct PDF path or citation_pdf_url meta tag found.")]
 
     # Step 5: Stream download
     try:
