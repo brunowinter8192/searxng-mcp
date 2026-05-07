@@ -19,6 +19,7 @@ from src.scraper.scrape_url import scrape_url_workflow
 from src.scraper.scrape_url_raw import scrape_url_raw_workflow
 from src.crawler.explore_site import explore_site_workflow
 from src.scraper.download_pdf import download_pdf_workflow
+from src.scraper.pdf_chain import should_download_as_pdf
 from mcp.types import TextContent
 
 atexit.register(kill_stale_chrome)
@@ -151,7 +152,7 @@ def main():
             return
 
     elif args.cmd == "scrape_url":
-        if args.url.endswith(".pdf"):
+        if should_download_as_pdf(args.url):
             result = download_pdf_workflow(args.url, str(Path.home() / "Downloads"))
         elif blocked := check_plugin_routed(args.url):
             result = blocked
@@ -159,7 +160,7 @@ def main():
             result = asyncio.run(scrape_url_workflow(args.url, args.max_content_length))
 
     elif args.cmd == "scrape_url_raw":
-        if args.url.endswith(".pdf"):
+        if should_download_as_pdf(args.url):
             result = download_pdf_workflow(args.url, str(Path.home() / "Downloads"))
         elif blocked := check_plugin_routed(args.url):
             result = blocked

@@ -38,7 +38,7 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 7 tools (search_web, search_batch, search_more, scrape_url, scrape_url_raw, explore_site, download_pdf). `scrape_url` and `scrape_url_raw` auto-route `.pdf` URLs to `download_pdf` (default `~/Downloads/`). |
+| **CLI** | `cli.py` via argparse + `~/.local/bin/searxng-cli` wrapper | 7 tools (search_web, search_batch, search_more, scrape_url, scrape_url_raw, explore_site, download_pdf). `scrape_url` and `scrape_url_raw` auto-route TIER1 domains (arxiv, aclanthology, openreview) + direct `.pdf` URLs (excl. GitHub blob) to `download_pdf` via `should_download_as_pdf()`. `download_pdf_workflow` resolves the full chain: HARD_BLACKLIST skip → GitHub blob skip → TIER1 URL transform → DIRECT `.pdf` download → MULTI_STEP `citation_pdf_url` two-hop (57% success on eligible domains). Chain logic in `src/scraper/pdf_chain.py`. |
 
 ### Key Files
 
@@ -52,7 +52,8 @@ See [sources/sources.md](sources/sources.md).
 | `src/search/engines/` | Per-engine parsers: `google.py`, `scholar.py`, `crossref.py`, `duckduckgo.py`, `mojeek.py`, `lobsters.py`, `openalex.py`, `stack_exchange.py` |
 | `src/scraper/scrape_url.py` | URL scraping (filtered) |
 | `src/scraper/scrape_url_raw.py` | Raw URL scraping (for RAG indexing) |
-| `src/scraper/download_pdf.py` | PDF file download |
+| `src/scraper/pdf_chain.py` | PDF URL chain resolution (blacklist, TIER1 transforms, citation_pdf_url multi-step) |
+| `src/scraper/download_pdf.py` | PDF file download (uses pdf_chain.py for URL resolution) |
 | `src/routing.py` | Plugin domain routing |
 | `src/crawler/crawl_site.py` | Full website crawl with markdown export |
 | `src/crawler/explore_site.py` | URL discovery — backend for `searxng-cli explore_site` + /crawl-site pipeline |

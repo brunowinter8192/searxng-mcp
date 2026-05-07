@@ -11,13 +11,21 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 import httpx
 
 SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
+from src.scraper.pdf_chain import (
+    HARD_BLACKLIST,
+    TIER1_DOMAINS,
+    apply_tier1_transform,
+    is_blacklisted,
+    is_github_blob,
+    parse_citation_pdf_url,
+)
 from src.search.browser import close_browser
 from src.search.merge import _merge_and_rank
 from src.search.result import SearchResult
@@ -34,20 +42,6 @@ DOWNLOAD_TIMEOUT = 15.0
 HTML_READ_BYTES = 32 * 1024
 
 USER_AGENT = "Mozilla/5.0 (compatible; research-probe/1.0)"
-
-HARD_BLACKLIST = frozenset({
-    "books.google.com", "jstor.org", "ieeexplore.ieee.org", "muse.jhu.edu",
-    "search.proquest.com", "scribd.com", "nature.com", "search.ebscohost.com",
-    "spiedigitallibrary.org", "semanticscholar.org", "openalex.org",
-})
-
-TIER1_DOMAINS = frozenset({"arxiv.org", "aclanthology.org", "openreview.net"})
-
-CITATION_PDF_RE = re.compile(
-    r'<meta[^>]+name=["\']citation_pdf_url["\'][^>]+content=["\']([^"\']+)["\']'
-    r'|<meta[^>]+content=["\']([^"\']+)["\'][^>]+name=["\']citation_pdf_url["\']',
-    re.IGNORECASE,
-)
 
 
 # ORCHESTRATOR
@@ -141,7 +135,7 @@ async def _process_url_with_cap(
         if chain_path == "DIRECT":
             row = await _direct_download(client, result, rank, url)
         else:  # TIER1
-            transformed = _apply_transform(url)
+            transformed = apply_tier1_transform(url)
             row = await _tier1_download(client, result, rank, transformed or url)
         await asyncio.sleep(COURTESY_SLEEP)
     rows[idx] = row
@@ -149,7 +143,7 @@ async def _process_url_with_cap(
 
 # Return (chain_path, target_domain) for a URL
 def _classify_chain_path(url: str, domain: str) -> tuple[str, str]:
-    if domain in HARD_BLACKLIST or any(domain.endswith("." + b) for b in HARD_BLACKLIST):
+    if is_blacklisted(url) or is_github_blob(url):
         return "BLACKLIST", domain
     if domain in TIER1_DOMAINS or any(domain.endswith("." + t) for t in TIER1_DOMAINS):
         return "TIER1", domain
@@ -243,8 +237,7 @@ async def _extract_citation_pdf_url(client: httpx.AsyncClient, url: str) -> str 
                 if sum(len(c) for c in body_chunks) >= HTML_READ_BYTES:
                     break
         body_str = b"".join(body_chunks).decode("utf-8", errors="replace")
-        m = CITATION_PDF_RE.search(body_str)
-        return (m.group(1) or m.group(2)) if m else None
+        return parse_citation_pdf_url(body_str)
     except Exception:
         return None
 
@@ -277,27 +270,6 @@ def _extract_filename_from_resp(headers: httpx.Headers, url: str) -> str:
     if basename and basename.lower().endswith(".pdf"):
         return basename
     return f"download_{int(time.time())}.pdf"
-
-
-# Apply Tier-1 URL transform; return transformed URL or None
-def _apply_transform(url: str) -> str | None:
-    parsed = urlparse(url)
-    domain = parsed.netloc.lower()
-    if domain.startswith("www."):
-        domain = domain[4:]
-    if domain == "arxiv.org":
-        if re.match(r"^/(abs|html)/", parsed.path):
-            return urlunparse(parsed._replace(path=re.sub(r"^/(abs|html)/", "/pdf/", parsed.path)))
-        return None
-    if domain == "aclanthology.org":
-        if parsed.path.lower().endswith(".pdf"):
-            return None
-        return urlunparse(parsed._replace(path=parsed.path.rstrip("/") + ".pdf"))
-    if domain == "openreview.net":
-        if parsed.path == "/forum":
-            return urlunparse(parsed._replace(path="/pdf"))
-        return None
-    return None
 
 
 # Strip www. from netloc
