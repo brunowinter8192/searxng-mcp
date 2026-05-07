@@ -2,7 +2,7 @@
 
 ## Role
 
-Production-mode smoke test suite for all 8 active search engines. Each per-engine smoke invokes the production engine class from `src/search/engines/` directly — no standalone pydoll setup, rate-limiter active, selectors and config internal to the engine class. Multi-engine smoke (`05`) fans out across all engines in parallel via `asyncio.gather`. `config.yml` retained for run parameters used by `02_burst_smoke.py` only.
+Production-mode smoke test suite for all 9 active search engines. Each per-engine smoke invokes the production engine class from `src/search/engines/` directly — no standalone pydoll setup, rate-limiter active, selectors and config internal to the engine class. Multi-engine smoke (`05`) fans out across all engines in parallel via `asyncio.gather`. `config.yml` retained for run parameters used by `02_burst_smoke.py` only.
 
 ## Layout
 
@@ -32,6 +32,7 @@ Production-mode smoke test suite for all 8 active search engines. Each per-engin
 | `16_search_to_pdf_probe.py` | End-to-end search-to-PDF chain probe. Takes queries via CLI, runs `search_web_workflow` directly, applies the full chain (Tier-1 transform / DIRECT .pdf / MULTI_STEP citation_pdf_url / BLACKLIST), saves real PDFs to `~/Downloads/`. Per-query report with chain-path distribution + downloaded files. Imports chain logic from `src/scraper/pdf_chain.py` post-migration. CLI flags: `--top-n N`, queries as positional args. Used as regression check after pdf_chain refactors. |
 | `18_uniform_timing_probe.py` | Uniform timing data collection — runs all 8 engines × 12 queries with monkey-patch instrumentation to capture per-engine page_load_ms / polling_cycles_used / http_request_ms / consent_fired / engine_search_total_ms plus preview URL fetch ms. Output `uniform_timing_probe_<ts>.md` with per-engine stats tables (min/mean/p50/p95/max), cross-engine maximum table (lock-in recommendations per dimension), per-query breakdown. Used to derive the uniform 3.6s lock-in values for src/search/ timeouts (max-observed = the value, no multiplier). |
 | `19_books_probe.py` | Empirical book-domain inventory — appends free word `book` to 12 thematically broad queries (tech classics, fiction, subject areas, DE queries) and runs them against Google, DDG, Mojeek (3 browser engines, max 100/200/200). No classification applied — raw domain pool observation. Output `books_probe_<ts>.md` to `01_reports/` with: per-query URL listings, global domain frequency table (count ≥ 2), top-30 inspection table (domain + 3 sample paths), per-engine top-15 distribution, run stats. Informs BOOK_WHITELIST/BLACKLIST design for the `--books` CLI flag (bead searxng-gpk). |
+| `21_semscholar_smoke.py` | Semantic Scholar production-mode smoke — imports `SemanticScholarEngine` from `src/`, calls `.search()` per query (pydoll browser, rate-limiter registered but acquire() in workflow not here), runs 30 baseline queries. Writes `semscholar_smoke_<ts>.md` to `01_reports/`. Status taxonomy: OK (≥3 results) / SUSPECT (1-2) / EMPTY / ERROR. Baseline 2026-05-07: 21/30 OK — EMPTY on dev-ops/consumer queries (expected, academic index) + burst-rate tail (queries 27-30 from no-throttle burst; production 4 req/min avoids). |
 | `20_docs_probe.py` | Empirical docs-domain probe — appends free word `documentation` to 12 broad tech queries and runs them against Google, DDG, Mojeek (max 100/200/200). Evaluates H1-H13 heuristics (docs subdomain, readthedocs, gitbook, notion, developer-subdomain, /docs/, /documentation/, /reference/, /guide/, /api/, /tutorial/, /manual/, /learn/) against the URL pool. Output `docs_probe_<ts>.md` to `01_reports/` with: per-query URL listings, global domain frequency (count ≥ 2), heuristic coverage matrix (per-heuristic count + % + per-engine breakdown), top-30 inspection table (domain + H-codes + 3 sample paths), miss-set analysis (domains count ≥ 2 matching no heuristic — new-heuristic candidates), per-engine top-15 distribution, run stats. Informs `--docs` whitelist/heuristic design (bead searxng-x4f). |
 | `inspect_query_log.py` | Quick summary of `src/logs/query_log.jsonl` — total record count, wall_ms min/mean/max, bottleneck-engine and TIMEOUT-hit counts, full per-engine breakdown of the most recent query (rate_wait_ms / search_ms / status / drop_reason / preview stats). CLI flag: `--tail N` to inspect the last N records. Used for spot-checking real query performance after the search_web_workflow logger went live. |
 | `_lib/` | Shared parser + text utilities — single source of truth for `KNOWN_ENGINES`, `parse_smoke_report`, `strip_bloat`, `lexical_density`, `detect_bloat`; consumed by `snippet_quality_analysis.py`, `engine_distribution_analysis.py`, `snippet_selection_simulator.py`. |
@@ -58,6 +59,7 @@ Production-mode smoke test suite for all 8 active search engines. Each per-engin
 | CrossRef | 30 | 0 | 0 | HTTP API, backoff only on 429/403 |
 | OpenAlex | 26 | 4 | 0 | HTTP API, 4 EMPTY on niche dev-tool queries |
 | Stack Exchange | 15 | 15 | 0 | HTTP API, 15 EMPTY on German + niche queries (expected) |
+| Semantic Scholar | 21 | 9 | 0 | pydoll; EMPTY on dev-ops/niche (academic index) + burst tail; baseline 2026-05-07 |
 
 **KPI:** 30/30 queries with results from ≥1 engine. Wall time <12 min.
 
@@ -147,4 +149,7 @@ STACK_EXCHANGE_API_KEY=your_key ./venv/bin/python3 dev/search_pipeline/10_stack_
 
 # Docs domain probe (12 queries × 3 engines × +documentation, ~4-6 min, output docs_probe_<ts>.md)
 ./venv/bin/python3 dev/search_pipeline/20_docs_probe.py
+
+# Semantic Scholar smoke (30 queries via SemanticScholarEngine, ~2.5 min burst / ~7.5 min at 4 req/min)
+./venv/bin/python3 dev/search_pipeline/21_semscholar_smoke.py
 ```
