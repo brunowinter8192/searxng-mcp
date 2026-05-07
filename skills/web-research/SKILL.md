@@ -87,6 +87,7 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 | --general | flag | off | Restrict output to GENERAL class slots only |
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
+| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download) |
 
 **Output:** Numbered list 1–20 — title, URL, snippet. Hard slot-allocated from the full ranked pool (~60–80 candidates): 12 GENERAL / 6 ACADEMIC / 2 QA. Underflow = fewer than 20 results when a class has insufficient supply. No overflow fill. Snippet source per URL is the highest-scoring candidate by `clean_len × lexical_density` across all engine snippets, og:description, and meta description (MIN_FLOOR=40 chars; best-of-worst fallback when all candidates are short). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
 
@@ -116,6 +117,19 @@ Use `--engines` to restrict to specific engines (e.g. `--engines "google scholar
 
 Class filter is part of the cache key. `search_more` must use the same flags as the original `search_web` call to get a cache hit.
 
+#### Books Lookup Mode
+
+`--books` restricts the search to Google, DuckDuckGo, and Mojeek, appends the free word `book` to the query, and post-filters results through a 68-domain whitelist (marketplaces, publishers, catalogs, aggregators, book-companion sites) plus path-pattern rules (`/dp/`, `/books/`, `/buch/`, `/library/view/`, etc.).
+
+```bash
+# Find books on a topic
+searxng-cli search_web --books "tolkien"
+searxng-cli search_web --books "harry potter"
+searxng-cli search_web --books "clean code" --language de
+```
+
+**Expected behavior:** ACADEMIC and QA slots will be empty (those engines are not queried). Some queries may return fewer than 20 results when the whitelist filters aggressively — that is accepted behavior. Paginate with `search_more --books "query"` to fetch cached pool beyond result 20.
+
 ### search_batch
 
 | Parameter | Type | Default | Description |
@@ -127,6 +141,7 @@ Class filter is part of the cache key. `search_more` must use the same flags as 
 | --general | flag | off | Restrict output to GENERAL class slots only |
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
+| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download) |
 
 **Output:** Results for each query in the same format as `search_web`, separated by `---`.
 
@@ -144,6 +159,7 @@ Class filter is part of the cache key. `search_more` must use the same flags as 
 | --general | flag | off | Must match the original search_web call (part of cache key) |
 | --academic | flag | off | Must match the original search_web call (part of cache key) |
 | --qa | flag | off | Must match the original search_web call (part of cache key) |
+| --books | flag | off | Must match the original search_web call (part of cache key) |
 
 **Output:** Next batch of URLs from the cached ranked pool (results 21+), numbered from 21 onward.
 
