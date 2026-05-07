@@ -11,6 +11,7 @@ from mcp.types import TextContent
 
 # From pdf_chain.py: URL chain resolution (blacklist, TIER1 transforms, multi-step citation_pdf_url)
 from src.scraper.pdf_chain import (
+    TIER1_DOMAINS,
     _base_domain,
     apply_tier1_transform,
     extract_citation_pdf_url,
@@ -46,8 +47,10 @@ def download_pdf_workflow(url: str, output_dir: str = str(Path.home() / "Downloa
         logger.info("TIER1 transform: %s → %s", url, fetch_url)
     else:
         fetch_url = url
-        # Step 4: If not a direct .pdf path, try multi-step citation_pdf_url extraction
-        if not urlparse(fetch_url).path.lower().endswith(".pdf"):
+        domain = _base_domain(fetch_url)
+        is_tier1 = domain in TIER1_DOMAINS or any(domain.endswith("." + t) for t in TIER1_DOMAINS)
+        # Step 4: If not a direct .pdf path AND not a TIER1 domain, try multi-step citation_pdf_url extraction
+        if not urlparse(fetch_url).path.lower().endswith(".pdf") and not is_tier1:
             citation_url = extract_citation_pdf_url(fetch_url)
             if citation_url:
                 logger.info("Multi-step citation_pdf_url: %s → %s", fetch_url, citation_url)
