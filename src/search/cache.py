@@ -18,9 +18,19 @@ DEFAULT_TTL = 3600  # 1 hour
 # FUNCTIONS
 
 # SHA-256 hex of canonical input string, first 16 chars
-def cache_key(query: str, language: str, engines: str | None, time_range: str | None, class_filter: frozenset[str] | None = None) -> str:
+# modifier_id is appended when set (e.g. 'books' for --books, future 'pdf' for --pdf/x4f).
+# modifier_id=None is backward-compatible — produces identical hash to pre-modifier callers.
+def cache_key(
+    query: str,
+    language: str,
+    engines: str | None,
+    time_range: str | None,
+    class_filter: frozenset[str] | None = None,
+    modifier_id: str | None = None,
+) -> str:
     cf = "|".join(sorted(class_filter)) if class_filter else ""
-    canonical = f"{query.lower().strip()}|{language}|{engines or ''}|{time_range or ''}|{cf}"
+    mid = f"|{modifier_id}" if modifier_id else ""
+    canonical = f"{query.lower().strip()}|{language}|{engines or ''}|{time_range or ''}|{cf}{mid}"
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 
 

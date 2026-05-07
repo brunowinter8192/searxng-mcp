@@ -45,6 +45,10 @@ def main():
     p.add_argument("--general",  action="store_true", help="Restrict output slots to GENERAL class")
     p.add_argument("--academic", action="store_true", help="Restrict output slots to ACADEMIC class")
     p.add_argument("--qa",       action="store_true", help="Restrict output slots to QA class")
+    # Future: --pdf (bead x4f) will be mutually exclusive with --books.
+    # Replace these two add_argument calls with add_mutually_exclusive_group() when x4f lands.
+    p.add_argument("--books",    action="store_true",
+                   help="Restrict to book-domain whitelist (Google, DDG, Mojeek only, +book modifier)")
 
     # ── search_batch ──────────────────────────────────────────────────────────
     p = sub.add_parser(
@@ -59,6 +63,8 @@ def main():
     p.add_argument("--general",  action="store_true", help="Restrict output slots to GENERAL class")
     p.add_argument("--academic", action="store_true", help="Restrict output slots to ACADEMIC class")
     p.add_argument("--qa",       action="store_true", help="Restrict output slots to QA class")
+    p.add_argument("--books",    action="store_true",
+                   help="Restrict to book-domain whitelist (Google, DDG, Mojeek only, +book modifier)")
 
     # ── search_more ───────────────────────────────────────────────────────────
     p = sub.add_parser(
@@ -73,6 +79,7 @@ def main():
     p.add_argument("--general",  action="store_true", help="Must match original search_web call (part of cache key)")
     p.add_argument("--academic", action="store_true", help="Must match original search_web call (part of cache key)")
     p.add_argument("--qa",       action="store_true", help="Must match original search_web call (part of cache key)")
+    p.add_argument("--books",    action="store_true", help="Must match original search_web call (part of cache key)")
 
     # ── scrape_url ────────────────────────────────────────────────────────────
     p = sub.add_parser("scrape_url", help="Scrape URL to filtered markdown (PruningContentFilter).")
@@ -109,14 +116,16 @@ def main():
         selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
         class_filter = selected if selected else None
         result = asyncio.run(search_web_workflow(
-            args.query, args.language, args.time_range, args.engines, class_filter=class_filter
+            args.query, args.language, args.time_range, args.engines,
+            class_filter=class_filter, books=args.books,
         ))
 
     elif args.cmd == "search_batch":
         selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
         class_filter = selected if selected else None
         results = asyncio.run(search_batch_workflow(
-            args.queries, args.language, args.time_range, args.engines, class_filter=class_filter
+            args.queries, args.language, args.time_range, args.engines,
+            class_filter=class_filter, books=args.books,
         ))
         print("\n---\n".join(r[0].text for r in results))
         return
@@ -124,7 +133,8 @@ def main():
     elif args.cmd == "search_more":
         selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
         class_filter = selected if selected else None
-        key = cache_key(args.query, args.language, args.engines, args.time_range, class_filter=class_filter)
+        key = cache_key(args.query, args.language, args.engines, args.time_range, class_filter=class_filter,
+                        modifier_id="books" if args.books else None)
         hit = cache_read(key)
         if hit is not None:
             urls = hit.get("urls", [])
@@ -138,7 +148,8 @@ def main():
         else:
             # Cache miss or expired — run fresh search, cache is written as side effect
             fresh = asyncio.run(search_web_workflow(
-                args.query, args.language, args.time_range, args.engines, class_filter=class_filter
+                args.query, args.language, args.time_range, args.engines,
+                class_filter=class_filter, books=args.books,
             ))
             hit2 = cache_read(key)
             if hit2:

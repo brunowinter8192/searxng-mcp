@@ -25,6 +25,8 @@ from src.search.snippet import _select_snippet
 from src.search.merge import _merge_and_rank
 # From query_logger.py: append-only JSONL query log
 from src.search.query_logger import log_query
+# From book_whitelist.py: domain whitelist + path rules for --books mode
+from src.search.book_whitelist import is_book_url
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,10 @@ ENGINES = {
     "stack_exchange": StackExchangeEngine(),
 }
 
+# --books mode: restrict to general-web engines and append '+book' modifier
+_BOOKS_ENGINES = frozenset({"google", "duckduckgo", "mojeek"})
+_BOOKS_MODIFIER: Callable[[str], str] = lambda q: f"{q} book"
+
 
 # ORCHESTRATOR
 
@@ -67,10 +73,14 @@ async def search_web_workflow(
     class_filter: frozenset[str] | None = None,
     engine_timeout: float | None = None,
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
+    books: bool = False,
 ) -> list[TextContent] | tuple[list[TextContent], dict]:
     t_total = time.perf_counter()
-    logger.info("Searching: %s (language=%s)", query, language)
+    logger.info("Searching: %s (language=%s, books=%s)", query, language, books)
     selected = _select_engines(engines)
+    if books:
+        selected = {k: v for k, v in selected.items() if k in _BOOKS_ENGINES}
+        query_modifier_map = {name: _BOOKS_MODIFIER for name in _BOOKS_ENGINES}
     effective_timeout = engine_timeout if engine_timeout is not None else ENGINE_WATCHDOG_TIMEOUT
 
     # Engine fanout phase
@@ -102,6 +112,8 @@ async def search_web_workflow(
     # Merge-rank phase
     t0 = time.perf_counter()
     ranked, slot_counts = _merge_and_rank(raw_results, class_filter=class_filter)
+    if books:
+        ranked = [r for r in ranked if is_book_url(r.url)]
     merge_rank_ms = round((time.perf_counter() - t0) * 1000)
 
     # Preview phase (before cache_write so snippet_source is og-aware)
@@ -117,7 +129,8 @@ async def search_web_workflow(
     og_meta = {r.url: r.preview for r in top20 if r.preview}
 
     # Cache write phase
-    key = cache_key(query, language, engines, time_range, class_filter=class_filter)
+    key = cache_key(query, language, engines, time_range, class_filter=class_filter,
+                    modifier_id="books" if books else None)
     t0 = time.perf_counter()
     cache_write(key, ranked, query, language, engines, time_range,
                 snippet_sources=snippet_sources, slot_counts=slot_counts,
@@ -165,6 +178,7 @@ async def search_batch_workflow(
     engines: str | None = None,
     class_filter: frozenset[str] | None = None,
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
+    books: bool = False,
 ) -> list[list[TextContent]]:
     results = []
     try:
@@ -173,6 +187,7 @@ async def search_batch_workflow(
                 q, language, time_range, engines,
                 class_filter=class_filter,
                 query_modifier_map=query_modifier_map,
+                books=books,
             ))
     finally:
         await close_browser()
