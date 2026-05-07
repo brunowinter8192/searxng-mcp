@@ -29,6 +29,8 @@ from src.search.query_logger import log_query
 from src.search.book_whitelist import is_book_url
 # From pdf_filter.py: PDF host whitelist + path rules for --pdf mode
 from src.search.pdf_filter import is_pdf_url
+# From docs_filter.py: noise blacklist for --docs mode
+from src.search.docs_filter import is_docs_url
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,11 @@ _BOOKS_MODIFIER: Callable[[str], str] = lambda q: f"{q} book"
 _PDF_ENGINES = frozenset({"google", "duckduckgo", "mojeek", "google scholar"})
 _PDF_MODIFIER: Callable[[str], str] = lambda q: f"{q} pdf"
 
+# --docs mode: restrict to general-web engines, append 'documentation' modifier, post-filter via is_docs_url
+# Pure blacklist: blocks known noise (forums, blogs, code-hosting, tutorial sites), passes everything else
+_DOCS_ENGINES = frozenset({"google", "duckduckgo", "mojeek"})
+_DOCS_MODIFIER: Callable[[str], str] = lambda q: f"{q} documentation"
+
 
 # ORCHESTRATOR
 
@@ -84,12 +91,19 @@ async def search_web_workflow(
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
     books: bool = False,
     pdf: bool = False,
+    docs: bool = False,
 ) -> list[TextContent] | tuple[list[TextContent], dict]:
     t_total = time.perf_counter()
-    if books and pdf:
-        logger.warning("books=True and pdf=True both set — pdf takes precedence; ignoring books")
-        books = False
-    logger.info("Searching: %s (language=%s, books=%s, pdf=%s)", query, language, books, pdf)
+    # 3-way mutex: pdf > docs > books (cli enforces mutex; guard here for direct callers)
+    if sum([books, pdf, docs]) > 1:
+        if pdf:
+            logger.warning("Multiple mode flags set — pdf takes precedence; ignoring books/docs")
+            books = False
+            docs = False
+        elif docs:
+            logger.warning("Multiple mode flags set — docs takes precedence; ignoring books")
+            books = False
+    logger.info("Searching: %s (language=%s, books=%s, pdf=%s, docs=%s)", query, language, books, pdf, docs)
     selected = _select_engines(engines)
     if books:
         selected = {k: v for k, v in selected.items() if k in _BOOKS_ENGINES}
@@ -97,6 +111,9 @@ async def search_web_workflow(
     if pdf:
         selected = {k: v for k, v in selected.items() if k in _PDF_ENGINES}
         query_modifier_map = {name: _PDF_MODIFIER for name in _PDF_ENGINES}
+    if docs:
+        selected = {k: v for k, v in selected.items() if k in _DOCS_ENGINES}
+        query_modifier_map = {name: _DOCS_MODIFIER for name in _DOCS_ENGINES}
     effective_timeout = engine_timeout if engine_timeout is not None else ENGINE_WATCHDOG_TIMEOUT
 
     # Engine fanout phase
@@ -132,6 +149,8 @@ async def search_web_workflow(
         ranked = [r for r in ranked if is_book_url(r.url)]
     if pdf:
         ranked = [r for r in ranked if is_pdf_url(r.url)]
+    if docs:
+        ranked = [r for r in ranked if is_docs_url(r.url)]
     merge_rank_ms = round((time.perf_counter() - t0) * 1000)
 
     # Preview phase (before cache_write so snippet_source is og-aware)
@@ -148,7 +167,7 @@ async def search_web_workflow(
 
     # Cache write phase
     key = cache_key(query, language, engines, time_range, class_filter=class_filter,
-                    modifier_id="books" if books else ("pdf" if pdf else None))
+                    modifier_id="books" if books else ("pdf" if pdf else ("docs" if docs else None)))
     t0 = time.perf_counter()
     cache_write(key, ranked, query, language, engines, time_range,
                 snippet_sources=snippet_sources, slot_counts=slot_counts,
@@ -198,6 +217,7 @@ async def search_batch_workflow(
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
     books: bool = False,
     pdf: bool = False,
+    docs: bool = False,
 ) -> list[list[TextContent]]:
     results = []
     try:
@@ -208,6 +228,7 @@ async def search_batch_workflow(
                 query_modifier_map=query_modifier_map,
                 books=books,
                 pdf=pdf,
+                docs=docs,
             ))
     finally:
         await close_browser()
