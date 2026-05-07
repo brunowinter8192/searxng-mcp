@@ -85,6 +85,33 @@ cd /Users/brunowinter2000/Documents/ai/Mineru && \
 
 If INPUT is a directory: loop over `*.pdf`, derive STEM per file (read first page or arxiv abstract if filename is cryptic), run convert per file. Report progress: `[N/M] <STEM>: phase 0 done`.
 
+**Concrete loop template — use exactly this shape, including both guards:**
+
+```bash
+for PDF in "$PDF_DIR"/*.pdf; do
+    STEM="<derive descriptive PascalCase name — see Note below>"
+    # GUARD 1 — empty STEM means "$OUTPUT_DIR/.md" which silently overwrites every iteration
+    [ -z "$STEM" ] && { echo "BUG: empty STEM for $PDF — abort batch"; exit 1; }
+    cd /Users/brunowinter2000/Documents/ai/Mineru && \
+        ./venv/bin/python workflow.py convert \
+            --input "$PDF" \
+            --output "$OUTPUT_DIR/$STEM.md"
+    # GUARD 2 — convert may exit 0 but produce empty/missing output
+    [ -s "$OUTPUT_DIR/$STEM.md" ] || { echo "WARNING: empty or missing output for $STEM"; }
+done
+```
+
+Note on STEM derivation: cannot be `basename "$PDF" .pdf` mechanically — original filenames are often hashes, ISBN-strings, library-uploader patterns. Derive a descriptive PascalCase name per file: read the first page header / title metadata, condense to ~30 chars (e.g. `AslamMontague2001MetasearchModels`, `ManningRaghavanSchutze2008IRTextbook`). Filename collisions inside one batch must be avoided — append year or first-author-initial when needed.
+
+**Why both guards matter:** an empty `$STEM` at line 4 produces output path `$OUTPUT_DIR/.md`. MinerU happily writes to it, exits 0, and the next iteration overwrites the same file. Without GUARD 1, ten papers collapse into one `.md` and the bug is invisible until the directory is listed. GUARD 2 catches the rarer case where MinerU silently produces an empty file — index-time would skip it without explanation.
+
+**ZSH trap to know about — bash assoc-arrays don't transfer.** A natural-looking pattern is `declare -A STEMS; STEMS["MyFile.pdf"]="MyStem"; for f in *.pdf; do stem="${STEMS[$f]}"; ...; done`. This works in bash. In zsh (default macOS shell, default in worker tmux sessions) `${STEMS[$f]}` does NOT expand when the key contains `.` or `-` — `$stem` silently becomes empty, GUARD 1 fires, and the batch aborts. Two safer patterns:
+
+1. **Python script for any batch >3 files** (recommended): zero shell-quoting risk, easy to add per-file timing/error handling, single tool-call per batch. Build a small `subprocess.run([...])` loop over a `dict[str, str]` of `pdf_basename → stem` mappings.
+2. **Bash-only loop with literal stems** (small batches): write the STEM literally inside the loop body per file, avoid associative arrays entirely.
+
+Do NOT carry a bash assoc-array pattern into a zsh worker session expecting it to work — the GUARD will catch it but the whole batch is wasted.
+
 If MinerU fails for any PDF: log + skip + continue. Report failed PDFs at end.
 
 ---
