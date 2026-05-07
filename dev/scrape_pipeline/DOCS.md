@@ -30,6 +30,24 @@ Quality monitoring and configuration testing for the URL scraper module.
 ./venv/bin/python dev/scrape_pipeline/02_raw_smoke.py --input dev/search_pipeline/01_reports/pipeline_smoke_<ts>.md --query 24
 ```
 
+## Tests
+
+### test_pdf_chain.py + conftest.py
+
+**Purpose:** Pytest test suite for `src/scraper/pdf_chain.py` and `download_pdf_workflow`. Two layers: (a) **Unit tests** (no network) covering pure-function regression guards on `apply_tier1_transform`, `is_blacklisted`, `is_github_blob`, `should_download_as_pdf`, `parse_citation_pdf_url` — 52 trivial-but-meaningful asserts. (b) **Integration tests** marked `@pytest.mark.network`, gated by the `--network` flag — exercise `download_pdf_workflow` end-to-end against real arxiv/aclanthology/openreview URLs, assert real PDF bytes land in tmp_path. Plus blacklist + GitHub-blob error-path assertions.
+
+`conftest.py` registers the `network` marker and adds the `--network` CLI option.
+
+**Why this layering:** unit tests catch regressions if anyone refactors the constants/regexes; integration tests catch real-world contract failures (e.g. the TIER1 bypass bug from session 2026-05-07 where arxiv `/pdf/<id>` had no `.pdf` suffix and was wrongly routed to citation_pdf_url extraction).
+
+```bash
+# Unit tests only (default — no network)
+./venv/bin/python -m pytest dev/scrape_pipeline/test_pdf_chain.py
+
+# All including network integration tests
+./venv/bin/python -m pytest dev/scrape_pipeline/test_pdf_chain.py --network
+```
+
 ## Shared Config (pipeline root)
 
 ### domains.txt
