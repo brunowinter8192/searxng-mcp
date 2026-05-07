@@ -51,7 +51,7 @@ async def _fetch_results(query: str, max_results: int) -> list[dict] | None:
     mailto = os.environ.get("OPENALEX_MAILTO", "")
     if mailto:
         params["mailto"] = mailto
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=3.6) as client:
         response = await client.get(API_URL, params=params)
     if response.status_code in (429, 403):
         logger.warning("OpenAlex rate limited: %d", response.status_code)

@@ -49,7 +49,7 @@ class DuckDuckGoEngine(BaseEngine):
         tab = await new_tab()
         search_url = _build_url(query)
         try:
-            await tab.go_to(search_url, timeout=20)
+            await tab.go_to(search_url, timeout=3.0)
             if await _has_captcha(tab):
                 logger.warning("DuckDuckGo CAPTCHA detected for: %s", query)
                 limiter.backoff()
