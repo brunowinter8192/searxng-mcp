@@ -231,15 +231,34 @@ PYTHONUNBUFFERED=1 ./venv/bin/python workflow.py index-dir \
 
 This handles: server health check → start if needed → chunk → index → summary.
 
-### Live progress check (during indexing)
+### Wait for indexing to finish — match timer duration to expected wallclock
 
-Use `rag-cli progress` — queries the DB directly and shows per-document `done/total` plus percent. Pollable as often as you want.
+Indexing takes 30–90 minutes for typical book-sized collections. The default polling pattern `sleep 60 && rag-cli progress` is the single most expensive anti-pattern in worker orchestration: each `Bash(run_in_background=true)` completion arriving while an API stream is open fires a new REQ, cancels the in-flight stream client-side, and gets billed input + cache-read. A 60-minute index with 60s polls = ~60 cascade events. **Never** set a short timer for a long-running job.
+
+Two correct patterns, depending on whether anything follows the indexer:
+
+**A) Indexing is the last work step before the completion checklist** — wait passively. ONE backgrounded bash fires ONE completion when the indexer is gone:
 
 ```bash
-rag-cli progress "$COLLECTION"
+# Run as Bash(run_in_background=true)
+( while pgrep -f 'workflow.py index-dir' > /dev/null 2>&1; do sleep 30; done; echo INDEXING_DONE ) &
+wait
 ```
 
-Output shape:
+The `sleep 30` *inside* the loop is normal blocking sleep — it does NOT trigger CC tool-completion events. CC sees ONE backgrounded call, ONE completion at the very end. Zero cascade.
+
+**B) More steps follow after the indexer (e.g. sample-query verification, cleanup pass on an output dir)** — set ONE timer that approximates the expected remaining wallclock. **The timer duration must match the work, not a default like 60–120s.** For a 29-minute remaining run, set the timer to ~25 minutes. ONE completion fires, then check `rag-cli progress`. If more time needed, set another sized-to-remaining timer. Never fire 14 short timers for a single long run.
+
+If the user asks "how far?" at any moment, do ONE manual `rag-cli progress "$COLLECTION"` in foreground — that is fine. The anti-pattern is *automated repeated short polling*, not a single user-triggered status read.
+
+After indexing completes, run the post-checks:
+
+```bash
+rag-cli progress "$COLLECTION"          # all docs must show done == total
+tail -30 /tmp/${COLLECTION}_index.log    # confirm "Done: M files, N chunks chunked, N chunks indexed"
+```
+
+**Output shape of `rag-cli progress`:**
 
 ```
 Indexing Progress: <COLLECTION>
@@ -251,12 +270,6 @@ Indexing Progress: <COLLECTION>
 ```
 
 A document is currently being indexed when its row shows `done < total`. Documents not yet started don't appear in the table at all. Documents with `done == total` are committed.
-
-**Polling pattern:** every ~60s during the run, capture `rag-cli progress "$COLLECTION"` output, diff against the previous capture. If `done` numbers are growing → indexing is alive. If unchanged for 2+ polls → check the log for stalls or exits:
-
-```bash
-tail -30 /tmp/${COLLECTION}_index.log
-```
 
 ### Failure check (after indexing done)
 
