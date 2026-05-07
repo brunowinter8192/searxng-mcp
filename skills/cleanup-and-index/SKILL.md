@@ -202,6 +202,26 @@ Stop when:
 
 Identical for both modes. Run as background job with `PYTHONUNBUFFERED=1` so the worker stays responsive (foreground would block on the long-running embed phase) and the log fills line-by-line for post-mortem if needed.
 
+### Pre-run: clean up partial chunks from prior killed runs
+
+If a previous `index-dir` run was killed mid-document, the `documents` table contains partial chunks for that document. The next `index-dir` run handles that *for documents whose chunks.json hash changed*, but if the hash is unchanged it sees a "fresh" indexed-files entry and SKIPS — leaving the partial in place forever.
+
+Check first:
+
+```bash
+rag-cli progress "$COLLECTION"
+```
+
+Any document showing `done < total` was interrupted mid-write. Delete those before re-running:
+
+```bash
+rag-cli delete --collection "$COLLECTION" --document "<doc>.md"
+```
+
+Don't pass `--remove-source` here — the `.md` is fine, only the partial DB rows need to go.
+
+### Run indexing
+
 ```bash
 cd ~/Documents/ai/Meta/ClaudeCode/MCP/RAG && \
 PYTHONUNBUFFERED=1 ./venv/bin/python workflow.py index-dir \
@@ -211,14 +231,31 @@ PYTHONUNBUFFERED=1 ./venv/bin/python workflow.py index-dir \
 
 This handles: server health check → start if needed → chunk → index → summary.
 
-### Status check (during indexing)
+### Live progress check (during indexing)
 
-Single signal — chunk count in the DB. Grows during indexing, stable when done.
+Use `rag-cli progress` — queries the DB directly and shows per-document `done/total` plus percent. Pollable as often as you want.
 
 ```bash
-cd ~/Documents/ai/Meta/ClaudeCode/MCP/RAG && \
-./venv/bin/python cli.py list_collections | grep "$COLLECTION"
-# → "  $COLLECTION (N chunks)"
+rag-cli progress "$COLLECTION"
+```
+
+Output shape:
+
+```
+Indexing Progress: <COLLECTION>
+
+  Document                  Done / Total       %  Status
+  doc_a.md                   579 / 579    100.0%  done
+  doc_b.md                  1248 / 1390    89.8%  in-progress
+  doc_c.md                     0 / 0        0.0%  ...   (not yet started — won't appear)
+```
+
+A document is currently being indexed when its row shows `done < total`. Documents not yet started don't appear in the table at all. Documents with `done == total` are committed.
+
+**Polling pattern:** every ~60s during the run, capture `rag-cli progress "$COLLECTION"` output, diff against the previous capture. If `done` numbers are growing → indexing is alive. If unchanged for 2+ polls → check the log for stalls or exits:
+
+```bash
+tail -30 /tmp/${COLLECTION}_index.log
 ```
 
 ### Failure check (after indexing done)
@@ -227,7 +264,7 @@ cd ~/Documents/ai/Meta/ClaudeCode/MCP/RAG && \
 tail -20 /tmp/${COLLECTION}_index.log
 ```
 
-Confirm `M chunks chunked, M chunks indexed` — numbers must match. If a `⚠️  WARNING: ... chunks skipped due to NULL embeddings` block is present, investigate via the indexer log before treating the collection as complete.
+Confirm `M chunks chunked, M chunks indexed` — numbers must match. Cross-check with `rag-cli progress` — every document should show `done == total`. If a `⚠️  WARNING: ... chunks skipped due to NULL embeddings` block is present, investigate via the indexer log before treating the collection as complete.
 
 ### Verify
 
