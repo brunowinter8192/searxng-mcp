@@ -252,12 +252,19 @@ class TestDownloadPdfWorkflowIntegration:
         assert pdfs[0].read_bytes()[:4] == b"%PDF", "File does not start with %PDF magic bytes"
 
     def test_arxiv_abs_tier1_transform(self, tmp_path):
-        """arxiv /abs/ → TIER1 transform → /pdf/ → direct download (not citation_pdf_url branch).
-        This is the exact bug case: /pdf/2603.13277 has no .pdf suffix, which previously
-        triggered citation_pdf_url extraction, received application/pdf, returned None, and
-        reported 'no PDF path found'."""
+        """arxiv /abs/ → TIER1 transform → /pdf/ → direct download (not citation_pdf_url branch)."""
         from src.scraper.download_pdf import download_pdf_workflow
         result = download_pdf_workflow("https://arxiv.org/abs/2603.13277", str(tmp_path))
+        self._assert_downloaded(result, tmp_path)
+
+    def test_arxiv_pdf_direct_no_suffix(self, tmp_path):
+        """arxiv /pdf/<id> input (no .pdf suffix) → TIER1 transform returns None → is_tier1 guard
+        skips multi-step branch → direct download succeeds.
+        Regression: previously, citation_pdf_url extraction was invoked, server returned
+        application/pdf (not text/html), extract_citation_pdf_url returned None, workflow
+        reported 'no direct PDF path or citation_pdf_url meta tag found'. Bead a1a."""
+        from src.scraper.download_pdf import download_pdf_workflow
+        result = download_pdf_workflow("https://arxiv.org/pdf/2603.13277", str(tmp_path))
         self._assert_downloaded(result, tmp_path)
 
     def test_arxiv_html_tier1_transform(self, tmp_path):
