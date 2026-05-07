@@ -50,6 +50,8 @@ def main():
                    help="Restrict to book-domain whitelist (Google, DDG, Mojeek only, +book modifier)")
     mode_sw.add_argument("--pdf", action="store_true",
                    help="Restrict to PDF-domain whitelist (Google, DDG, Mojeek, Scholar only, +pdf modifier)")
+    mode_sw.add_argument("--docs", action="store_true",
+                   help="Restrict to docs-mode blacklist filter (Google, DDG, Mojeek only, +documentation modifier)")
 
     # ── search_batch ──────────────────────────────────────────────────────────
     p = sub.add_parser(
@@ -69,6 +71,8 @@ def main():
                    help="Restrict to book-domain whitelist (Google, DDG, Mojeek only, +book modifier)")
     mode_sb.add_argument("--pdf", action="store_true",
                    help="Restrict to PDF-domain whitelist (Google, DDG, Mojeek, Scholar only, +pdf modifier)")
+    mode_sb.add_argument("--docs", action="store_true",
+                   help="Restrict to docs-mode blacklist filter (Google, DDG, Mojeek only, +documentation modifier)")
 
     # ── search_more ───────────────────────────────────────────────────────────
     p = sub.add_parser(
@@ -85,6 +89,7 @@ def main():
     p.add_argument("--qa",       action="store_true", help="Must match original search_web call (part of cache key)")
     p.add_argument("--books",    action="store_true", help="Must match original search_web call (part of cache key)")
     p.add_argument("--pdf",      action="store_true", help="Must match original search_web call (part of cache key)")
+    p.add_argument("--docs",     action="store_true", help="Must match original search_web call (part of cache key)")
 
     # ── scrape_url ────────────────────────────────────────────────────────────
     p = sub.add_parser("scrape_url", help="Scrape URL to filtered markdown (PruningContentFilter).")
@@ -122,7 +127,7 @@ def main():
         class_filter = selected if selected else None
         result = asyncio.run(search_web_workflow(
             args.query, args.language, args.time_range, args.engines,
-            class_filter=class_filter, books=args.books, pdf=args.pdf,
+            class_filter=class_filter, books=args.books, pdf=args.pdf, docs=args.docs,
         ))
 
     elif args.cmd == "search_batch":
@@ -130,7 +135,7 @@ def main():
         class_filter = selected if selected else None
         results = asyncio.run(search_batch_workflow(
             args.queries, args.language, args.time_range, args.engines,
-            class_filter=class_filter, books=args.books, pdf=args.pdf,
+            class_filter=class_filter, books=args.books, pdf=args.pdf, docs=args.docs,
         ))
         print("\n---\n".join(r[0].text for r in results))
         return
@@ -139,7 +144,7 @@ def main():
         selected = frozenset(c for c, f in [("general", args.general), ("academic", args.academic), ("qa", args.qa)] if f)
         class_filter = selected if selected else None
         key = cache_key(args.query, args.language, args.engines, args.time_range, class_filter=class_filter,
-                        modifier_id="books" if args.books else ("pdf" if args.pdf else None))
+                        modifier_id="books" if args.books else ("pdf" if args.pdf else ("docs" if args.docs else None)))
         hit = cache_read(key)
         if hit is not None:
             urls = hit.get("urls", [])
@@ -154,7 +159,7 @@ def main():
             # Cache miss or expired — run fresh search, cache is written as side effect
             fresh = asyncio.run(search_web_workflow(
                 args.query, args.language, args.time_range, args.engines,
-                class_filter=class_filter, books=args.books, pdf=args.pdf,
+                class_filter=class_filter, books=args.books, pdf=args.pdf, docs=args.docs,
             ))
             hit2 = cache_read(key)
             if hit2:
