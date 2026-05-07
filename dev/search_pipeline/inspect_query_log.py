@@ -31,15 +31,19 @@ def main() -> None:
     total_wall = [r["total_wall_ms"] for r in records]
     bottlenecks = Counter(r.get("bottleneck_engine") for r in records if r.get("bottleneck_engine"))
     timeouts: Counter = Counter()
+    rate_skips: Counter = Counter()
     for r in records:
         for eng, d in r.get("engines", {}).items():
             if d.get("status") == "TIMEOUT":
                 timeouts[eng] += 1
+            if d.get("status") == "RATE_SKIP":
+                rate_skips[eng] += 1
 
     print(f"Records      : {len(records)}")
     print(f"Wall ms      : min={min(total_wall)}  mean={sum(total_wall)//len(total_wall)}  max={max(total_wall)}")
     print(f"Bottlenecks  : {dict(bottlenecks.most_common(5))}")
     print(f"TIMEOUT hits : {dict(timeouts.most_common(5))}")
+    print(f"RATE_SKIP    : {dict(rate_skips.most_common(5))}")
     print(f"\nLast query   : {records[-1].get('query')}  ({records[-1].get('ts')})")
 
     prev = records[-1]

@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 
 SNIPPET_LENGTH = 5000
 ENGINE_WATCHDOG_TIMEOUT: float = 3.6
+RATE_WAIT_TIMEOUT: float = 5.0
 
 # Empirical per-engine ceilings (max_results_probe_20260507_024429.md)
 ENGINE_MAX_RESULTS: dict[str, int] = {
@@ -305,7 +306,11 @@ async def _engine_with_timing(
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
 ) -> tuple[list, int, int, str, str | None]:
     t_before_acquire = time.perf_counter()
-    await get_limiter(engine.name).acquire()
+    try:
+        await asyncio.wait_for(get_limiter(engine.name).acquire(), timeout=RATE_WAIT_TIMEOUT)
+    except asyncio.TimeoutError:
+        rate_wait_ms = round((time.perf_counter() - t_before_acquire) * 1000)
+        return [], rate_wait_ms, 0, "RATE_SKIP", f"rate_wait > {RATE_WAIT_TIMEOUT}s"
     rate_wait_ms = round((time.perf_counter() - t_before_acquire) * 1000)
     effective_query = query
     if query_modifier_map and engine.name in query_modifier_map:
