@@ -12,7 +12,7 @@ See [sources/sources.md](sources/sources.md).
 
 | Component | Implementation | Config |
 |-----------|---------------|--------|
-| **Engines (active)** | Google, Google Scholar, DuckDuckGo, Mojeek, Lobsters (pydoll); CrossRef, OpenAlex, Stack Exchange (HTTP) | 8-engine set; HN dropped 2026-05-04 (rate-limit-cascade-hostile); Bing dropped 2026-05-04 (DOM-drift, replaced by DDG which uses the Bing index); SE added 2026-05-04 |
+| **Engines (active)** | Google, Google Scholar, DuckDuckGo, Mojeek, Lobsters, Semantic Scholar (pydoll); CrossRef, OpenAlex, Stack Exchange (HTTP) | 9-engine set; HN dropped 2026-05-04 (rate-limit-cascade-hostile); Bing dropped 2026-05-04 (DOM-drift, replaced by DDG which uses the Bing index); SE added 2026-05-04; Semantic Scholar added 2026-05-07 (bead searxng-10y Step 1; browser-based, API tier 429s instantly) |
 | **Engines (plugin)** | ArXiv, GitHub, Reddit | discovery-only, content via MCP plugins |
 | **Browser** | pydoll Chrome (stealth fingerprint patches, per-engine JS selectors) | `src/search/browser.py`, `src/search/engines/`, `dev/search_pipeline/` smokes |
 | **Rate Limiting** | Token-bucket per engine, uniform 4 req/min; backoff only on CAPTCHA/HTTP-429/exception (not on EMPTY) | `src/search/rate_limiter.py` |
@@ -50,7 +50,7 @@ See [sources/sources.md](sources/sources.md).
 | `src/search/cache.py` | Disk cache for search results (sha256 key, 1h TTL, atomic write) |
 | `src/search/browser.py` | pydoll Chrome lifecycle (shared singleton) |
 | `src/search/rate_limiter.py` | Per-engine token bucket |
-| `src/search/engines/` | Per-engine parsers: `google.py`, `scholar.py`, `crossref.py`, `duckduckgo.py`, `mojeek.py`, `lobsters.py`, `openalex.py`, `stack_exchange.py` |
+| `src/search/engines/` | Per-engine parsers: `google.py`, `scholar.py`, `crossref.py`, `duckduckgo.py`, `mojeek.py`, `lobsters.py`, `openalex.py`, `stack_exchange.py`, `semantic_scholar.py` |
 | `src/scraper/scrape_url.py` | URL scraping (filtered) |
 | `src/scraper/scrape_url_raw.py` | Raw URL scraping (for RAG indexing) |
 | `src/scraper/pdf_chain.py` | PDF URL chain resolution (blacklist, TIER1 transforms, citation_pdf_url multi-step) |
@@ -86,7 +86,7 @@ searxng/
 ├── src/                            → [DOCS.md](src/DOCS.md)
 │   ├── routing.py                  → Plugin domain routing
 │   ├── search/                     → [DOCS.md](src/search/DOCS.md) — search engines (8 active: 5 browser + 3 API)
-│   │   └── engines/                → Per-engine parsers (google, scholar, duckduckgo, mojeek, lobsters, crossref, openalex, stack_exchange)
+│   │   └── engines/                → Per-engine parsers (google, scholar, duckduckgo, mojeek, lobsters, crossref, openalex, stack_exchange, semantic_scholar)
 │   ├── scraper/                    → [DOCS.md](src/scraper/DOCS.md)
 │   ├── crawler/                    → [DOCS.md](src/crawler/DOCS.md) — CLI-only (`/crawl-site` pipeline)
 │   └── spawn/                      → Worker spawn utilities (in src/DOCS.md)

@@ -17,6 +17,7 @@ from src.search.engines.mojeek import MojeekEngine
 from src.search.engines.lobsters import LobstersEngine
 from src.search.engines.openalex import OpenAlexEngine
 from src.search.engines.stack_exchange import StackExchangeEngine
+from src.search.engines.semantic_scholar import SemanticScholarEngine
 from src.search.rate_limiter import get_limiter
 from src.search.result import SearchResult
 # From snippet.py: score-based snippet selection
@@ -47,6 +48,7 @@ ENGINE_MAX_RESULTS: dict[str, int] = {
     "openalex": 200,        # per_page= API param; documented max 200
     "crossref": 200,        # rows= API param; documented max 1000, practical 200
     "stack_exchange": 100,  # pagesize= API param; hard cap 100
+    "semantic_scholar": 10, # 10/page hardcoded by SS UI; no override param
 }
 
 ENGINES = {
@@ -58,6 +60,7 @@ ENGINES = {
     "lobsters": LobstersEngine(),
     "openalex": OpenAlexEngine(),
     "stack_exchange": StackExchangeEngine(),
+    "semantic_scholar": SemanticScholarEngine(),
 }
 
 # --books mode: restrict to general-web engines and append '+book' modifier
