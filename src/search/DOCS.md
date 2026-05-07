@@ -4,6 +4,8 @@ pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXN
 
 **Active engines (9):** google, google scholar, duckduckgo, mojeek, lobsters, semantic_scholar (pydoll); crossref, openalex, stack_exchange (HTTP). See `decisions/stealth00_engine_status.md` for the drop decision on brave / startpage / bing. See `decisions/search05_engine_expansion.md` for DDG + Mojeek + Lobsters + OpenAlex + SE integration rationale (HN + Bing dropped 2026-05-04, Marginalia deferred). Semantic Scholar added 2026-05-07 (bead searxng-10y Step 1).
 
+**Filter-flag trio (`--books` / `--pdf` / `--docs`)** — three filter flags landed 2026-05-07 (beads gpk / x4f / 8gc closed). Each restricts the engine set + applies a query modifier + post-`_merge_and_rank` URL filter. Wiring in `search_web_workflow`: per-flag bool param (`books`, `pdf`, `docs`) → engine-restrict to `_BOOKS_ENGINES` / `_PDF_ENGINES` / `_DOCS_ENGINES` constant + set `query_modifier_map` to per-engine `+book` / `+pdf` / `+documentation` lambda + after `_merge_and_rank` apply `is_book_url` / `is_pdf_url` / `is_docs_url` filter + `cache_key(modifier_id="books"|"pdf"|"docs")`. 3-way mutex guard with precedence `pdf > docs > books` for programmatic callers; `cli.py` enforces mutex via `add_mutually_exclusive_group()` on search_web/search_batch parsers (search_more keeps separate independent flags for cache-key matching). Filter modules `book_whitelist.py` / `pdf_filter.py` / `docs_filter.py` documented as separate sections below. Underfill (some queries return <20 URLs after filter) is accepted by design — pooling-rethink for filter-mode is tracked in bead g82.
+
 ## search_web.py
 
 **Purpose:** Search orchestrator. Three entry points:
@@ -68,6 +70,27 @@ pydoll-based parallel search pipeline. Replaces the former `src/searxng/` SearXN
 **Input:** —
 **Output:** —
 
+## book_whitelist.py
+
+**Purpose:** `--books` CLI flag filter. Pure inclusion logic: URL passes if domain (or subdomain) is in `BOOK_WHITELIST` (68 domains across 5 categories: marketplaces/retailers, publishers, catalogs/archives, book-list aggregators, book-companion sites) OR path matches `BOOK_PATH_PATTERNS` (`/books/`, `/buecher/`, `/buch/`, `/book/show/`, `/dp/`, `/ebooks/`, `/detail/isbn-`, `/library/view/`, `/title/`, `/ebook/`). Path-rule false-positive guard: `_HOST_BLACKLIST` (github.com, gitlab.com, bitbucket.org, gist.github.com) — these match `/books/` paths in repos serving HTML viewers, never books. Blacklist checked BEFORE whitelist so blacklisted domains return False even if path matches. `is_book_url(url) -> bool` is the single export.
+**Input:** URL string.
+**Output:** Bool. Used by `search_web.search_web_workflow` post-`_merge_and_rank` filter when `books=True`.
+**Empirical basis:** Strawman whitelist derived from `dev/search_pipeline/01_reports/books_probe_20260507_213935.md` (12 broad queries × 3 general engines × +book modifier = 353 URLs, ~70 unique domains identified as book-fokussiert).
+
+## pdf_filter.py
+
+**Purpose:** `--pdf` CLI flag filter. Hybrid logic: URL passes if domain in `PDF_HOSTS` (14 domains: TIER1 transform-yields-PDF arxiv/aclanthology/openreview, OA preprint servers biorxiv/medrxiv/chemrxiv/osf, OA publishers mdpi/pmc, specialty repos inspirehep/zenodo/hal/europepmc) OR path matches `PDF_PATH_PATTERNS` (`.pdf`, `/pdf/`, `/pdfs/`, `/content/pdf/`, `/_downloads/`). Subdomain wildcards via `endswith(".X")`. `_HOST_BLACKLIST` (7 hosts: github/gitlab — HTML viewers; books.google.com/scribd — HTML preview; semanticscholar.org/openalex.org/researchgate.net — HTML landing pages, 0% PDF_OK in probe) override path-rule matches. `is_pdf_url(url) -> bool`. **Note for bead bzh:** the BLACKLIST excludes alt-access hosts (semanticscholar etc.) by design; widening to admit them as "landing-page" tier is a separate roadmap item.
+**Input:** URL string.
+**Output:** Bool. Used by `search_web.search_web_workflow` post-merge filter when `pdf=True`.
+**Empirical basis:** `dev/search_pipeline/01_reports/free_word_injection_probe_20260507_033631.md` +pdf variant + `download_classify_*.md` PDF_OK rates per host + `src/scraper/pdf_chain.py` HARD_BLACKLIST.
+
+## docs_filter.py
+
+**Purpose:** `--docs` CLI flag filter. **Inverted blacklist logic** (only filter, no whitelist): URL passes UNLESS host (or subdomain) is in `DOCS_BLACKLIST_HOSTS` (17 noise sources: forums reddit/stackoverflow/bugs.python.org, blogs medium/youtube/dev.to, code-hosting github/gitlab/bitbucket, tutorial-community w3schools/geeksforgeeks/freecodecamp/codezup/riptutorial, document-preview/wiki slideshare/scribd/deepwiki) OR path contains a `DOCS_BLACKLIST_PATHS` substring (`/blog/`, `/community/`). `is_docs_url(url) -> bool` returns False on blacklist hit, True otherwise. Empirical decision (probe 2026-05-07): docs domain space is unbounded (every tool has its own `docs.X` URL pattern), but noise concentrates on ~17 known hosts → blacklist is the only sustainable approach. `digitalocean.com` deliberately NOT host-blacklisted (subdomain endswith match would kill `docs.digitalocean.com`); `/community/` path-pattern catches digitalocean.com/community/tutorials/.
+**Input:** URL string.
+**Output:** Bool. Used by `search_web.search_web_workflow` post-merge filter when `docs=True`.
+**Empirical basis:** `dev/search_pipeline/01_reports/docs_probe_20260507_225321.md` — 12 broad tech queries × 3 general engines × +documentation modifier = 337 URLs; H1-H13 heuristic coverage 39%, miss-set 61% drove the user decision toward blacklist-only.
+
 ## engines/
 
 Per-engine parser modules. Each exports an `Engine` class with `search(query, language, max_results)` returning `list[SearchResult]`.
@@ -103,8 +126,6 @@ Per-engine parser modules. Each exports an `Engine` class with `search(query, la
 ### engines/lobsters.py
 
 **Purpose:** Lobste.rs web search via pydoll (lobste.rs/search GET endpoint). Link-aggregator for tech/programming content — smaller index than general engines, bias toward quality technical posts. No consent handling, no CAPTCHA detection (none observed in DOM probe 2026-05-03), no URL cleaning (direct hrefs, no redirect wrapper). Rate-limit pre-registered at `max_requests=4, window_seconds=60` (uniform 4 req/min, normalized 2026-05-04). `limiter.backoff()` only on exception — not on EMPTY. Selectors: `li.story` (result containers), `a.u-url` (href + title text), `a.domain` (snippet — domain-as-displayed, may include path prefix for GitHub repos). Snippet = domain only by design; `og:description` from preview-fetch fills the description field downstream — verified live 2026-05-03.
-
-### engines/openalex.py
 
 ### engines/semantic_scholar.py
 
