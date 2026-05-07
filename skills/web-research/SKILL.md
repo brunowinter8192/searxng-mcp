@@ -87,8 +87,9 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 | --general | flag | off | Restrict output to GENERAL class slots only |
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
-| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download). Mutually exclusive with `--pdf` |
-| --pdf   | flag | off | Lookup PDF documents — restricts to PDF-serving host whitelist (no download). Mutually exclusive with `--books` |
+| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download). Mutually exclusive with `--pdf` / `--docs` |
+| --pdf   | flag | off | Lookup PDF documents — restricts to PDF-serving host whitelist (no download). Mutually exclusive with `--books` / `--docs` |
+| --docs  | flag | off | Lookup documentation pages — noise-blacklist filter (forums, blogs, code-hosting blocked). Mutually exclusive with `--books` / `--pdf` |
 
 **Output:** Numbered list 1–20 — title, URL, snippet. Hard slot-allocated from the full ranked pool (~60–80 candidates): 12 GENERAL / 6 ACADEMIC / 2 QA. Underflow = fewer than 20 results when a class has insufficient supply. No overflow fill. Snippet source per URL is the highest-scoring candidate by `clean_len × lexical_density` across all engine snippets, og:description, and meta description (MIN_FLOOR=40 chars; best-of-worst fallback when all candidates are short). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
 
@@ -152,6 +153,27 @@ searxng-cli search_batch --pdf "learned sparse retrieval" "dense retrieval BEIR"
 
 **Expected behavior:** Results are URLs that either live on a PDF-serving host (arxiv.org, aclanthology.org, etc.) or have a `.pdf` / `/pdf/` path. For arxiv.org results, the `download_pdf` command resolves `/abs/` → `/pdf/` automatically. For other URLs ending in `.pdf`, use `download_pdf` directly. Fewer than 20 results is normal for niche queries — this is accepted underfill behavior, not an error. Paginate with `search_more --pdf "query"` to fetch the cached pool beyond result 20.
 
+#### Docs Lookup Mode
+
+`--docs` restricts the search to Google, DuckDuckGo, and Mojeek, appends the free word `documentation` to the query, and post-filters results through a pure noise blacklist — blocking forums (reddit.com, stackoverflow.com), blogs (medium.com, dev.to), video (youtube.com), code-hosting (github.com, gitlab.com, bitbucket.org), tutorial/community sites (w3schools.com, geeksforgeeks.org, freecodecamp.org, codezup.com, riptutorial.com), and document-preview noise (slideshare.net, scribd.com, deepwiki.com). Everything NOT on the blacklist passes through — vendor docs, framework docs, API references, official guides, readthedocs sites, and any other documentation host.
+
+Mutually exclusive with `--books` and `--pdf`.
+
+```bash
+# Find documentation for a library or framework
+searxng-cli search_web --docs "react hooks"
+searxng-cli search_web --docs "kubernetes networking"
+searxng-cli search_web --docs "rust ownership"
+
+# Paginate cached docs results
+searxng-cli search_more --docs "react hooks"
+
+# Batch docs lookups in one warm-Chrome session
+searxng-cli search_batch --docs "fastapi routing" "pydantic v2 validators"
+```
+
+**Expected behavior:** Results are documentation pages (vendor docs, framework references, readthedocs, official guides). Forums, blogs, tutorial aggregators, and code-repo pages are filtered out. Fewer than 20 results is possible for niche or narrow queries — accepted underfill. Paginate with `search_more --docs "query"` to fetch the cached pool beyond result 20.
+
 ### search_batch
 
 | Parameter | Type | Default | Description |
@@ -163,8 +185,9 @@ searxng-cli search_batch --pdf "learned sparse retrieval" "dense retrieval BEIR"
 | --general | flag | off | Restrict output to GENERAL class slots only |
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
-| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download). Mutually exclusive with `--pdf` |
-| --pdf   | flag | off | Lookup PDF documents — restricts to PDF-serving host whitelist (no download). Mutually exclusive with `--books` |
+| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download). Mutually exclusive with `--pdf` / `--docs` |
+| --pdf   | flag | off | Lookup PDF documents — restricts to PDF-serving host whitelist (no download). Mutually exclusive with `--books` / `--docs` |
+| --docs  | flag | off | Lookup documentation pages — noise-blacklist filter (forums, blogs, code-hosting blocked). Mutually exclusive with `--books` / `--pdf` |
 
 **Output:** Results for each query in the same format as `search_web`, separated by `---`.
 
@@ -184,6 +207,7 @@ searxng-cli search_batch --pdf "learned sparse retrieval" "dense retrieval BEIR"
 | --qa | flag | off | Must match the original search_web call (part of cache key) |
 | --books | flag | off | Must match the original search_web call (part of cache key) |
 | --pdf   | flag | off | Must match the original search_web call (part of cache key) |
+| --docs  | flag | off | Must match the original search_web call (part of cache key) |
 
 **Output:** Next batch of URLs from the cached ranked pool (results 21+), numbered from 21 onward.
 
