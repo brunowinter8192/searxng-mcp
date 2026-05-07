@@ -97,6 +97,15 @@ BOOK_WHITELIST: frozenset[str] = frozenset({
     "eternalisedofficial.com",
 })
 
+# Code-hosting domains that should never match book rules even via path-pattern
+# (e.g. github.com/.../Books/.../foo.pdf would match '/books/' path rule otherwise)
+_HOST_BLACKLIST: frozenset[str] = frozenset({
+    "github.com",
+    "gitlab.com",
+    "bitbucket.org",
+    "gist.github.com",
+})
+
 # Path substrings that signal book content regardless of domain
 BOOK_PATH_PATTERNS: tuple[str, ...] = (
     "/books/",
@@ -117,6 +126,8 @@ BOOK_PATH_PATTERNS: tuple[str, ...] = (
 # True if URL belongs to the book whitelist (domain or subdomain) or matches a book path pattern
 def is_book_url(url: str) -> bool:
     d = _domain(url)
+    if d in _HOST_BLACKLIST or any(d.endswith("." + h) for h in _HOST_BLACKLIST):
+        return False
     if d in BOOK_WHITELIST:
         return True
     if any(d.endswith("." + h) for h in BOOK_WHITELIST):
