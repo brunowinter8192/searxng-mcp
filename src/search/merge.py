@@ -2,10 +2,10 @@
 from src.search.result import SearchResult
 
 GENERAL  = {"google", "duckduckgo", "mojeek"}
-ACADEMIC = {"google_scholar", "openalex", "crossref"}  # "google_scholar" matches ScholarEngine.name
+ACADEMIC = {"google_scholar", "openalex", "crossref", "semantic_scholar"}
 QA       = {"stack_exchange", "lobsters"}
 
-ACADEMIC_PRIORITY = {"openalex": 1, "google_scholar": 2, "crossref": 3}
+ACADEMIC_PRIORITY = {"openalex": 1, "google_scholar": 2, "crossref": 3, "semantic_scholar": 4}
 QA_PRIORITY       = {"stack_exchange": 1, "lobsters": 2}
 
 TARGET_GENERAL  = 12
