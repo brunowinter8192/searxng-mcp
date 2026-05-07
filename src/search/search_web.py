@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from mcp.types import TextContent
 
 from src.search.browser import close_browser
@@ -26,6 +27,18 @@ logger = logging.getLogger(__name__)
 
 SNIPPET_LENGTH = 5000
 
+# Empirical per-engine ceilings (max_results_probe_20260507_024429.md)
+ENGINE_MAX_RESULTS: dict[str, int] = {
+    "google": 100,          # server cap via num= URL param; DOM renders ~9-11
+    "google_scholar": 20,   # Scholar renders max ~20 per page
+    "duckduckgo": 10,       # no count param; post-fetch DOM slice only
+    "mojeek": 10,           # no count param; post-fetch DOM slice only
+    "lobsters": 20,         # no count param; pool is query-dependent
+    "openalex": 200,        # per_page= API param; documented max 200
+    "crossref": 200,        # rows= API param; documented max 1000, practical 200
+    "stack_exchange": 100,  # pagesize= API param; hard cap 100
+}
+
 ENGINES = {
     "google": GoogleEngine(),
     "google scholar": ScholarEngine(),
@@ -49,6 +62,7 @@ async def search_web_workflow(
     _with_timings: bool = False,
     class_filter: frozenset[str] | None = None,
     engine_timeout: float | None = None,
+    query_modifier_map: dict[str, Callable[[str], str]] | None = None,
 ) -> list[TextContent] | tuple[list[TextContent], dict]:
     t_total = time.perf_counter()
     logger.info("Searching: %s (language=%s)", query, language)
@@ -60,7 +74,7 @@ async def search_web_workflow(
     t_fanout = time.perf_counter()
     if _with_timings:
         names_and_engines = list(selected.items())
-        tasks = [_engine_with_timing(eng, query, language, 10, engine_timeout) for _, eng in names_and_engines]
+        tasks = [_engine_with_timing(eng, query, language, 10, engine_timeout, query_modifier_map=query_modifier_map) for _, eng in names_and_engines]
         timed = await asyncio.gather(*tasks)
         engine_details: dict[str, dict] = {}
         for (name, _), (eng_results, ms, status) in zip(names_and_engines, timed):
@@ -69,7 +83,7 @@ async def search_web_workflow(
             engine_ms[f"engine_{key}_ms"] = ms
             engine_details[key] = {"status": status, "ms": ms}
     else:
-        raw_results = await _query_engines_concurrent(query, language, 10, selected)
+        raw_results = await _query_engines_concurrent(query, language, 10, selected, query_modifier_map=query_modifier_map)
     engine_fanout_ms = round((time.perf_counter() - t_fanout) * 1000)
 
     # Merge-rank phase
@@ -123,11 +137,16 @@ async def search_batch_workflow(
     time_range: str | None = None,
     engines: str | None = None,
     class_filter: frozenset[str] | None = None,
+    query_modifier_map: dict[str, Callable[[str], str]] | None = None,
 ) -> list[list[TextContent]]:
     results = []
     try:
         for q in queries:
-            results.append(await search_web_workflow(q, language, time_range, engines, class_filter=class_filter))
+            results.append(await search_web_workflow(
+                q, language, time_range, engines,
+                class_filter=class_filter,
+                query_modifier_map=query_modifier_map,
+            ))
     finally:
         await close_browser()
     return results
@@ -166,8 +185,8 @@ def _select_engines(engines: str | None) -> dict:
 
 
 # Query selected engines concurrently, collect all SearchResult objects
-async def _query_engines_concurrent(query: str, language: str, max_results: int, selected: dict) -> list:
-    tasks = [_engine_with_timing(engine, query, language, max_results) for engine in selected.values()]
+async def _query_engines_concurrent(query: str, language: str, max_results: int, selected: dict, query_modifier_map: dict[str, Callable[[str], str]] | None = None) -> list:
+    tasks = [_engine_with_timing(engine, query, language, max_results, query_modifier_map=query_modifier_map) for engine in selected.values()]
     timed = await asyncio.gather(*tasks)
     combined = []
     for eng_results, _, _ in timed:
@@ -176,14 +195,19 @@ async def _query_engines_concurrent(query: str, language: str, max_results: int,
 
 
 # Wrap a single engine search call; return (results, elapsed_ms, status) — status: OK/EMPTY/TIMEOUT/ERROR
-async def _engine_with_timing(engine, query: str, language: str, max_results: int, timeout: float | None = None) -> tuple[list, int, str]:
+async def _engine_with_timing(engine, query: str, language: str, max_results: int, timeout: float | None = None, query_modifier_map: dict[str, Callable[[str], str]] | None = None) -> tuple[list, int, str]:
     await get_limiter(engine.name).acquire()
+    effective_query = query
+    if query_modifier_map and engine.name in query_modifier_map:
+        effective_query = query_modifier_map[engine.name](query)
+    logger.debug("Engine %s effective_query: %s", engine.name, effective_query)
+    effective_max = ENGINE_MAX_RESULTS.get(engine.name, max_results)
     t0 = time.perf_counter()
     try:
         if timeout is not None:
-            results = await asyncio.wait_for(engine.search(query, language, max_results), timeout=timeout)
+            results = await asyncio.wait_for(engine.search(effective_query, language, effective_max), timeout=timeout)
         else:
-            results = await engine.search(query, language, max_results)
+            results = await engine.search(effective_query, language, effective_max)
         ms = round((time.perf_counter() - t0) * 1000)
         return results, ms, "OK" if results else "EMPTY"
     except asyncio.TimeoutError:
