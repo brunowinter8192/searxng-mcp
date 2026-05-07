@@ -27,6 +27,8 @@ from src.search.merge import _merge_and_rank
 from src.search.query_logger import log_query
 # From book_whitelist.py: domain whitelist + path rules for --books mode
 from src.search.book_whitelist import is_book_url
+# From pdf_filter.py: PDF host whitelist + path rules for --pdf mode
+from src.search.pdf_filter import is_pdf_url
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +62,13 @@ ENGINES = {
 _BOOKS_ENGINES = frozenset({"google", "duckduckgo", "mojeek"})
 _BOOKS_MODIFIER: Callable[[str], str] = lambda q: f"{q} book"
 
+# --pdf mode: restrict to PDF-rich engines and append ' pdf' modifier; post-filter via is_pdf_url
+# Engine selection rationale (free_word_injection_probe_20260507_033631.md):
+#   google/ddg/mojeek → surface direct .pdf file URLs; scholar → arxiv.org/abs/ (TIER1 transform)
+#   crossref/openalex dropped: return doi.org-only results, 0 yield after is_pdf_url filter
+_PDF_ENGINES = frozenset({"google", "duckduckgo", "mojeek", "google scholar"})
+_PDF_MODIFIER: Callable[[str], str] = lambda q: f"{q} pdf"
+
 
 # ORCHESTRATOR
 
@@ -74,13 +83,20 @@ async def search_web_workflow(
     engine_timeout: float | None = None,
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
     books: bool = False,
+    pdf: bool = False,
 ) -> list[TextContent] | tuple[list[TextContent], dict]:
     t_total = time.perf_counter()
-    logger.info("Searching: %s (language=%s, books=%s)", query, language, books)
+    if books and pdf:
+        logger.warning("books=True and pdf=True both set — pdf takes precedence; ignoring books")
+        books = False
+    logger.info("Searching: %s (language=%s, books=%s, pdf=%s)", query, language, books, pdf)
     selected = _select_engines(engines)
     if books:
         selected = {k: v for k, v in selected.items() if k in _BOOKS_ENGINES}
         query_modifier_map = {name: _BOOKS_MODIFIER for name in _BOOKS_ENGINES}
+    if pdf:
+        selected = {k: v for k, v in selected.items() if k in _PDF_ENGINES}
+        query_modifier_map = {name: _PDF_MODIFIER for name in _PDF_ENGINES}
     effective_timeout = engine_timeout if engine_timeout is not None else ENGINE_WATCHDOG_TIMEOUT
 
     # Engine fanout phase
@@ -114,6 +130,8 @@ async def search_web_workflow(
     ranked, slot_counts = _merge_and_rank(raw_results, class_filter=class_filter)
     if books:
         ranked = [r for r in ranked if is_book_url(r.url)]
+    if pdf:
+        ranked = [r for r in ranked if is_pdf_url(r.url)]
     merge_rank_ms = round((time.perf_counter() - t0) * 1000)
 
     # Preview phase (before cache_write so snippet_source is og-aware)
@@ -130,7 +148,7 @@ async def search_web_workflow(
 
     # Cache write phase
     key = cache_key(query, language, engines, time_range, class_filter=class_filter,
-                    modifier_id="books" if books else None)
+                    modifier_id="books" if books else ("pdf" if pdf else None))
     t0 = time.perf_counter()
     cache_write(key, ranked, query, language, engines, time_range,
                 snippet_sources=snippet_sources, slot_counts=slot_counts,
@@ -179,6 +197,7 @@ async def search_batch_workflow(
     class_filter: frozenset[str] | None = None,
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
     books: bool = False,
+    pdf: bool = False,
 ) -> list[list[TextContent]]:
     results = []
     try:
@@ -188,6 +207,7 @@ async def search_batch_workflow(
                 class_filter=class_filter,
                 query_modifier_map=query_modifier_map,
                 books=books,
+                pdf=pdf,
             ))
     finally:
         await close_browser()

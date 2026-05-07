@@ -87,7 +87,8 @@ On error (import failure, missing dependency, engine timeout): the CLI prints to
 | --general | flag | off | Restrict output to GENERAL class slots only |
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
-| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download) |
+| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download). Mutually exclusive with `--pdf` |
+| --pdf   | flag | off | Lookup PDF documents — restricts to PDF-serving host whitelist (no download). Mutually exclusive with `--books` |
 
 **Output:** Numbered list 1–20 — title, URL, snippet. Hard slot-allocated from the full ranked pool (~60–80 candidates): 12 GENERAL / 6 ACADEMIC / 2 QA. Underflow = fewer than 20 results when a class has insufficient supply. No overflow fill. Snippet source per URL is the highest-scoring candidate by `clean_len × lexical_density` across all engine snippets, og:description, and meta description (MIN_FLOOR=40 chars; best-of-worst fallback when all candidates are short). OpenAlex results with >50 citations append `(Cited N×)` to the snippet. CrossRef synthesizes `Author, I. (year), Container` when no abstract is available.
 
@@ -130,6 +131,27 @@ searxng-cli search_web --books "clean code" --language de
 
 **Expected behavior:** ACADEMIC and QA slots will be empty (those engines are not queried). Some queries may return fewer than 20 results when the whitelist filters aggressively — that is accepted behavior. Paginate with `search_more --books "query"` to fetch cached pool beyond result 20.
 
+#### PDF Lookup Mode
+
+`--pdf` restricts the search to Google, DuckDuckGo, Mojeek, and Google Scholar, appends the free word `pdf` to the query, and post-filters results through a whitelist of known PDF-serving hosts (TIER1: arxiv.org, aclanthology.org, openreview.net; OA preprints: biorxiv.org, medrxiv.org, zenodo.org, osf.io; publishers: mdpi.com, pmc.ncbi.nlm.nih.gov; plus any URL path containing `.pdf`, `/pdf/`, `/content/pdf/`, `/_downloads/`).
+
+Mutually exclusive with `--books` — both flags cannot be set in the same call.
+
+```bash
+# Find academic papers with open PDF access
+searxng-cli search_web --pdf "transformer attention mechanism"
+searxng-cli search_web --pdf "sparse retrieval SPLADE benchmark"
+searxng-cli search_web --pdf "kubernetes operator design pattern"
+
+# Paginate cached PDF results
+searxng-cli search_more --pdf "transformer attention mechanism"
+
+# Batch PDF lookups in one warm-Chrome session
+searxng-cli search_batch --pdf "learned sparse retrieval" "dense retrieval BEIR"
+```
+
+**Expected behavior:** Results are URLs that either live on a PDF-serving host (arxiv.org, aclanthology.org, etc.) or have a `.pdf` / `/pdf/` path. For arxiv.org results, the `download_pdf` command resolves `/abs/` → `/pdf/` automatically. For other URLs ending in `.pdf`, use `download_pdf` directly. Fewer than 20 results is normal for niche queries — this is accepted underfill behavior, not an error. Paginate with `search_more --pdf "query"` to fetch the cached pool beyond result 20.
+
 ### search_batch
 
 | Parameter | Type | Default | Description |
@@ -141,7 +163,8 @@ searxng-cli search_web --books "clean code" --language de
 | --general | flag | off | Restrict output to GENERAL class slots only |
 | --academic | flag | off | Restrict output to ACADEMIC class slots only |
 | --qa | flag | off | Restrict output to QA class slots only |
-| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download) |
+| --books | flag | off | Lookup books on a topic — restricts to book-domain whitelist (no download). Mutually exclusive with `--pdf` |
+| --pdf   | flag | off | Lookup PDF documents — restricts to PDF-serving host whitelist (no download). Mutually exclusive with `--books` |
 
 **Output:** Results for each query in the same format as `search_web`, separated by `---`.
 
@@ -160,6 +183,7 @@ searxng-cli search_web --books "clean code" --language de
 | --academic | flag | off | Must match the original search_web call (part of cache key) |
 | --qa | flag | off | Must match the original search_web call (part of cache key) |
 | --books | flag | off | Must match the original search_web call (part of cache key) |
+| --pdf   | flag | off | Must match the original search_web call (part of cache key) |
 
 **Output:** Next batch of URLs from the cached ranked pool (results 21+), numbered from 21 onward.
 
