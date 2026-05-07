@@ -1,0 +1,143 @@
+# INFRASTRUCTURE
+import asyncio
+import json
+import logging
+from urllib.parse import quote_plus
+
+from src.search.browser import new_tab
+from src.search.engines.base import BaseEngine
+from src.search.rate_limiter import RateLimiter, get_limiter, _limiters
+from src.search.result import SearchResult
+
+logger = logging.getLogger(__name__)
+
+# NOTE: &sort=... URL param causes HTTP 400/405 from SS backend — omit entirely
+SEARCH_URL = "https://www.semanticscholar.org/search?q={}"
+ERROR_TEST_ID = "error-message-block"
+MAX_WAIT_CYCLES = 2
+WAIT_INTERVAL = 0.8
+
+_JS_WAIT = "return document.querySelectorAll('div.cl-paper-row').length"
+
+# Detect SS backend error page (400/405 rate-limit or server error — error-message-block test-id)
+_JS_ERROR = "return document.querySelectorAll('[data-test-id=\"error-message-block\"]').length"
+
+_JS_PARSE = """var _n = document.querySelectorAll('div.cl-paper-row');
+var _o = [];
+for (var _i = 0; _i < _n.length; _i++) {
+    var _el = _n[_i];
+    var _a = _el.querySelector('[data-test-id="title-link"]');
+    if (!_a) continue;
+    var _s = _el.querySelector('[data-test-id="paper-abstract-toggle"]');
+    _o.push({url: _a.href, title: _a.textContent.trim(), snippet: _s ? _s.textContent.trim() : ''});
+}
+return JSON.stringify(_o)"""
+
+_JS_CONSENT = """
+var _btn = Array.from(document.querySelectorAll('button')).find(function(b) {
+    return b.innerText.indexOf('akzeptieren') !== -1 || b.innerText.indexOf('Accept all') !== -1;
+});
+if (_btn) { _btn.click(); return true; }
+return false;
+"""
+
+# Uniform 4 req/min across all engines (Google-Baseline, normalized 2026-05-04)
+_limiters["semantic_scholar"] = RateLimiter(max_requests=4, window_seconds=60)
+
+
+# ORCHESTRATOR
+
+# Semantic Scholar academic search via pydoll stealth browser
+class SemanticScholarEngine(BaseEngine):
+    name = "semantic_scholar"
+
+    async def search(self, query: str, language: str = "en", max_results: int = 10) -> list[SearchResult]:
+        logger.info("Semantic Scholar search: %s", query)
+        limiter = get_limiter(self.name)
+        tab = await new_tab()
+        search_url = _build_url(query)
+        try:
+            await tab.go_to(search_url, timeout=3.0)
+            await _handle_consent(tab)
+            if await _has_error_page(tab):
+                logger.warning("Semantic Scholar error page for: %s — backing off", query)
+                limiter.backoff()
+                return []
+            if not await _wait_for_results(tab):
+                logger.warning("No Semantic Scholar results loaded for: %s", query)
+                return []
+            results = await _parse_results(tab, max_results)
+        except Exception as e:
+            logger.error("Semantic Scholar search failed: %s", e)
+            limiter.backoff()
+            return []
+        finally:
+            await tab.close()
+        limiter.reset_backoff()
+        return results
+
+
+# FUNCTIONS
+
+# Extract primitive value from CDP execute_script result dict
+def _extract_value(result):
+    try:
+        return result["result"]["result"]["value"]
+    except (KeyError, TypeError):
+        return None
+
+
+# Build Semantic Scholar search URL — no sort param (any sort value causes HTTP 400)
+def _build_url(query: str) -> str:
+    return SEARCH_URL.format(quote_plus(query))
+
+
+# Detect SS backend error page (HTTP 400/405 rate-limit response — error-message-block test-id present)
+async def _has_error_page(tab) -> bool:
+    raw = await tab.execute_script(_JS_ERROR)
+    val = _extract_value(raw)
+    return bool(val and int(val) > 0)
+
+
+# Click cookie consent accept button if banner is visible (one-time; session persists in profile dir)
+async def _handle_consent(tab) -> None:
+    raw = await tab.execute_script(_JS_CONSENT)
+    val = _extract_value(raw)
+    if val:
+        logger.info("Semantic Scholar consent banner accepted")
+
+
+# Poll for result containers up to MAX_WAIT_CYCLES seconds, return True when found
+async def _wait_for_results(tab) -> bool:
+    for _ in range(MAX_WAIT_CYCLES):
+        raw = await tab.execute_script(_JS_WAIT)
+        count = _extract_value(raw)
+        if count and int(count) > 0:
+            return True
+        await asyncio.sleep(WAIT_INTERVAL)
+    return False
+
+
+# Query DOM for paper cards and return SearchResult list
+async def _parse_results(tab, max_results: int) -> list[SearchResult]:
+    raw = await tab.execute_script(_JS_PARSE)
+    value = _extract_value(raw)
+    if not value:
+        return []
+    try:
+        items = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        return []
+    results = []
+    for i, item in enumerate(items[:max_results]):
+        url = item.get("url", "")
+        if not url:
+            continue
+        results.append(SearchResult(
+            url=url,
+            title=item.get("title", ""),
+            snippet=item.get("snippet", ""),
+            engine="semantic_scholar",
+            position=i + 1,
+        ))
+    return results
