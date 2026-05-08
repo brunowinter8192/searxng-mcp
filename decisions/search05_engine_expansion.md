@@ -188,6 +188,44 @@ Recherche-Pass GitHub-Search 2026-05-01 zur Frage: welche Engines erweitern den 
 
 ---
 
+## Semantic Scholar — re-added via browser path (2026-05-07, fixed 2026-05-08)
+
+**Engine:** `src/search/engines/semantic_scholar.py` — BaseEngine subclass, pydoll Chrome browser, 4 req/min, ENGINE_MAX_RESULTS=10
+**Endpoint:** `https://www.semanticscholar.org/search?q={q}` (no sort param — &sort=... causes HTTP 400)
+**Smoke:** `dev/search_pipeline/21_semscholar_smoke.py`
+**Class:** ACADEMIC, priority 4 (after openalex/scholar/crossref)
+**Watchdog override:** 5.0s (CSR-React-hydration takes 0.5-2.5s post-navigate)
+
+**Why re-added via browser:** API tier still blocked (verified 2026-05-07: 3 consecutive 429s + business-mail key gate). Browser path bypasses both — Web search UI accessible to anonymous users. Stealth probe: MILD severity (no Cloudflare/CAPTCHA on baseline queries).
+
+**DOM-Drift fix (2026-05-08, bead 10y):** original `[data-test-id="paper-abstract-toggle"]` snippet selector returned 0 matches — SS replaced abstract toggles with TLDR summaries. New selector: `.tldr-abstract-replacement`. Plus SSR→CSR shift required `MAX_WAIT_CYCLES=5, WAIT_INTERVAL=0.5` (2.5s polling window) to catch React-rendered results. Container `div.cl-paper-row` and title `[data-test-id="title-link"]` selectors confirmed unchanged via `dev/search_pipeline/inspections/inspect_engine_dom.py` (new tooling for engine selector drift recovery, 329 LOC).
+
+---
+
+## Open Library — Implemented (2026-05-08)
+
+**Endpoint:** `https://openlibrary.org/search.json?q={q}&limit={n}` (GET, JSON, no key)
+**Engine:** `src/search/engines/open_library.py` — BaseEngine subclass, httpx, 4 req/min
+**Smoke:** `dev/search_pipeline/22_openlibrary_smoke.py`, `23_books_ab_smoke.py` (A/B pool-widening)
+**Class:** GENERAL + `_BOOKS_ENGINES` whitelist
+**ENGINE_MAX_RESULTS:** 100 (API supports 1000+, latency server-dominated 1.4-5.8s, 100 is sweet spot)
+**Watchdog override:** 6.0s (server-dominated latency, 3.6s default produced ~35% TIMEOUT rate)
+**Modifier exclusion:** `--books` mode appends `+book` to web engines; Open Library is already a book catalog, modifier excluded for OL via `query_modifier_map` filter.
+
+**Why Open Library:** `--books` mode pool was underwhelming with 3 general engines (google/ddg/mojeek) all returning the same Manning IR textbook for "introduction to information retrieval" — 9 URLs, all same book. Open Library brings a structurally INDEPENDENT source: structured book catalog (~50M+ works) with metadata web-engines don't expose (author, year, edition_count, ebook_access).
+
+**A/B pool-widening empiry (2026-05-08):**
+- 9/10 book queries get meaningful pool widening (≥3 OL URLs)
+- 81.2 unique OL URLs avg per completed book query
+- 40% ebook availability (public/borrowable/printdisabled)
+- "introduction to information retrieval" --books: 11 OL URLs out of 20 (vs 0 OL URLs pre-fix), distinct works: Manning, Rowley, IBM 1971, Melucci 2015, etc.
+
+**Snippet template:** `f"{author} ({year}) — {edition_count} eds, ebook: {ebook_access}"` — 4-pillar (author/year/editions/ebook) format that web-engines can't replicate.
+
+**Inner httpx timeout coordination:** `httpx.AsyncClient(timeout=6.0)` matches the watchdog override. Without coordination (initial implementation had timeout=3.6) the inner httpx fires before the watchdog → status ERROR instead of TIMEOUT → loses diagnosability.
+
+---
+
 ## Quellen
 
 - StractOrg/stract — Stract Search Engine (Repo, dropped: $27/mo commercial API)

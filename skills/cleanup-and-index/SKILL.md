@@ -5,8 +5,6 @@ description: Worker-side methodology — cleanup raw scraped/crawled markdown OR
 
 # Cleanup-and-Index Skill (Worker)
 
-This skill is loaded by a worker after main session has made acquisition decisions. Worker calls `Skill(skill="cleanup-and-index")` at start, then follows this protocol with the inputs provided in its spawn prompt.
-
 ## DEV State
 
 This skill consolidates three existing artifacts that will be deleted after end-to-end verification:
