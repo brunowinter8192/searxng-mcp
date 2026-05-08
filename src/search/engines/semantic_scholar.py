@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # NOTE: &sort=... URL param causes HTTP 400/405 from SS backend — omit entirely
 SEARCH_URL = "https://www.semanticscholar.org/search?q={}"
 ERROR_TEST_ID = "error-message-block"
-MAX_WAIT_CYCLES = 2
-WAIT_INTERVAL = 0.8
+MAX_WAIT_CYCLES = 5
+WAIT_INTERVAL = 0.5
 
 _JS_WAIT = "return document.querySelectorAll('div.cl-paper-row').length"
 
@@ -28,7 +28,7 @@ for (var _i = 0; _i < _n.length; _i++) {
     var _el = _n[_i];
     var _a = _el.querySelector('[data-test-id="title-link"]');
     if (!_a) continue;
-    var _s = _el.querySelector('[data-test-id="paper-abstract-toggle"]');
+    var _s = _el.querySelector('.tldr-abstract-replacement');
     _o.push({url: _a.href, title: _a.textContent.trim(), snippet: _s ? _s.textContent.trim() : ''});
 }
 return JSON.stringify(_o)"""
