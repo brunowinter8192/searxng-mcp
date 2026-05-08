@@ -1,7 +1,7 @@
 # INFRASTRUCTURE
 from src.search.result import SearchResult
 
-GENERAL  = {"google", "duckduckgo", "mojeek"}
+GENERAL  = {"google", "duckduckgo", "mojeek", "open_library"}
 ACADEMIC = {"google_scholar", "openalex", "crossref", "semantic_scholar"}
 QA       = {"stack_exchange", "lobsters"}
 
