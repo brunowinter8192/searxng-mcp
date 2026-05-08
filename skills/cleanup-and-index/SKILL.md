@@ -116,6 +116,49 @@ Do NOT carry a bash assoc-array pattern into a zsh worker session expecting it t
 
 If MinerU fails for any PDF: log + skip + continue. Report failed PDFs at end.
 
+### Background-Polling for Phase 0 Convert
+
+Use this pattern whenever **any** of the following is true:
+- Input PDF is >50 MB
+- Batch over all PDFs in a directory (loop template above)
+- Single PDF and wallclock is expected to exceed 60 s (rule of thumb: any academic paper >10 MB, any book PDF)
+
+```bash
+# Run as Bash(run_in_background=true)
+( while pgrep -f 'workflow.py convert' > /dev/null 2>&1; do sleep 15; done; echo CONVERT_DONE ) &
+wait
+```
+
+The `sleep 15` *inside* the loop is normal blocking sleep — it does NOT trigger CC tool-completion events. CC sees ONE backgrounded call, ONE completion when MinerU is truly gone. Zero cascade. Mirror of the Phase 2 indexing pattern.
+
+### Post-Convert Verify
+
+After every convert (single file or end of batch loop), verify the output is non-empty and substantial:
+
+```bash
+[ -s "$OUTPUT_DIR/$STEM.md" ] && wc -w "$OUTPUT_DIR/$STEM.md"
+```
+
+Threshold: **≥ 100 words** = meaningful conversion. Below threshold:
+- Log `WARNING: $STEM.md has <N> words — expected ≥100`
+- Retry: add `--timeout 300` (or higher) to the `workflow.py convert` call
+- If retry also fails: skip file, add to failed list, continue batch
+
+### Why Background-Polling for Convert
+
+Claude Code auto-backgrounds any Bash call whose wallclock exceeds ~60 s AND whose output stream has been idle for >30 s. MinerU convert on large PDFs routinely meets both conditions — it's CPU-bound and silent during the OCR/LaTeX extraction phase.
+
+**What happens without the polling pattern:**
+
+1. Worker fires `Bash(workflow.py convert --input paper.pdf --output out.md)` with output redirected to a log file.
+2. CC sees process running, output stream quiet → auto-backgrounds the call.
+3. Bash tool-result returns immediately with exit code 0 (CC's backgrounding exit, NOT MinerU's exit).
+4. Worker reads exit=0 → assumes convert succeeded, moves to Phase 1 cleanup.
+5. MinerU is still running in the background (or was killed by CC). The `.md` output file is empty or partially written.
+6. GUARD 2 in the batch loop (`[ -s "$OUTPUT_DIR/$STEM.md" ]`) fires — but only if the worker revisits the file. If the worker already reported "Phase 0 done" and moved on, the empty file silently enters Phase 1.
+
+**What the polling pattern does:** CC sees ONE backgrounded Bash call. `wait` blocks until `pgrep -f 'workflow.py convert'` finds no process. Only then does `echo CONVERT_DONE` fire. Worker receives ONE completion notification after MinerU is truly gone, then runs the post-convert verify.
+
 ---
 
 ## Phase 1 — Cleanup
