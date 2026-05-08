@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 SNIPPET_LENGTH = 5000
 ENGINE_WATCHDOG_TIMEOUT: float = 3.6
 RATE_WAIT_TIMEOUT: float = 5.0
+ENGINE_WATCHDOG_OVERRIDE: dict[str, float] = {
+    "open_library": 6.0,        # Server-dominated 1.4-5.8s latency; 3.6s cap caused ~35% timeouts
+    "semantic_scholar": 5.0,    # CSR hydration 0.5-2.5s + go_to budget post-DOM-drift fix
+}
 
 # Empirical per-engine ceilings (max_results_probe_20260507_024429.md)
 ENGINE_MAX_RESULTS: dict[str, int] = {
@@ -131,7 +135,7 @@ async def search_web_workflow(
     t_fanout = time.perf_counter()
     if _with_timings:
         names_and_engines = list(selected.items())
-        tasks = [_engine_with_timing(eng, query, language, 10, effective_timeout, query_modifier_map=query_modifier_map) for _, eng in names_and_engines]
+        tasks = [_engine_with_timing(eng, query, language, 10, ENGINE_WATCHDOG_OVERRIDE.get(eng.name, effective_timeout), query_modifier_map=query_modifier_map) for _, eng in names_and_engines]
         timed = await asyncio.gather(*tasks)
         engine_details: dict[str, dict] = {}
         for (name, eng), (eng_results, rate_wait_ms, search_ms, status, drop_reason) in zip(names_and_engines, timed):
@@ -284,7 +288,10 @@ async def _query_engines_concurrent(
     timeout: float = ENGINE_WATCHDOG_TIMEOUT,
     query_modifier_map: dict[str, Callable[[str], str]] | None = None,
 ) -> tuple[list, dict[str, dict]]:
-    tasks = [_engine_with_timing(engine, query, language, max_results, timeout, query_modifier_map=query_modifier_map) for engine in selected.values()]
+    tasks = [
+        _engine_with_timing(engine, query, language, max_results, ENGINE_WATCHDOG_OVERRIDE.get(engine.name, timeout), query_modifier_map=query_modifier_map)
+        for engine in selected.values()
+    ]
     timed = await asyncio.gather(*tasks)
     combined: list = []
     engine_stats: dict[str, dict] = {}
