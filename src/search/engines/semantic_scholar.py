@@ -14,8 +14,8 @@ logger = logging.getLogger(__name__)
 # NOTE: &sort=... URL param causes HTTP 400/405 from SS backend — omit entirely
 SEARCH_URL = "https://www.semanticscholar.org/search?q={}"
 ERROR_TEST_ID = "error-message-block"
-MAX_WAIT_CYCLES = 3
-WAIT_INTERVAL = 0.8
+MAX_WAIT_CYCLES = 5
+WAIT_INTERVAL = 0.5
 
 _JS_WAIT = "return document.querySelectorAll('div.cl-paper-row').length"
 
