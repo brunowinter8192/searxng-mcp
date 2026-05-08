@@ -36,7 +36,7 @@ class OpenLibraryEngine(BaseEngine):
 # Fetch raw doc items from Open Library search API; returns None on rate-limit
 async def _fetch_results(query: str, limit: int) -> list[dict] | None:
     params: dict = {"q": query, "limit": limit}
-    async with httpx.AsyncClient(timeout=3.6) as client:
+    async with httpx.AsyncClient(timeout=6.0) as client:  # aligned with ENGINE_WATCHDOG_OVERRIDE
         response = await client.get(API_URL, params=params)
     if response.status_code in (429, 403):
         logger.warning("Open Library rate limited: %d", response.status_code)
