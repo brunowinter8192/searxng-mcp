@@ -73,16 +73,26 @@
 | Santos 2010 — Exploiting Query Reformulations for Diversification (xQuAD) | Paper | g82 | Indexed (RAG: searxng_reference) |
 | Zhu/Guo 2014 — Learning for Search Result Diversification | Paper | g82 | Indexed (RAG: searxng_reference) |
 | Hu 2015 — Search Result Diversification Based on Query Facets | Paper | g82 | Indexed (RAG: searxng_reference) |
-| Mordo 2025 — Diversification in Competitive Search | Paper | g82 | Indexed (RAG: searxng_reference) |
+| Mordo 2025 — Diversification in Competitive Search (arxiv 2501.14922) | Paper | g82 | Removed (off-topic, deleted from /pdf/ 2026-05-08) |
 | Rollings — TREC 2022 Multi-Faceted Question Fusion | Paper | g82 | Indexed (RAG: searxng_reference) |
 | UWaterloo TREC 21 — Logistic Regression + RRF | Paper | g82 | Indexed (RAG: searxng_reference) |
 | Kafi — Weighted Reciprocal Rank Fusion RAG | Paper | g82 | Indexed (RAG: searxng_reference) |
-| Santosh 2024 — arxiv 2404.00590 (rank-fusion-related) | Paper | g82 | Indexed (RAG: searxng_reference) |
+| Santosh 2024 — CuSINeS Statutory Article Retrieval (arxiv 2404.00590) | Paper | g82 | Removed (off-topic, deleted from /pdf/ 2026-05-08) |
 | Ruizhang ICDE 2023 — Personalized Diversification for Neural Re-ranking | Paper | g82 | Referenced (recommendation system, less relevant) |
 | api.semanticscholar.org / semanticscholar.org/product/api | Web | 10y | Verified (browser-engine landed; API tier 429s without business-email key) |
-| Manning/Raghavan/Schütze — Introduction to Information Retrieval (2008) | Book | g82 | Referenced (canonical IR textbook, not yet indexed) |
-| Croft/Metzler/Strohman — Search Engines: IR in Practice (2009) | Book | g82 | Referenced (web-search architecture textbook, not yet indexed) |
-| Baeza-Yates/Ribeiro-Neto — Modern Information Retrieval (2nd Ed 2011) | Book | g82 | Referenced (broad IR textbook, not yet indexed) |
-| Liu — Learning to Rank for Information Retrieval (2011) | Book | g82 | Referenced (LtR monograph, not yet indexed) |
+| Aslam/Montague 2001 — Models for Metasearch (foundational, 969 cit) | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Montague/Aslam 2001 — Relevance Score Normalization for Metasearch (259 cit) | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Renda 2003 — Web Metasearch: Rank vs. Score Based Rank Aggregation (301 cit) | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Akritidis 2008 — Effective Ranking Fusion Methods for Personalized Metasearch | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Wu 2000 — Necessary Constraints for Fusion Algorithms in Meta Search (InTech) | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Lillis 2006 — Probability-Based Fusion of Information Retrieval Result Sets | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Trinity College Dublin — Preliminary Research Report Metasearch Engine (Thesis) | Thesis | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Ogilvie/Callan 2003 — Combining Document Representations for Known-Item Search (341 cit) | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Amin 2012 — Metasearch information fusion using linear programming | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| arXiv 2025 (2507.03761) — Ranking-based Fusion Algorithms for XMTC | Paper | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Manning/Raghavan/Schütze — Introduction to Information Retrieval (2008) | Book | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Croft/Metzler/Strohman — Search Engines: IR in Practice (2010) | Book | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Baeza-Yates/Ribeiro-Neto — Modern Information Retrieval (2nd Ed 2010, 195 MB) | Book | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
+| Liu — Learning to Rank for Information Retrieval (2011) | Book | g82 | Indexing in progress (worker rate-skip 2026-05-08) |
 
 Consult via RAG search before making assumptions. Pipeline step references match `decisions/` files.
