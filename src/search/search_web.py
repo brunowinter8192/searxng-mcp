@@ -18,6 +18,7 @@ from src.search.engines.lobsters import LobstersEngine
 from src.search.engines.openalex import OpenAlexEngine
 from src.search.engines.stack_exchange import StackExchangeEngine
 from src.search.engines.semantic_scholar import SemanticScholarEngine
+from src.search.engines.open_library import OpenLibraryEngine
 from src.search.rate_limiter import get_limiter
 from src.search.result import SearchResult
 # From snippet.py: score-based snippet selection
@@ -50,6 +51,7 @@ ENGINE_MAX_RESULTS: dict[str, int] = {
     "crossref": 200,        # rows= API param; documented max 1000, practical 200
     "stack_exchange": 100,  # pagesize= API param; hard cap 100
     "semantic_scholar": 10, # 10/page hardcoded by SS UI; no override param
+    "open_library": 100,   # limit= API param; supports 1000+ but latency server-dominated (1.4-5.8s at 100)
 }
 
 ENGINES = {
@@ -62,10 +64,11 @@ ENGINES = {
     "openalex": OpenAlexEngine(),
     "stack_exchange": StackExchangeEngine(),
     "semantic_scholar": SemanticScholarEngine(),
+    "open_library": OpenLibraryEngine(),
 }
 
-# --books mode: restrict to general-web engines and append '+book' modifier
-_BOOKS_ENGINES = frozenset({"google", "duckduckgo", "mojeek"})
+# --books mode: restrict to general-web engines + Open Library catalog, append '+book' modifier to web engines
+_BOOKS_ENGINES = frozenset({"google", "duckduckgo", "mojeek", "open_library"})
 _BOOKS_MODIFIER: Callable[[str], str] = lambda q: f"{q} book"
 
 # --pdf mode: restrict to PDF-rich engines and append ' pdf' modifier; post-filter via is_pdf_url
@@ -111,7 +114,8 @@ async def search_web_workflow(
     selected = _select_engines(engines)
     if books:
         selected = {k: v for k, v in selected.items() if k in _BOOKS_ENGINES}
-        query_modifier_map = {name: _BOOKS_MODIFIER for name in _BOOKS_ENGINES}
+        # modifier applies only to web engines — Open Library is already a book catalog
+        query_modifier_map = {name: _BOOKS_MODIFIER for name in _BOOKS_ENGINES if name != "open_library"}
     if pdf:
         selected = {k: v for k, v in selected.items() if k in _PDF_ENGINES}
         query_modifier_map = {name: _PDF_MODIFIER for name in _PDF_ENGINES}
